@@ -1,0 +1,19 @@
+{
+  "name": "lane-math",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Single-lane arithmetic puzzle. Difficulty is resource planning, not arithmetic.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "generate": "vite-node src/generator/cli.ts",
+    "generate:top": "vite-node src/generator/cli.ts --tiers late,expert --attempts 4000"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
