@@ -18,22 +18,31 @@ missing. See GDD §12 for the phase ladder.
 The phase is not decoration. It decides how work gets verified (below). Update this heading when
 the phase changes, in the same commit that crosses the boundary.
 
-### Known spec gaps
+### Resolved spec questions
 
-These are places where the code had to decide something the GDD does not say. Each is a real
-decision that should be settled in the GDD rather than left to the implementation:
+All four gaps recorded here previously are now settled in the GDD. Kept as a short record of what
+the answers are, because each one silently changes measured numbers if it drifts back:
 
-- **§6 `#ops = T` under Expert, with unary ops in play.** A unary transform is a move (§3.5), so a
-  line that uses one makes more than `T` moves. The code reads consumed as "binary counts sum to
-  `T`, unary budgeted at exactly the transforms the line needs" — the only reading under which a
-  `√` tier can be Expert at all.
-- **§8.4 `d_i` "from the current pool".** Measured against the STARTING pool, to agree with §13's
-  resolution of keystone uniqueness. Otherwise `decisionPoints` and `keystones` count different
-  things.
-- **§8.5 uniqueness is a mode property, not a tier property.** "Casual permits multiple winning
-  lines; Expert enforces a unique solution" is applied to every level's Expert budget, at every
-  tier.
-- **No §8.6 or §8.7 exist.** The tier table is §8.5. `src/generator/tiers.ts` transcribes it.
+- **Consumed mode is `#ops = T + U`**, not `T` (§8.5). A unary transform consumes an operator
+  without clearing a target. `scarcityOf` takes the line's `U` — without it, it can only check the
+  structural half and will pass a budget that over-grants unary uses.
+- **`d_i` is two metrics** (§8.4). `dStart` for structure and keystones; `dPath` for search burden.
+  **`decisionPoints` comes from `dPath`.** Banding on `dStart` inflates it by ~1.4 on a Late board
+  and wrongly rejects boards that are correctly difficult — measured, not assumed.
+- **Metrics and budgets are per-mode** (§8.6, §10), keyed inside `modes{}`. One board is three
+  puzzles.
+- **A mode may be absent** when no valid budget exists for it (§10). Excluded, not forced, and not
+  a reason to discard the level — unless it is the mode the tier is banded under.
+
+### Known lever, not built
+
+**`no-keystone` is the dominant rejection filter (~55%) above Early.** The `directed` construction
+strategy only reorders the queue; it never selects keystone-friendly operand values.
+
+Constructing keystone operands first — picking values whose sum or product is hard to reproduce
+from the rest of the pool — attacks that filter directly rather than waiting for it to be satisfied
+by chance. Not needed at current yields. Reach for it if curation later demands specific
+structures rather than whatever survives sampling.
 
 ---
 
@@ -135,12 +144,14 @@ that way.
 3. **Integers only, positive pool.** `÷` is legal only on exact division, `√` only on perfect
    squares. Pool values are positive integers — this is what makes `÷0` unrepresentable rather
    than merely guarded.
-4. **Keystone uniqueness is measured against the STARTING pool**, never the pool as reached
+4. **Keystone uniqueness is measured against the STARTING pool** — `dStart`, never `dPath`
    (GDD §13). Any other definition makes the keystone unknowable at level open, which is the one
-   thing the player is supposed to be able to reason about.
-5. **All three operator scarcities are real modes.** Free, counted, consumed. A level solvable
-   under free may be unsolvable under consumed. Every level is solved once per mode; never assume
-   one result transfers.
+   thing the player is supposed to be able to reason about. The mirror of this is that
+   `decisionPoints` must use `dPath` and never `dStart` (§8.4). The two metrics are not
+   interchangeable and swapping either one silently moves every tier band.
+5. **All three operator scarcities are real modes.** Free, counted, consumed. Metrics are computed
+   per mode, not per level (§8.6) — scarcity changes trap structure, not just solvability. Never
+   assume one mode's result transfers to another.
 6. **No cascading unary transforms.** One transform per tile, even where `√4 = 2` is legal. A
    unary transform counts as a move for failure detection.
 7. **No hidden difficulty adjustment, ever.** No DDA, no fail-streak mercy, no regenerating a
