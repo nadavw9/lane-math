@@ -1,0 +1,222 @@
+{
+  "id": "gen-mid-541",
+  "world": 3,
+  "tier": "mid",
+  "pool": [
+    10,
+    11,
+    8,
+    11,
+    6,
+    3,
+    6,
+    7,
+    10,
+    5,
+    9
+  ],
+  "targets": [
+    21,
+    19,
+    3,
+    42,
+    2
+  ],
+  "operators": {
+    "casual": {
+      "+": null,
+      "-": null,
+      "*": null,
+      "/": null
+    },
+    "normal": {
+      "+": 2,
+      "/": 3,
+      "*": 2
+    },
+    "expert": {
+      "+": 2,
+      "/": 2,
+      "*": 1
+    }
+  },
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "metrics": {
+    "surplus": 1,
+    "keystones": [
+      2,
+      3
+    ],
+    "lookaheadDistance": 3,
+    "decisionPoints": 3,
+    "solutionPaths": 1,
+    "maxTrapDepth": 2
+  },
+  "metricsByMode": {
+    "casual": {
+      "surplus": 1,
+      "decompositionCounts": [
+        2,
+        2,
+        6,
+        1,
+        8
+      ],
+      "decisionPoints": 4,
+      "keystones": [
+        3
+      ],
+      "keystoneDetail": [
+        {
+          "index": 3,
+          "operands": [
+            6,
+            7
+          ],
+          "earliestThief": 0,
+          "lookahead": 3
+        }
+      ],
+      "overlappingKeystonePairs": 0,
+      "lookaheadDistance": 3,
+      "solutionPaths": 7,
+      "maxTrapDepth": 3,
+      "solvable": true
+    },
+    "normal": {
+      "surplus": 1,
+      "decompositionCounts": [
+        2,
+        2,
+        1,
+        1,
+        2
+      ],
+      "decisionPoints": 3,
+      "keystones": [
+        2,
+        3
+      ],
+      "keystoneDetail": [
+        {
+          "index": 2,
+          "operands": [
+            9,
+            3
+          ],
+          "earliestThief": 0,
+          "lookahead": 2
+        },
+        {
+          "index": 3,
+          "operands": [
+            6,
+            7
+          ],
+          "earliestThief": 0,
+          "lookahead": 3
+        }
+      ],
+      "overlappingKeystonePairs": 0,
+      "lookaheadDistance": 3,
+      "solutionPaths": 1,
+      "maxTrapDepth": 2,
+      "solvable": true
+    },
+    "expert": {
+      "surplus": 1,
+      "decompositionCounts": [
+        2,
+        2,
+        1,
+        1,
+        2
+      ],
+      "decisionPoints": 3,
+      "keystones": [
+        2,
+        3
+      ],
+      "keystoneDetail": [
+        {
+          "index": 2,
+          "operands": [
+            9,
+            3
+          ],
+          "earliestThief": 0,
+          "lookahead": 2
+        },
+        {
+          "index": 3,
+          "operands": [
+            6,
+            7
+          ],
+          "earliestThief": 0,
+          "lookahead": 3
+        }
+      ],
+      "overlappingKeystonePairs": 0,
+      "lookaheadDistance": 3,
+      "solutionPaths": 1,
+      "maxTrapDepth": 2,
+      "solvable": true
+    }
+  },
+  "traps": [
+    {
+      "targetIndex": 0,
+      "fatal": "3 * 7 = 21",
+      "correct": "10 + 11 = 21",
+      "fatalNaturalness": 0.6,
+      "correctNaturalness": 0.488,
+      "temptation": 0.552,
+      "trapDepth": 3,
+      "stealsKeystoneOperand": true
+    },
+    {
+      "targetIndex": 2,
+      "fatal": "6 - 3 = 3",
+      "correct": "8 - 5 = 3",
+      "fatalNaturalness": 0.414,
+      "correctNaturalness": 0.364,
+      "temptation": 0.532,
+      "trapDepth": 2,
+      "stealsKeystoneOperand": true
+    },
+    {
+      "targetIndex": 2,
+      "fatal": "10 - 7 = 3",
+      "correct": "6 - 3 = 3",
+      "fatalNaturalness": 0.324,
+      "correctNaturalness": 0.414,
+      "temptation": 0.439,
+      "trapDepth": 1,
+      "stealsKeystoneOperand": true
+    }
+  ],
+  "generator": {
+    "seed": 20260813,
+    "strategy": "random",
+    "hash": "3.5.6.6.7.8.9.10.10.11.11|21.19.3.42.2",
+    "overlappingKeystonePairs": 0,
+    "peakTemptation": 0.552,
+    "decoys": [
+      {
+        "value": 9,
+        "newDecompositions": 5,
+        "affectedTargets": [
+          1,
+          2,
+          4
+        ]
+      }
+    ],
+    "expertBudgetsSolvable": 3,
+    "expertBudgetsUnique": 1
+  }
+}

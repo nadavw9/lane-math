@@ -1,0 +1,151 @@
+{
+  "id": "gen-tutorial-922",
+  "world": 1,
+  "tier": "tutorial",
+  "pool": [
+    8,
+    3,
+    8,
+    2,
+    4,
+    4
+  ],
+  "targets": [
+    11,
+    6,
+    8
+  ],
+  "operators": {
+    "casual": {
+      "+": null,
+      "-": null
+    },
+    "normal": {
+      "+": 2,
+      "-": 2
+    },
+    "expert": {
+      "+": 2,
+      "-": 1
+    }
+  },
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "metrics": {
+    "surplus": 0,
+    "keystones": [
+      2
+    ],
+    "lookaheadDistance": 1,
+    "decisionPoints": 1,
+    "solutionPaths": 1,
+    "maxTrapDepth": 1
+  },
+  "metricsByMode": {
+    "casual": {
+      "surplus": 0,
+      "decompositionCounts": [
+        1,
+        2,
+        1
+      ],
+      "decisionPoints": 1,
+      "keystones": [
+        2
+      ],
+      "keystoneDetail": [
+        {
+          "index": 2,
+          "operands": [
+            4
+          ],
+          "earliestThief": 1,
+          "lookahead": 1
+        }
+      ],
+      "overlappingKeystonePairs": 0,
+      "lookaheadDistance": 1,
+      "solutionPaths": 1,
+      "maxTrapDepth": 1,
+      "solvable": true
+    },
+    "normal": {
+      "surplus": 0,
+      "decompositionCounts": [
+        1,
+        2,
+        1
+      ],
+      "decisionPoints": 1,
+      "keystones": [
+        2
+      ],
+      "keystoneDetail": [
+        {
+          "index": 2,
+          "operands": [
+            4
+          ],
+          "earliestThief": 1,
+          "lookahead": 1
+        }
+      ],
+      "overlappingKeystonePairs": 0,
+      "lookaheadDistance": 1,
+      "solutionPaths": 1,
+      "maxTrapDepth": 1,
+      "solvable": true
+    },
+    "expert": {
+      "surplus": 0,
+      "decompositionCounts": [
+        1,
+        2,
+        1
+      ],
+      "decisionPoints": 1,
+      "keystones": [
+        2
+      ],
+      "keystoneDetail": [
+        {
+          "index": 2,
+          "operands": [
+            4
+          ],
+          "earliestThief": 1,
+          "lookahead": 1
+        }
+      ],
+      "overlappingKeystonePairs": 0,
+      "lookaheadDistance": 1,
+      "solutionPaths": 1,
+      "maxTrapDepth": 1,
+      "solvable": true
+    }
+  },
+  "traps": [
+    {
+      "targetIndex": 1,
+      "fatal": "2 + 4 = 6",
+      "correct": "8 - 2 = 6",
+      "fatalNaturalness": 0.769,
+      "correctNaturalness": 0.4,
+      "temptation": 0.658,
+      "trapDepth": 1,
+      "stealsKeystoneOperand": true
+    }
+  ],
+  "generator": {
+    "seed": 20260813,
+    "strategy": "random",
+    "hash": "2.3.4.4.8.8|11.6.8",
+    "overlappingKeystonePairs": 0,
+    "peakTemptation": 0.658,
+    "decoys": [],
+    "expertBudgetsSolvable": 1,
+    "expertBudgetsUnique": 1
+  }
+}
