@@ -60,6 +60,7 @@ export function runTier(
   const bandingSamples: Metrics[] = [];
 
   const acceptedMetrics: Metrics[] = [];
+  const bandFailureCounts = new Map<string, number>();
   let inertDecoyRejections = 0;
   let totalMs = 0;
   let attempts = 0;
@@ -95,6 +96,11 @@ export function runTier(
 
     rejections[outcome.reason]++;
     inertDecoyRejections += outcome.inertDecoyRejections;
+    for (const failure of outcome.bandFailures) {
+      // Bucket by criterion, dropping the measured value from the label.
+      const criterion = failure.split(" ")[0]!;
+      bandFailureCounts.set(criterion, (bandFailureCounts.get(criterion) ?? 0) + 1);
+    }
     if (outcome.recordMetrics && bandingSamples.length < options.bandingSampleCap) {
       bandingSamples.push(outcome.recordMetrics);
     }
@@ -111,6 +117,7 @@ export function runTier(
     levels,
     bandingSamples,
     acceptedMetrics,
+    bandFailureCounts,
   };
 }
 

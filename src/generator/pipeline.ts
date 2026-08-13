@@ -127,6 +127,12 @@ export type Outcome =
        * says whether the band is unreachable or merely rare.
        */
       readonly recordMetrics: Metrics | null;
+      /**
+       * Which band criteria this candidate failed. Without this, a criterion
+       * that improves in isolation looks like progress even when a different
+       * one was doing all the rejecting.
+       */
+      readonly bandFailures: readonly string[];
     };
 
 export interface AttemptContext {
@@ -222,15 +228,17 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
   const done = (
     outcome: Omit<
       Extract<Outcome, { accepted: false }>,
-      "ms" | "inertDecoyRejections" | "recordMetrics"
+      "ms" | "inertDecoyRejections" | "recordMetrics" | "bandFailures"
     > & {
       inertDecoyRejections?: number;
       recordMetrics?: Metrics;
+      bandFailures?: readonly string[];
     },
   ): Outcome => ({
     ...outcome,
     inertDecoyRejections: outcome.inertDecoyRejections ?? 0,
     recordMetrics: outcome.recordMetrics ?? null,
+    bandFailures: outcome.bandFailures ?? [],
     ms: performance.now() - started,
   });
 
@@ -406,6 +414,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
       detail: record.bandFailures.join("; "),
       inertDecoyRejections: inert,
       recordMetrics: record.metrics,
+      bandFailures: record.bandFailures,
     });
   }
 

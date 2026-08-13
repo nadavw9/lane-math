@@ -20,6 +20,8 @@ export interface TierRun {
   readonly bandingSamples: readonly Metrics[];
   /** Mode-of-record metrics for accepted levels only. */
   readonly acceptedMetrics: readonly Metrics[];
+  /** Which band criterion rejected each out-of-band candidate. */
+  readonly bandFailureCounts: ReadonlyMap<string, number>;
 }
 
 export interface RunReport {
@@ -174,7 +176,7 @@ export function renderReport(report: RunReport, tiers: readonly TierSpec[]): str
 
       w("**decisionPoints: dStart vs dPath** (all candidates reaching banding)");
       w();
-      w("| Basis | min/med/max | mean | histogram | inside band |");
+      w("| Basis | min/med/max | mean | histogram | passes decisionPoints alone |");
       w("|---|---|---:|---|---:|");
       w(
         `| dStart (wrong) | ${summarise(dStartPoints)} | ${mean(dStartPoints)} | ${histogram(dStartPoints)} | ${inBand(dStartPoints)} |`,
@@ -182,6 +184,27 @@ export function renderReport(report: RunReport, tiers: readonly TierSpec[]): str
       w(
         `| dPath (correct) | ${summarise(dPathPoints)} | ${mean(dPathPoints)} | ${histogram(dPathPoints)} | ${inBand(dPathPoints)} |`,
       );
+      w();
+      w(
+        `The last column isolates ONE criterion. Overall band pass is ` +
+          `**${pct(run.accepted, run.bandingSamples.length)}** ` +
+          `(${run.accepted} of ${run.bandingSamples.length} reaching banding) — a board must clear ` +
+          `keystones, lookahead and decisionPoints together. Relief on a criterion that was not ` +
+          `binding does not move yield.`,
+      );
+      w();
+    }
+
+    if (run.bandFailureCounts.size > 0) {
+      w("**Which criterion actually binds** (out-of-band candidates; one can fail several)");
+      w();
+      w("| Criterion | Rejected |");
+      w("|---|---:|");
+      for (const [criterion, count] of [...run.bandFailureCounts.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )) {
+        w(`| ${criterion} | ${count} |`);
+      }
       w();
     }
 
