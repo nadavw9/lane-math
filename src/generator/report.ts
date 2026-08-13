@@ -5,7 +5,7 @@ import {
   type GeneratedLevel,
   type RejectionReason,
 } from "./pipeline.js";
-import type { Range, TierName, TierSpec } from "./tiers.js";
+import { inRange as inRangeValue, type Range, type TierName, type TierSpec } from "./tiers.js";
 
 export interface TierRun {
   readonly tier: TierName;
@@ -18,6 +18,8 @@ export interface TierRun {
   readonly levels: readonly GeneratedLevel[];
   /** Mode-of-record metrics for every candidate that survived to banding. */
   readonly bandingSamples: readonly Metrics[];
+  /** Mode-of-record metrics for accepted levels only. */
+  readonly acceptedMetrics: readonly Metrics[];
 }
 
 export interface RunReport {
@@ -150,7 +152,7 @@ export function renderReport(report: RunReport, tiers: readonly TierSpec[]): str
       ],
     ];
 
-    const acceptedMetrics = run.levels.map((l) => l.metricsByMode[tier.modeOfRecord]);
+    const acceptedMetrics = run.acceptedMetrics;
     for (const [label, band, get] of rows) {
       const acc = acceptedMetrics.map(get);
       const reached = run.bandingSamples.map(get);
@@ -159,6 +161,29 @@ export function renderReport(report: RunReport, tiers: readonly TierSpec[]): str
       );
     }
     w();
+
+    // The measurement this re-run exists for: how much did banding on dStart
+    // inflate decisionPoints? Both are counted over the same candidate set.
+    const dStartPoints = run.bandingSamples.map((m) => m.dStart.filter((d) => d >= 2).length);
+    const dPathPoints = run.bandingSamples.map((m) => m.decisionPoints);
+    if (run.bandingSamples.length > 0) {
+      const mean = (xs: readonly number[]): string =>
+        (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2);
+      const inBand = (xs: readonly number[]): string =>
+        pct(xs.filter((x) => inRangeValue(x, tier.decisionPoints)).length, xs.length);
+
+      w("**decisionPoints: dStart vs dPath** (all candidates reaching banding)");
+      w();
+      w("| Basis | min/med/max | mean | histogram | inside band |");
+      w("|---|---|---:|---|---:|");
+      w(
+        `| dStart (wrong) | ${summarise(dStartPoints)} | ${mean(dStartPoints)} | ${histogram(dStartPoints)} | ${inBand(dStartPoints)} |`,
+      );
+      w(
+        `| dPath (correct) | ${summarise(dPathPoints)} | ${mean(dPathPoints)} | ${histogram(dPathPoints)} | ${inBand(dPathPoints)} |`,
+      );
+      w();
+    }
 
     const temptations = run.levels.map((l) => l.generator.peakTemptation);
     if (temptations.length > 0) {
@@ -190,8 +215,12 @@ export function renderReport(report: RunReport, tiers: readonly TierSpec[]): str
     const land = (mode: "casual" | "normal" | "expert"): string => {
       const counts = new Map<string, number>();
       for (const level of run.levels) {
-        const m = level.metricsByMode[mode];
-        const key = `k${m.keystones.length}/l${m.lookaheadDistance}/d${m.decisionPoints}`;
+        const block = level.modes[mode];
+        if (!block) {
+          counts.set("absent", (counts.get("absent") ?? 0) + 1);
+          continue;
+        }
+        const key = `${block.tier ?? "none"} (k${block.metrics.keystones.length}/l${block.metrics.lookaheadDistance}/d${block.metrics.decisionPoints})`;
         counts.set(key, (counts.get(key) ?? 0) + 1);
       }
       return [...counts.entries()]

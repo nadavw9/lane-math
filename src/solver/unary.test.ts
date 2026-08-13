@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { enumerateTransforms } from "./unary.js";
 import { makePool } from "./pool.js";
+import { scarcityOf } from "./budget.js";
 import { solve } from "./solve.js";
 import { describeMove } from "./format.js";
 import { DEFAULT_RULES, type Level } from "./types.js";
@@ -106,6 +107,39 @@ describe("unary transforms inside solve()", () => {
     expect(fatal).toBeDefined();
     expect(fatal!.trapDepth).toBe(1);
     expect(fatal!.diesAtTargetIndex).toBe(1);
+  });
+});
+
+describe("consumed mode is T + U, not T (GDD §8.5)", () => {
+  it("a consumed budget on a level using one transform totals T + 1", () => {
+    // pool [16,3], target [7]: sqrt(16)=4 then 3+4=7. One target, one
+    // transform, so T=1 and U=1 — the budget must total 2. Under the old
+    // `#ops = T` reading this level could have no valid Expert budget at all.
+    const budget = { "+": 1, sqrt: 1 };
+    const board = level({});
+
+    const result = solve(board, budget);
+    expect(result.solvable).toBe(true);
+
+    const transforms = result.winningPaths[0]!.filter((m) => m.kind === "unary").length;
+    expect(transforms).toBe(1);
+
+    const total = Object.values(budget).reduce<number>((a, b) => a + (b ?? 0), 0);
+    expect(total).toBe(board.targets.length + transforms);
+    expect(scarcityOf(budget, board.targets.length, transforms)).toBe("consumed");
+  });
+
+  it("granting more unary budget than the line uses is counted, not consumed", () => {
+    // Total is T + 2 while the line performs one transform, so it is not
+    // consumed — the player has a spare operator. Detecting this needs U from
+    // the line; the budget alone cannot reveal it.
+    expect(scarcityOf({ "+": 1, sqrt: 2 }, 1, 1)).toBe("counted");
+    expect(scarcityOf({ "+": 1, sqrt: 1 }, 1, 1)).toBe("consumed");
+  });
+
+  it("a binary-only consumed budget still totals exactly T", () => {
+    expect(scarcityOf({ "+": 2, "*": 1 }, 3)).toBe("consumed");
+    expect(scarcityOf({ "+": 2, "*": 2 }, 3)).toBe("counted");
   });
 });
 

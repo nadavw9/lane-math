@@ -145,11 +145,23 @@ export interface KeystoneInfo {
 export interface Metrics {
   readonly surplus: number;
   /**
-   * `d_i` per target, measured against the STARTING pool (GDD §13). That is what
-   * the player can reason about at level open, and it is the basis the keystone
-   * definition is pinned to.
+   * `dStart_i` — decompositions of each target from the STARTING pool
+   * (GDD §8.4). Path-independent: this is structure, and it is what keystone
+   * detection is pinned to (GDD §13).
    */
-  readonly decompositionCounts: readonly number[];
+  readonly dStart: readonly number[];
+  /**
+   * `dPath_i` — decompositions of each target from the pool AS REACHED along
+   * the intended winning line (GDD §8.4). This is the search burden the player
+   * actually faces.
+   *
+   * The two diverge, and `dStart` inflates with `T`: on a Late board a late
+   * target is reached with 3–6 tiles in hand and is usually forced, while
+   * measuring it against all 14 starting tiles makes it look like a branch.
+   * Empty when the level is unsolvable.
+   */
+  readonly dPath: readonly number[];
+  /** Count of targets where `dPath_i >= 2` (GDD §8.4). Never `dStart`. */
   readonly decisionPoints: number;
   readonly keystones: readonly number[];
   readonly keystoneDetail: readonly KeystoneInfo[];

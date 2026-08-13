@@ -7,6 +7,7 @@ import {
   type Operator,
   type OperatorBudget,
   type Scarcity,
+  UNARY_OPS,
 } from "./types.js";
 
 /** Every operator, unlimited. */
@@ -49,22 +50,47 @@ export function budgetKey(budget: OperatorBudget): string {
 }
 
 /**
- * GDD §6. Derived, not declared:
+ * GDD §6 and §8.5. Derived, not declared:
  *
  *   free      every operator present is unlimited
- *   consumed  every binary operator is counted and they sum to exactly T —
- *             one operator per move, all of them spent
+ *   consumed  every operator is counted and the TOTAL budget is exactly
+ *             `T + U`, where `U` is the number of unary transforms — one
+ *             operator per move, all of them spent
  *   counted   anything else
+ *
+ * `#ops = T` cannot hold on a level using a unary operator: a transform
+ * consumes an operator without clearing a target, so it adds a move without
+ * adding a target. `T + U` is the relation that actually holds.
+ *
+ * Pass `unaryTransforms` — the `U` of the intended line — to check the rule as
+ * written. Without it this can only verify the structural half (binary ops sum
+ * to `T`) and will call a budget consumed even when it grants more unary uses
+ * than the line performs, because the budget alone cannot reveal that.
  */
-export function scarcityOf(budget: OperatorBudget, targetCount: number): Scarcity {
+export function scarcityOf(
+  budget: OperatorBudget,
+  targetCount: number,
+  unaryTransforms?: number,
+): Scarcity {
   const present = ALL_OPS.filter((op) => budget[op] !== undefined);
   if (present.length > 0 && present.every((op) => budget[op] === null)) return "free";
 
-  let total = 0;
-  for (const op of BINARY_OPS) {
-    const remaining = budget[op];
-    if (remaining === null) return "counted";
-    if (remaining !== undefined) total += remaining;
+  const sum = (ops: readonly Operator[]): number | null => {
+    let total = 0;
+    for (const op of ops) {
+      const remaining = budget[op];
+      if (remaining === null) return null; // unlimited: cannot be consumed
+      if (remaining !== undefined) total += remaining;
+    }
+    return total;
+  };
+
+  const binary = sum(BINARY_OPS);
+  const unary = sum(UNARY_OPS);
+  if (binary === null || unary === null) return "counted";
+
+  if (unaryTransforms !== undefined) {
+    return binary + unary === targetCount + unaryTransforms ? "consumed" : "counted";
   }
-  return total === targetCount ? "consumed" : "counted";
+  return binary === targetCount ? "consumed" : "counted";
 }

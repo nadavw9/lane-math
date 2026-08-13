@@ -26,6 +26,7 @@ export interface RunOptions {
   readonly targetAccepted: number;
   readonly bandingSampleCap: number;
   readonly temptationThreshold: number;
+  readonly requireAllModes: boolean;
 }
 
 export const DEFAULT_OPTIONS: RunOptions = {
@@ -37,6 +38,7 @@ export const DEFAULT_OPTIONS: RunOptions = {
   targetAccepted: 200,
   bandingSampleCap: 2000,
   temptationThreshold: TEMPTATION_THRESHOLD,
+  requireAllModes: false,
 };
 
 function emptyRejections(): Record<RejectionReason, number> {
@@ -57,6 +59,7 @@ export function runTier(
   const levels: GeneratedLevel[] = [];
   const bandingSamples: Metrics[] = [];
 
+  const acceptedMetrics: Metrics[] = [];
   let inertDecoyRejections = 0;
   let totalMs = 0;
   let attempts = 0;
@@ -71,6 +74,7 @@ export function runTier(
     rules: DEFAULT_RULES,
     maxCollected: options.maxCollected,
     temptationThreshold: options.temptationThreshold,
+    requireAllModes: options.requireAllModes,
   };
 
   for (let i = 0; i < options.attemptsPerTier; i++) {
@@ -80,7 +84,11 @@ export function runTier(
 
     if (outcome.accepted) {
       levels.push(outcome.level);
-      bandingSamples.push(outcome.level.metricsByMode[tier.modeOfRecord]);
+      const record = outcome.byMode[tier.modeOfRecord];
+      if (record) {
+        bandingSamples.push(record);
+        acceptedMetrics.push(record);
+      }
       if (levels.length >= options.targetAccepted) break;
       continue;
     }
@@ -102,6 +110,7 @@ export function runTier(
     totalMs,
     levels,
     bandingSamples,
+    acceptedMetrics,
   };
 }
 
@@ -146,6 +155,9 @@ export function parseArgs(argv: readonly string[]): RunOptions {
         break;
       case "--temptation":
         options.temptationThreshold = Number(value);
+        break;
+      case "--require-all-modes":
+        options.requireAllModes = value === "true" || value === "1";
         break;
       case "--strategies":
         options.strategies = value.split(",") as Strategy[];

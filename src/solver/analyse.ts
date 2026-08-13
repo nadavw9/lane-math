@@ -1,6 +1,6 @@
 import { enumerate } from "./enumerate.js";
 import { makePool } from "./pool.js";
-import { resolveBudget, solve } from "./solve.js";
+import { applyMove, resolveBudget, solve, type State } from "./solve.js";
 import { validateLevel } from "./validate.js";
 import type {
   Decomposition,
@@ -8,6 +8,7 @@ import type {
   Level,
   Metrics,
   Mode,
+  Move,
   OperatorBudget,
   SolveOptions,
   SolveResult,
@@ -16,15 +17,28 @@ import type {
 export interface AnalyseOptions extends SolveOptions {
   /** A solve() result for the same level and budget, to avoid re-solving. */
   readonly reuse?: SolveResult;
+  /**
+   * The line `dPath` is measured along. Defaults to the first winning path in
+   * canonical enumeration order — deterministic, and derivable from the level
+   * JSON alone, which is what lets verification reproduce a published `dPath`
+   * without knowing how the level was constructed.
+   */
+  readonly intendedLine?: readonly Move[];
 }
 
 /**
  * GDD §8.4 metrics.
  *
- * `d_i` is measured against the STARTING pool, not the pool as reached. GDD §13
- * resolves keystone uniqueness that way — the starting pool is what the player
- * can see and reason about at level open — and the two definitions must agree
- * or `decisionPoints` and `keystones` would be counting different things.
+ * Two decomposition counts, deliberately kept apart:
+ *
+ *   dStart  from the starting pool. Structure and keystone detection, because
+ *           the starting pool is what the player can see and reason about at
+ *           level open (GDD §13).
+ *   dPath   from the pool as reached along the intended winning line. Search
+ *           burden, and the only basis `decisionPoints` may use — banding on
+ *           dStart rejects correctly-difficult large boards (GDD §8.4).
+ *
+ * Reporting only one of them is a spec error.
  */
 export function analyse(
   level: Level,
@@ -39,19 +53,23 @@ export function analyse(
   const decompositions: Decomposition[][] = level.targets.map((target) =>
     enumerate(startingPool, target, budget, level.rules),
   );
-  const decompositionCounts = decompositions.map((d) => d.length);
+  const dStart = decompositions.map((d) => d.length);
 
   const keystoneDetail = findKeystones(decompositions);
   // A caller that has already solved this exact (level, budget) can hand the
   // result back rather than paying for it twice.
   const result = options.reuse ?? solve(level, budget, options);
 
+  const intendedLine = options.intendedLine ?? result.winningPaths[0] ?? null;
+  const dPath = intendedLine ? computeDPath(level, budget, intendedLine) : [];
+
   return {
     // GDD §3.1: N = 2T + S. Unary transforms rewrite tiles rather than
     // consuming them, so they do not disturb this.
     surplus: level.pool.length - 2 * level.targets.length,
-    decompositionCounts,
-    decisionPoints: decompositionCounts.filter((count) => count >= 2).length,
+    dStart,
+    dPath,
+    decisionPoints: dPath.filter((count) => count >= 2).length,
     keystones: keystoneDetail.map((k) => k.index),
     keystoneDetail,
     overlappingKeystonePairs: countOverlaps(keystoneDetail),
@@ -60,6 +78,38 @@ export function analyse(
     maxTrapDepth: result.fatalMoves.reduce((max, f) => Math.max(max, f.trapDepth), 0),
     solvable: result.solvable,
   };
+}
+
+/**
+ * Walk the intended line, counting the decompositions available at each target.
+ *
+ * Measured immediately before the binary move that clears the target, so any
+ * unary transforms the line performs while that target is at the front have
+ * already happened. That keeps `dPath_i >= 1` on a solvable level — the
+ * intended move is always one of the options counted.
+ *
+ * The budget is carried forward too: under a counted or consumed budget, what
+ * the player can see at target 5 depends on what they spent at targets 1–4.
+ */
+function computeDPath(
+  level: Level,
+  budget: OperatorBudget,
+  path: readonly Move[],
+): number[] {
+  const dPath: number[] = [];
+  let state: State = { tiles: makePool(level.pool), targetIndex: 0, budget };
+
+  for (const move of path) {
+    if (move.kind === "binary") {
+      dPath.push(
+        enumerate(state.tiles, level.targets[state.targetIndex]!, state.budget, level.rules)
+          .length,
+      );
+    }
+    state = applyMove(state, move);
+  }
+
+  return dPath;
 }
 
 /**

@@ -55,32 +55,52 @@ export interface ModeAnalysis {
   readonly landsInTier: TierName | null;
 }
 
+/** One mode's block in the GDD §10 level format. */
+export interface ModeBlock {
+  /** Generator output (§8.5), never hand-authored. `null` = unlimited. */
+  readonly budget: OperatorBudget;
+  /** The tier this mode's metrics actually land in. May differ per mode (§8.6). */
+  readonly tier: TierName | null;
+  readonly metrics: {
+    readonly solvable: boolean;
+    readonly solutionPaths: number;
+    readonly dStart: readonly number[];
+    readonly dPath: readonly number[];
+    readonly decisionPoints: number;
+    readonly keystones: readonly number[];
+    readonly lookaheadDistance: number;
+    readonly maxTrapDepth: number;
+    readonly overlappingKeystonePairs: number;
+  };
+}
+
+/**
+ * GDD §10 level format. Budgets and metrics are keyed per mode, not per level
+ * (§8.6) — operator scarcity changes trap structure, so one board is three
+ * genuinely different puzzles.
+ *
+ * A mode is absent when no valid budget exists for it; gameplay must handle a
+ * level that is not offered in Expert.
+ *
+ * `generator` is the one additive key beyond §10: provenance for curation and
+ * bisection. Everything §10 specifies is present and correctly shaped.
+ */
 export interface GeneratedLevel {
   readonly id: string;
   readonly world: number;
-  readonly tier: TierName;
   readonly pool: readonly number[];
   readonly targets: readonly number[];
-  readonly operators: Readonly<Record<Mode, OperatorBudget>>;
   readonly rules: Rules;
-  /** GDD §10 metrics block, taken from the tier's mode of record. */
-  readonly metrics: {
-    readonly surplus: number;
-    readonly keystones: readonly number[];
-    readonly lookaheadDistance: number;
-    readonly decisionPoints: number;
-    readonly solutionPaths: number;
-    readonly maxTrapDepth: number;
-  };
-  /** Additive, beyond GDD §10 — the per-mode evidence the central constraint needs. */
-  readonly metricsByMode: Readonly<Record<Mode, Metrics>>;
-  readonly traps: readonly TrapScore[];
+  readonly modes: Partial<Record<Mode, ModeBlock>>;
+  readonly surplus: number;
   readonly generator: {
     readonly seed: number;
     readonly strategy: Strategy;
+    /** The tier this board was generated for, as opposed to where it landed. */
+    readonly targetTier: TierName;
     readonly hash: string;
-    readonly overlappingKeystonePairs: number;
     readonly peakTemptation: number;
+    readonly traps: readonly TrapScore[];
     readonly decoys: readonly DecoyInfo[];
     readonly expertBudgetsSolvable: number;
     readonly expertBudgetsUnique: number;
@@ -88,7 +108,13 @@ export interface GeneratedLevel {
 }
 
 export type Outcome =
-  | { readonly accepted: true; readonly level: GeneratedLevel; readonly ms: number }
+  | {
+      readonly accepted: true;
+      readonly level: GeneratedLevel;
+      readonly ms: number;
+      /** Full metric blocks, for the report's distributions. */
+      readonly byMode: Partial<Record<Mode, Metrics>>;
+    }
   | {
       readonly accepted: false;
       readonly reason: RejectionReason;
@@ -119,6 +145,13 @@ export interface AttemptContext {
    * that is really an artefact of this threshold would be worthless.
    */
   readonly temptationThreshold: number;
+  /**
+   * Require every mode to have a valid budget, rather than emitting the level
+   * with that mode absent (GDD §10 allows absence). Exists to isolate how much
+   * of a yield change comes from that policy rather than from a metric fix —
+   * a yield number that mixes the two explains nothing.
+   */
+  readonly requireAllModes: boolean;
 }
 
 export function hashBoard(pool: readonly number[], targets: readonly number[]): string {
@@ -312,36 +345,41 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
   const normal = solveNormalBudget(level, tier, usages, rng);
   const expert = solveExpertBudget(level, usages, true);
 
-  if (!normal || !expert.chosen) {
+  // GDD §8.5 and §10: a level admitting no valid budget for a mode is EXCLUDED
+  // from that mode, not forced and not discarded — unless it is the mode this
+  // tier is banded under, in which case there is nothing left to accept.
+  const missingRecordBudget =
+    (tier.modeOfRecord === "normal" && !normal) ||
+    (tier.modeOfRecord === "expert" && !expert.chosen);
+
+  if (missingRecordBudget || (ctx.requireAllModes && (!normal || !expert.chosen))) {
     return done({
       accepted: false,
       reason: "no-expert-budget",
-      detail: normal
-        ? `${expert.solvableCount} solvable expert budgets, ${expert.uniqueCount} unique`
-        : "no normal budget",
+      detail: `${expert.solvableCount} solvable expert budgets, ${expert.uniqueCount} unique`,
       inertDecoyRejections: inert,
     });
   }
 
-  // 7. PER-MODE ANALYSIS AND BANDING.
-  const budgets: Record<Mode, OperatorBudget> = {
-    casual,
-    normal: normal.budget,
-    expert: expert.chosen.budget,
-  };
+  // 7. PER-MODE ANALYSIS AND BANDING (GDD §8.6) — three metric blocks, not one.
+  const budgets: Partial<Record<Mode, OperatorBudget>> = { casual };
+  if (normal) budgets.normal = normal.budget;
+  if (expert.chosen) budgets.expert = expert.chosen.budget;
 
-  const byMode = {} as Record<Mode, Metrics>;
+  const byMode: Partial<Record<Mode, Metrics>> = {};
   const analyses: ModeAnalysis[] = [];
   for (const mode of ["casual", "normal", "expert"] as const) {
+    const budget = budgets[mode];
+    if (!budget) continue;
     const metrics =
       mode === "casual"
         ? casualMetrics
-        : analyse(level, budgets[mode], { maxCollected: ctx.maxCollected });
+        : analyse(level, budget, { maxCollected: ctx.maxCollected });
     byMode[mode] = metrics;
     const bandFailures = bandAgainst(metrics, tier);
     analyses.push({
       mode,
-      budget: budgets[mode],
+      budget,
       metrics,
       inBand: bandFailures.length === 0,
       bandFailures,
@@ -349,7 +387,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
     });
   }
 
-  // The central constraint: solvable in ALL THREE modes or it is not a level.
+  // Every mode that IS offered must be solvable under its own budget.
   const unsolvableModes = analyses.filter((a) => !a.metrics.solvable);
   if (unsolvableModes.length > 0) {
     return done({
@@ -373,35 +411,45 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
 
   ctx.seen.add(hash);
 
+  const modes: Partial<Record<Mode, ModeBlock>> = {};
+  for (const entry of analyses) {
+    modes[entry.mode] = {
+      budget: entry.budget,
+      tier: entry.landsInTier,
+      metrics: {
+        solvable: entry.metrics.solvable,
+        solutionPaths: entry.metrics.solutionPaths,
+        dStart: entry.metrics.dStart,
+        dPath: entry.metrics.dPath,
+        decisionPoints: entry.metrics.decisionPoints,
+        keystones: entry.metrics.keystones,
+        lookaheadDistance: entry.metrics.lookaheadDistance,
+        maxTrapDepth: entry.metrics.maxTrapDepth,
+        overlappingKeystonePairs: entry.metrics.overlappingKeystonePairs,
+      },
+    };
+  }
+
   const accepted: GeneratedLevel = {
     id: level.id,
     world: tier.world,
-    tier: tier.name,
     pool,
     targets,
-    operators: budgets,
     rules,
-    metrics: {
-      surplus: record.metrics.surplus,
-      keystones: record.metrics.keystones,
-      lookaheadDistance: record.metrics.lookaheadDistance,
-      decisionPoints: record.metrics.decisionPoints,
-      solutionPaths: record.metrics.solutionPaths,
-      maxTrapDepth: record.metrics.maxTrapDepth,
-    },
-    metricsByMode: byMode,
-    traps,
+    modes,
+    surplus: record.metrics.surplus,
     generator: {
       seed: ctx.seed,
       strategy: ctx.strategy,
+      targetTier: tier.name,
       hash,
-      overlappingKeystonePairs: record.metrics.overlappingKeystonePairs,
       peakTemptation: temptation,
+      traps,
       decoys: decoyed.decoys,
       expertBudgetsSolvable: expert.solvableCount,
       expertBudgetsUnique: expert.uniqueCount,
     },
   };
 
-  return { accepted: true, level: accepted, ms: performance.now() - started };
+  return { accepted: true, level: accepted, ms: performance.now() - started, byMode };
 }

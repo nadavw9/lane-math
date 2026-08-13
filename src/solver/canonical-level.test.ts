@@ -119,6 +119,36 @@ describe("canonical level — assertion (d): 5-2=3 is legal, fatal, trap depth 1
   });
 });
 
+describe("canonical level — dStart and dPath diverge (GDD §8.4)", () => {
+  const metrics = analyse(CANONICAL, "casual");
+
+  it("dStart is [2, 4, 1] — measured against the starting pool", () => {
+    expect([...metrics.dStart]).toEqual([2, 4, 1]);
+  });
+
+  it("dPath is [2, 3, 1] — measured along the intended winning line", () => {
+    // 4 - 1 = 3 is counted at the start but is gone by the time target 1 is
+    // reached, because 2 x 4 consumed the 4. This is the worked example the
+    // GDD uses to show the two metrics are not interchangeable.
+    expect([...metrics.dPath]).toEqual([2, 3, 1]);
+  });
+
+  it("decisionPoints derives from dPath, never dStart", () => {
+    expect(metrics.decisionPoints).toBe(metrics.dPath.filter((d) => d >= 2).length);
+  });
+
+  it("dPath is never zero on a solvable level — the intended move is always counted", () => {
+    expect(metrics.dPath.every((d) => d >= 1)).toBe(true);
+  });
+
+  it("keystones are still measured on dStart", () => {
+    // Target 2 has dStart 1 and dPath 1; target 1 has dStart 4 and dPath 3.
+    // Only the dStart-unique one is a keystone.
+    expect([...metrics.keystones]).toEqual([2]);
+    expect(metrics.dStart[2]).toBe(1);
+  });
+});
+
 describe("canonical level — assertion (e): metrics", () => {
   const metrics = analyse(CANONICAL, "casual");
 
@@ -177,7 +207,7 @@ describe("canonical level — runs under all three operator scarcities", () => {
     expect(solve(CANONICAL, "expert").solvable).toBe(false);
   });
 
-  it("consumed: {+:1, *:2} sums to T and is solvable", () => {
+  it("consumed: {+:1, *:2} totals T + U (U = 0 here) and is solvable", () => {
     expect(scarcityOf(CONSUMED_SOLVABLE, CANONICAL.targets.length)).toBe("consumed");
     const result = solve(CANONICAL, CONSUMED_SOLVABLE);
     expect(result.solvable).toBe(true);

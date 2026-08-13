@@ -148,48 +148,71 @@ describe("the central constraint — accepted levels are valid in all three mode
     expect(sample.length).toBeGreaterThan(0);
   });
 
-  it("every accepted level is solvable under all three mode budgets", () => {
+  const asLevel = (level: (typeof sample)[number]): Level => ({
+    id: level.id,
+    pool: level.pool,
+    targets: level.targets,
+    operators: {
+      casual: level.modes.casual?.budget ?? {},
+      normal: level.modes.normal?.budget ?? {},
+      expert: level.modes.expert?.budget ?? {},
+    },
+    rules: level.rules,
+  });
+
+  it("every mode a level offers is solvable under that mode's own budget", () => {
     for (const level of sample) {
       for (const mode of modes) {
-        const asLevel: Level = {
-          id: level.id,
-          pool: level.pool,
-          targets: level.targets,
-          operators: level.operators,
-          rules: level.rules,
-        };
+        const block = level.modes[mode];
+        if (!block) continue; // GDD §10: a mode may legitimately be absent.
         expect(
-          solve(asLevel, mode).solvable,
+          solve(asLevel(level), block.budget).solvable,
           `${level.id} unsolvable in ${mode}`,
         ).toBe(true);
       }
     }
   });
 
-  it("every accepted level's published metrics reproduce from a fresh analyse()", () => {
+  it("always offers casual", () => {
     for (const level of sample) {
-      const tier = tierByName(level.tier);
-      const asLevel: Level = {
-        id: level.id,
-        pool: level.pool,
-        targets: level.targets,
-        operators: level.operators,
-        rules: level.rules,
-      };
-      const fresh = analyse(asLevel, tier.modeOfRecord);
-      expect(fresh.surplus, level.id).toBe(level.metrics.surplus);
-      expect(fresh.lookaheadDistance, level.id).toBe(level.metrics.lookaheadDistance);
-      expect(fresh.decisionPoints, level.id).toBe(level.metrics.decisionPoints);
-      expect(fresh.solutionPaths, level.id).toBe(level.metrics.solutionPaths);
-      expect([...fresh.keystones], level.id).toEqual([...level.metrics.keystones]);
+      expect(level.modes.casual, level.id).toBeDefined();
+    }
+  });
+
+  it("every offered mode's published metrics reproduce from a fresh analyse()", () => {
+    for (const level of sample) {
+      for (const mode of modes) {
+        const block = level.modes[mode];
+        if (!block) continue;
+        const fresh = analyse(asLevel(level), block.budget);
+        const where = `${level.id}/${mode}`;
+        expect(fresh.lookaheadDistance, where).toBe(block.metrics.lookaheadDistance);
+        expect(fresh.decisionPoints, where).toBe(block.metrics.decisionPoints);
+        expect(fresh.solutionPaths, where).toBe(block.metrics.solutionPaths);
+        expect([...fresh.keystones], where).toEqual([...block.metrics.keystones]);
+        expect([...fresh.dStart], where).toEqual([...block.metrics.dStart]);
+        expect([...fresh.dPath], where).toEqual([...block.metrics.dPath]);
+      }
+    }
+  });
+
+  it("decisionPoints is computed from dPath, not dStart (GDD §8.4)", () => {
+    for (const level of sample) {
+      for (const mode of modes) {
+        const block = level.modes[mode];
+        if (!block) continue;
+        const fromPath = block.metrics.dPath.filter((d) => d >= 2).length;
+        expect(block.metrics.decisionPoints, `${level.id}/${mode}`).toBe(fromPath);
+        expect(block.metrics.dPath.every((d) => d >= 1), `${level.id}/${mode}`).toBe(true);
+      }
     }
   });
 
   it("every accepted level satisfies N = 2T + S with S inside the tier band", () => {
     for (const level of sample) {
-      const tier = tierByName(level.tier);
+      const tier = tierByName(level.generator.targetTier);
       const surplus = level.pool.length - 2 * level.targets.length;
-      expect(surplus, level.id).toBe(level.metrics.surplus);
+      expect(surplus, level.id).toBe(level.surplus);
       expect(surplus, level.id).toBeGreaterThanOrEqual(tier.surplus.min);
       expect(surplus, level.id).toBeLessThanOrEqual(tier.surplus.max);
     }
@@ -206,23 +229,46 @@ describe("the central constraint — accepted levels are valid in all three mode
     }
   });
 
-  it("every accepted level's Expert budget is genuinely consumed", () => {
+  it("every offered Expert budget is consumed and totals T + U", () => {
     for (const level of sample) {
+      const block = level.modes.expert;
+      if (!block) continue;
+      const path = solve(asLevel(level), block.budget).winningPaths[0]!;
+      const unary = path.filter((m) => m.kind === "unary").length;
       expect(
-        scarcityOf(level.operators.expert, level.targets.length),
+        scarcityOf(block.budget, level.targets.length, unary),
         `${level.id} expert budget`,
       ).toBe("consumed");
+
+      const total = Object.values(block.budget).reduce<number>((a, b) => a + (b ?? 0), 0);
+      expect(total, `${level.id} expert budget total`).toBe(level.targets.length + unary);
     }
   });
 
-  it("every accepted level has a keystone with exactly one decomposition from the starting pool", () => {
+  it("keystones have exactly one dStart decomposition", () => {
     for (const level of sample) {
-      const tier = tierByName(level.tier);
-      const budget = level.operators[tier.modeOfRecord];
+      const tier = tierByName(level.generator.targetTier);
+      const block = level.modes[tier.modeOfRecord];
+      if (!block) continue;
       const tiles = makePool(level.pool);
-      for (const index of level.metrics.keystones) {
-        const decomps = enumerate(tiles, level.targets[index]!, budget, level.rules);
+      for (const index of block.metrics.keystones) {
+        const decomps = enumerate(tiles, level.targets[index]!, block.budget, level.rules);
         expect(decomps.length, `${level.id} keystone ${index}`).toBe(1);
+      }
+    }
+  });
+
+  it("emits every key GDD §10 specifies", () => {
+    for (const level of sample) {
+      for (const key of ["id", "world", "pool", "targets", "rules", "modes", "surplus"] as const) {
+        expect(level[key], `${level.id} missing ${key}`).toBeDefined();
+      }
+      for (const mode of modes) {
+        const block = level.modes[mode];
+        if (!block) continue;
+        expect(block.budget, `${level.id}/${mode} budget`).toBeDefined();
+        expect(block.metrics, `${level.id}/${mode} metrics`).toBeDefined();
+        expect(block, `${level.id}/${mode} tier`).toHaveProperty("tier");
       }
     }
   });
@@ -286,15 +332,21 @@ describe("construction is backwards — a solution exists before anything is mea
       rules: DEFAULT_RULES,
       maxCollected: 2000,
       temptationThreshold: TEMPTATION_THRESHOLD,
+      requireAllModes: false,
     };
     for (let i = 0; i < 200; i++) {
       const outcome = attempt(ctx, i);
       if (!outcome.accepted) continue;
+      const casualBlock = outcome.level.modes.casual!;
       const asLevel: Level = {
         id: outcome.level.id,
         pool: outcome.level.pool,
         targets: outcome.level.targets,
-        operators: outcome.level.operators,
+        operators: {
+          casual: casualBlock.budget,
+          normal: casualBlock.budget,
+          expert: casualBlock.budget,
+        },
         rules: outcome.level.rules,
       };
       expect(solve(asLevel, "casual").solvable).toBe(true);

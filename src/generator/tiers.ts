@@ -1,7 +1,7 @@
 import type { BinaryOp, Mode, Scarcity, UnaryOp } from "../solver/index.js";
 
 /**
- * GDD §8.5 tier table, as data.
+ * GDD §8.7 tier table, as data.
  *
  * Transcribed verbatim from the table in the GDD, plus the value ranges the
  * table does not specify (operand/target magnitude), which are a construction
@@ -13,7 +13,10 @@ import type { BinaryOp, Mode, Scarcity, UnaryOp } from "../solver/index.js";
  *   | Early    | 4-5 | 0   | + - *     | Free     | 1              | 1-2       | 1-2          |
  *   | Mid      | 5-6 | 1   | + - * /   | Counted  | 1-2            | 2-3       | 2-3          |
  *   | Late     | 6-7 | 1-2 | all + sqrt| Counted  | 2              | 3-4       | 3-4          |
- *   | Expert   | 6-7 | 2   | all       | Consumed | 2+ overlapping | 4+        | 4+           |
+ *   | Expert   | 6-7 | 2   | all       | Consumed | 2+ overlapping | 5+        | 5+           |
+ *
+ * All decisionPoints figures are measured on `dPath`, never `dStart` (§8.4).
+ * Bands must not touch: Expert starts where Late ends.
  */
 export type TierName = "tutorial" | "early" | "mid" | "late" | "expert";
 
@@ -134,8 +137,10 @@ export const TIERS: readonly TierSpec[] = [
     modeOfRecord: "expert",
     keystones: r(2, INF),
     requireOverlappingKeystones: true,
-    lookahead: r(4, INF),
-    decisionPoints: r(4, INF),
+    // GDD §8.7: Expert starts where Late ends. The bands previously touched at
+    // 4, which made them the same difficulty with Expert merely unbounded.
+    lookahead: r(5, INF),
+    decisionPoints: r(5, INF),
     uniqueSolution: true,
     operandMax: 12,
     targetMax: 80,
