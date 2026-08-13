@@ -1,0 +1,760 @@
+# Lane Math — Game Design Document
+
+**Status:** Design locked, pre-implementation
+**Author:** Nadav
+**Related project:** Traffic Bomb (`lane-defense`) — selective reuse, see §11
+
+---
+
+## 1. Concept
+
+A single-lane arithmetic puzzle where the difficulty is **resource planning, not arithmetic**.
+
+The player is given a pool of numbers and a queue of targets. Each move combines two numbers with one operator to produce the next target. The numbers used are destroyed permanently. Solving each equation is trivial; choosing *which* decomposition to use is the entire game, because every choice removes resources a later target may need.
+
+**Design premise:** the arithmetic must stay easy so that all cognitive load lands on planning. Anything that makes the mental math harder (fractions, huge numbers) is working against the design.
+
+### Canonical example
+
+```
+Pool:    1, 2, 2, 3, 4, 5
+Queue:   8 → 3 → 15
+```
+
+**Reasoning backwards:** `15` can only be made as `3 × 5`. So the 3 and the 5 are reserved. Everything else must come from `{1, 2, 2, 4}`.
+
+**The only winning line:**
+
+| Target | Move | Pool after |
+|---|---|---|
+| 8 | `2 × 4` | `1, 2, 3, 5` |
+| 3 | `1 + 2` | `3, 5` |
+| 15 | `3 × 5` | — |
+
+**Three fatal branches, all of which look correct at the time:**
+
+| Fatal move | At target | Dies at | Trap depth |
+|---|---|---|---|
+| `3 + 5 = 8` | 0 | 2 | **2** |
+| `5 − 2 = 3` | 1 (after `2×4`) | 2 | 1 |
+| `1 × 3 = 3` | 1 (after `2×4`) | 2 | 1 |
+
+Level metrics (free operators): `S = 0`, `dStart = [2, 4, 1]`, keystone at index 2, lookahead distance 2, decision points 2, solution paths 1, max trap depth 2.
+
+**Under a consumed budget of `{+:1, ×:2}` the same board is a different puzzle:** `3 + 5 = 8` spends the only `+`, leaving no way to make 3 from `{1, 2, 2, 4}` with `×` alone. Trap depth drops from 2 to 1. See §8.6.
+
+The failure surfaces at the **third** target, two moves after the mistake. That gap is the game.
+
+---
+
+## 2. Core loop
+
+1. Level opens. **The entire target queue is visible from the start.** (Non-negotiable — see §4.)
+2. Player drags two numbers and one operator into the equation slots: `[num] [op] [num] =`
+3. Pieces can be tapped to return them to the pool. Nothing is committed yet.
+4. Player presses **`=`** to commit.
+   - **Correct** → target clears, lane advances, the two numbers and (mode-dependent) the operator are destroyed.
+   - **Incorrect** → equation rejected, pieces return, no penalty. Wrong arithmetic is not a failure state.
+5. Repeat until the queue is empty (**win**) or the front target is unreachable (**fail**).
+
+### Screen layout (top → bottom)
+
+```
+┌─────────────────────────┐
+│   LANE (vertical)       │  full target queue, front target at bottom
+│   15                    │
+│    3                    │
+│    8  ← front           │
+├─────────────────────────┤
+│  [ _ ] [ _ ] [ _ ]  =   │  equation slots + commit button
+├─────────────────────────┤
+│  OPERATORS  + − × ÷ √   │
+│  NUMBERS    1 2 2 3 4 5 │
+└─────────────────────────┘
+```
+
+The lane occupies the same screen region as Traffic Bomb's road. One lane only.
+
+---
+
+## 3. Mechanics
+
+### 3.1 Pool sizing
+
+Each move consumes exactly 2 numbers and clears 1 target:
+
+```
+N = 2T + S
+```
+- `N` = pool size, `T` = target count, `S` = surplus
+
+**Surplus is not difficulty — it is the removal of deduction.** At `S = 0` the player can reason from parity ("every number must be used, so this pairing is forced"). That is a genuine and satisfying inference. Surplus destroys it, replacing insight with search.
+
+| Setting | Effect |
+|---|---|
+| `S = 0` | Parity deduction available. Feels fair, solvable by pure thought. Use early. |
+| `S = 1–2` | Parity broken, search widens. Use mid/late. |
+| `S ≥ 3` | Screen clutter, no added depth. **Do not ship.** |
+
+**Surplus numbers are trap material, not filler.** Every decoy must be chosen because it creates a *false decomposition* — a tempting alternative reading of an earlier target that consumes a number reserved for a later one. A decoy that creates no false path is dead weight and must be rejected by the generator.
+
+### 3.2 Operators
+
+Binary: `+`, `−`, `×`, `÷`
+Unary: `√`, `x²`
+
+Scarcity is **mode-dependent** (§6).
+
+### 3.3 Unary operators — pool transformers
+
+`√` and `x²` take one number, which breaks the `[num][op][num]` slot shape. **Do not special-case the slots.**
+
+Instead: unary operators act **on the pool**. Drag `√` onto the `16` in the pool → it becomes `4`, still in the pool, still needing a partner. The equation row shape never changes.
+
+This gives unary ops a distinct puzzle identity: **they manufacture numbers you don't have.** A single `√` is a one-shot resource that converts a large useless number into a small critical one. Excellent trap material.
+
+Constraints:
+- Only offer `√` when the pool contains at least one perfect square. A permanently dead item on the board feels broken.
+- `x²` is rarer and later — squaring inflates the target range fast. `√` shrinks and behaves well.
+- Applying a unary op consumes it (in counted/consumed modes) and is **irreversible** — the transformed number cannot be reverted.
+
+### 3.4 Integer-only results
+
+**Hard rule.** All intermediate and final values are integers.
+
+- `÷` legal only on exact division
+- `√` legal only on perfect squares
+
+Rationale: fractions break the design premise (§1) — they make the arithmetic non-trivial, explode the search space for both player and generator, and read badly on a phone.
+
+The restriction is itself a soft hint (it prunes the player's search), which is acceptable and helpful early.
+
+### 3.5 Input scheme — tap, not drag
+
+**Tap-to-place, not drag-and-drop.** Drag has no good failure mode on a phone: a slip mid-drag is ambiguous (cancel or misdrop?), hit boxes compete, and it is hostile to one-handed play. Tap has no ambiguous states — every tap either fills a slot or empties one.
+
+**Binary state machine:**
+
+```
+IDLE
+ └─ tap number  → slot 1 filled.  Operators bold, numbers dim.
+     └─ tap op  → slot 2 filled.  Numbers bold, operators dim.
+         └─ tap number → slot 3 filled.  "=" bold.
+             └─ tap "=" → COMMIT (irreversible)
+```
+
+Tapping any filled slot returns that piece to the pool and rewinds the machine to that step. (Wordle letter-selection model, plus explicit affordance highlighting.)
+
+**Affordance rule:** bold alone is insufficient — weight change is easy to miss and poor for low-vision players. **Always pair bold-active with dim-inactive.**
+
+**Unary operators are a mode, not a step.** `√` does not fit the binary machine because it never enters the equation. Instead:
+
+```
+tap √ → TRANSFORM MODE
+        every perfect square in pool highlights, everything else dims
+        └─ tap a highlighted number → transforms in place, √ consumed, → IDLE
+        └─ tap √ again → cancel, → IDLE
+```
+
+This keeps binary and unary visibly distinct, which is correct — they are different actions.
+
+Rules:
+- **A unary transform counts as a move for failure detection.** Transforming `16 → 4` can strip the pool of what the front target needed; the game must fail immediately, not wait for a commit that never comes.
+- **No cascading transforms.** One transform per tile, even where `√4 = 2` is legal.
+
+**Additional input rules:**
+
+| Rule | Reason |
+|---|---|
+| Tiles are consumed **by index, not by value** | Pool `[2, 2]` — the wrong tile animates otherwise |
+| Emptying a slot does **not** reshuffle the others | Slot 3 must not slide into slot 1 |
+| **Swap gesture** on the equation row | `5−3 ≠ 3−5` and tap order sets it; correcting order must not cost two taps |
+| `=` disabled until all three slots filled | No half-formed commits |
+
+### 3.6 Negative intermediates
+
+Separate difficulty axis, independent of the integer rule.
+
+- **Early worlds:** results must be ≥ 0. `3 − 8` is rejected.
+- **Later worlds:** negatives allowed. Roughly doubles subtraction's branching factor without touching arithmetic difficulty.
+
+---
+
+## 4. Failure
+
+### 4.1 Trigger
+
+**Failure fires when the target at the front of the lane cannot be produced from the numbers remaining in the pool.**
+
+Not when the solver detects an unwinnable state. The trigger is a concrete, visible board condition the player can verify themselves. The lane stops because the thing in front of it is unreachable.
+
+The gap between the fatal move and the failure is **unbounded**. In the canonical example the mistake is at target 1 and the failure at target 3.
+
+### 4.2 Full queue visibility is mandatory
+
+Because failure can surface arbitrarily far from its cause, the player **must** be able to see the whole queue at level start. The intended reasoning is backwards:
+
+> *15 can only be 3×5. So 3 and 5 are spoken for. Now make 8 and 3 from `{1, 2, 2, 4}`.*
+
+If the queue were hidden, failing at 15 would punish the player for information they were never given. Same rule, entirely different — and much worse — game.
+
+Targets arrive one at a time in the sense that only the front one is *solvable*. All of them are *visible*.
+
+### 4.3 Consequence
+
+```
+Fail → lose 1 life → restart the level from the beginning
+```
+
+**Rewind is to the start, not to the fatal move.** Rewinding to the branch point would announce *your mistake was move 1*, handing over most of the solution — and you cannot then charge stars for a hint that failure gives away free.
+
+Restarting leaks nothing. The player keeps everything they learned: same numbers, same queue, all still visible. They failed to read backwards; now they know to.
+
+### 4.4 No undo
+
+Every committed equation is final. Undo would let the player probe branches and take them back, dissolving the commitment the design rests on.
+
+**This makes input quality a hard requirement.** Mitigations, all pre-commit:
+- Dragging pieces into slots is free and reversible
+- Tapping a piece in a slot returns it to the pool
+- Nothing resolves until all three slots are filled **and** `=` is pressed
+- Generous hit boxes; `=` disabled until the row is complete
+
+A misclick must never cost a star or a life.
+
+### 4.5 Target count ceiling
+
+Rewind-to-start plus no-undo caps level length. **`T` ≤ 7.** Difficulty comes from keystone structure, not length.
+
+---
+
+## 5. Economy
+
+### 5.1 Stars
+
+Awarded on clear, based on **failures accumulated on that level**:
+
+| Failures | Stars |
+|---|---|
+| 0 | ★★★ |
+| 1 | ★★ |
+| 2+ | ★ |
+
+**The failure counter persists across restarts within a level.** If it reset, every failure would be free — restart, exploit the now-known trap, collect 3 stars. The counter must survive the restart or the economy is fake.
+
+Player-facing framing: **3 stars requires clearing the level without ever failing it.**
+
+**Replays:** a fully replayed level can re-earn a better rating (best result persists, Candy Crush model). Replays still cost lives, so this is not exploitable.
+
+### 5.2 Lives
+
+Candy Crush model:
+- Max **5**
+- Regenerate **1 per 20 minutes** (full refill ≈ 100 min)
+- At 0: rewarded ad for +1, or spend gold
+
+**The refill rate must be remote-configurable or at minimum a single JSON value** deployable without a store release. This number will be wrong on first guess and only retention data will show it.
+
+**Lives are not active during the tutorial worlds** (§7). A player must never lose a life to a mechanic they haven't been taught.
+
+### 5.3 Gold — deferred
+
+Purchasable with money; earnable from tournaments later. Not designed now — it is a live-ops system and needs an audience before it needs a design.
+
+### 5.4 Hints
+
+Bought with stars.
+
+**A hint must never reveal a keystone outright.** In a single-keystone level, "the 15 has only one solution" *is* the answer — the player has purchased the solution, not help. Acceptable hint forms:
+
+| Hint | Effect |
+|---|---|
+| **Narrow** | "One of the last three targets has only one solution." Shrinks the search, doesn't end it. |
+| **Contested resource** | "The 5 is contested." Points at the scarce number, not what needs it. |
+| **Branch elimination** | Highlights an earlier target: *your instinct here is wrong.* Kills the tempting fatal option without revealing the correct one. |
+
+Branch elimination is the most honest — it is a warning, not an answer.
+
+**Structural safeguard:** past the tutorial, levels should have **two or more keystones** (§8.2). A single-keystone level is one insight — find it and you're done — which makes it fragile to hints and fragile in general. Two keystones contesting the same number cannot be collapsed by revealing either one, because the insight is the *interaction*.
+
+---
+
+## 6. Difficulty modes
+
+Player-selectable. Same 40 levels, three modes — content multiplied at no authoring cost.
+
+| Mode | Operators | Fatal-move warning | Keystones |
+|---|---|---|---|
+| **Casual** | Unlimited | **Yes** — warns before committing a level-killing move | 1 |
+| **Normal** | Counted (e.g. 3× `+`, 1× `÷`) | No | 1–2 |
+| **Expert** | Consumed — one per move, `#ops = T + U` | No | 2+, overlapping |
+
+The solver runs the same check in all three modes. **Only disclosure changes.**
+
+Counted operators are the interesting middle: *"there is only one ÷ in this level"* is a real planning pressure and reads instantly on screen.
+
+---
+
+## 7. Progression and first-time experience
+
+### 7.1 The core tension
+
+Standard mobile FTUE practice optimises for *immediate action* — get the player tapping within seconds. Lane Math's core skill is the **opposite**: stop and plan before acting.
+
+Followed naively, the standard playbook trains the exact habit that causes failure at level 8.
+
+**Resolution: do not slow onboarding down — make early levels small enough that planning takes three seconds.** `T = 3`, six numbers, one keystone, lookahead distance 1. The player plans without noticing they are planning. Then grow **the size of the plan**, not the number of mechanics.
+
+Industry context for the stakes: ~77% of users churn on day one; average mobile D1 retention sits around 24% (freemium range 20–40%). Session one is the entire budget.
+
+### 7.2 Structure
+
+**4 worlds × 10 levels = 40 levels** at launch. One new concept per world.
+
+Each mechanic follows the standard puzzle-teaching loop, which fits a 10-level world exactly:
+
+```
+TEACH    — mechanic in isolation, forced/near-forced moves, unloseable
+TEST     — same mechanic, player must apply it unaided
+TWIST    — mechanic interacts with something previously learned
+MASTER   — open application at full difficulty
+```
+
+| World | Introduces | Lives | Params |
+|---|---|---|---|
+| **1 — Basics** | `+`, `−` | **Off** | `T=3`, `S=0`, 1 keystone, lookahead 1 |
+| **2 — Multiply** | `×` | **On from 2-8** | `T=4–5`, `S=0`, lookahead 1–2 |
+| **3 — Divide** | `÷` (exact), counted operators | On | `T=5–6`, `S=1`, lookahead 2–3 |
+| **4 — Roots** | `√`, negatives, two keystones | On | `T=6–7`, `S=1–2`, lookahead 3–4 |
+
+### 7.3 Difficulty curve — saw, not ramp
+
+Difficulty must rise in **peaks and valleys**, not a straight line. **Every new mechanic gets a valley**: one or two deliberately easy levels immediately after introduction, so the player learns the mechanic without simultaneously fighting difficulty.
+
+```
+difficulty
+   │        ╱╲      ╱╲        ╱╲
+   │   ╱╲  ╱  ╲    ╱  ╲      ╱  ╲
+   │  ╱  ╲╱    ╲__╱    ╲____╱    ╲
+   │ ╱          ↑         ↑
+   └────────────┴─────────┴──────────→ level
+              new mech  new mech
+              = valley  = valley
+```
+
+**Tune on attempts, not win rate.** Industry heuristic: 1–3 attempts = easy, 20–35 = hard. The star system already counts attempts, so this is free telemetry.
+
+### 7.4 Session one, beat by beat
+
+| Beat | Content | Rule |
+|---|---|---|
+| **0:00** | App opens directly into level 1-1. | No login, no account, no avatar, no splash video. Play as guest; offer account linking much later. |
+| **0:03** | Board visible. Pool of 6, three targets, `+` and `−` only. | Nothing on screen except the board. No HUD, no currency, no menus. |
+| **0:10** | First equation committed. Correct. | Level 1-1 is **near-forced** — every target has `d_i = 1`. The player cannot go wrong. |
+| **0:30** | Level 1-1 cleared. First stars awarded. | Star counter animates in **now** — introduced as a reward, not as pre-existing chrome. |
+| **1-2 → 1-3** | Free decisions appear (`d_i = 2`), still no fatal branches. | Player learns that choices exist before learning they matter. |
+| **1-4** | **THE SCRIPTED TRAP.** See §7.5. | Hand-authored, not generated. |
+| **1-5** | Valley. Easy level, applying the new insight. | Recovery beat. |
+| **1-6** | Same trap shape, **warning off**. Player must see it themselves. | TEACH → TEST completed. |
+| **1-10** | World 1 complete. World map appears for the first time. | Map is a reward for finishing, not a hurdle before starting. |
+
+### 7.5 The scripted trap (level 1-4)
+
+The single most important level in the game. It converts the central mechanic from a punishment into an insight.
+
+Hand-author a level where the **fatal branch is the obvious one**. When the player commits it:
+
+1. The commit animation **pauses mid-flight**.
+2. The camera pulls to the keystone target further down the lane.
+3. One line of text: *"Wait — what makes the 15?"*
+4. The only two numbers that can make it pulse in the pool.
+5. The move is **rewound for free** — no star, no life, no failure recorded.
+6. Player retries and succeeds.
+
+This is the "illusion of loss" principle: new players should not actually be able to lose, but they must *feel* that they could, so the win reads as earned.
+
+**Level 1-6 repeats the same structural shape with the warning disabled.** That is where the lesson is verified.
+
+### 7.6 Progressive disclosure schedule
+
+Nothing appears on screen before it is needed. Every system is a reward for progress.
+
+| Unlocks at | System | Rationale |
+|---|---|---|
+| 1-1 clear | Star counter | Introduced as a prize |
+| 1-4 | Fatal-move warning | The teaching device |
+| 1-10 | World map | Reward for world completion |
+| 2-1 | `×` | — |
+| **2-8** | **Lives** | **After** the player can reliably win. Granted at full 5, explained in one screen. |
+| 3-1 | `÷` | — |
+| 3-3 | Counted operators | — |
+| **3-6** | **Hint shop** | Only once the player has enough stars to actually afford something. A shop full of unaffordable items teaches "this is not for me." |
+| 3-10 | **Difficulty mode selector** | Choosing a mode before understanding the game is a decision made on zero information. |
+| 4-1 | `√` | — |
+| 4-5 | Negative intermediates | — |
+| 4-8 | Two-keystone levels | — |
+
+### 7.7 Text and instruction rules
+
+- **Guide with visuals; never with text walls.** An effective tutorial is invisible.
+- **Maximum one line of text per teaching beat.** No modals, no dismissible popups, no "Next →" chains.
+- **Never explain a mechanic the board can demonstrate.** Highlight, pulse, and dim carry the instruction.
+- **No forced tutorial replay.** A returning or fast-learning player must be able to skip ahead; even a crude two-way split (experienced / new) measurably reduces early churn.
+- **The board teaches by constraint.** In 1-1, only legal moves are tappable. The player cannot form a wrong equation, so no error message is needed.
+
+### 7.8 Instrumentation — the FTUE funnel
+
+Read as a **step-by-step funnel, not an average.** A single averaged retention number hides exactly where players leave.
+
+| Event | Payload |
+|---|---|
+| `app_open` | first_open, session_index |
+| `level_start` | level_id, attempt_number, mode |
+| **`first_tap_latency`** | **ms from board render to first tap** |
+| `move_commit` | level_id, expression, correct, target_index |
+| `unary_transform` | level_id, from, to |
+| `level_fail` | level_id, target_index_of_failure, attempt_number |
+| `level_complete` | level_id, stars, attempts, duration_ms |
+| `hint_purchased` | level_id, hint_type, stars_spent |
+| `life_depleted` | level_id |
+| `ad_watched` / `ad_failed` | placement |
+
+**`first_tap_latency` is the key metric for this game and appears on no standard list.** It is a direct proxy for whether the player is planning. Expected shape: ~1s in World 1 (trivial), rising to 10–30s by World 3 as levels demand real lookahead.
+
+**If it stays near 1s into World 2, players are guessing rather than planning, and the core design is not landing.** That is a design failure detectable from telemetry long before it shows up in reviews or churn.
+
+### 7.9 Post-launch modes (generator already supports)
+
+- **Endless / Daily** — pure generated stream, no fixed ladder
+- **Practice** — replay a cleared level with a freshly generated equivalent
+- **Tournaments** — same generated set for all players that week
+
+---
+
+## 8. Level generator
+
+### 8.1 Fixed levels, not runtime generation
+
+Generate thousands offline, **curate 40**. Do **not** regenerate a level when the player fails it.
+
+Rationale: the whole reward of failure is that the retry is *informed*. The player re-reads the queue backwards and sees the trap. Changing the numbers throws that away — they paid a life and received a new puzzle they've learned nothing about.
+
+The anti-brute-force concern is already solved twice over: **stars are permanently capped after a failure**, and **lives cap the attempt rate**. Punish guessing through score, not by deleting the player's progress.
+
+Fixed levels are also required for: tournaments, leaderboards, difficulty tuning from real telemetry, and CI verification. A level that exists only at runtime can never be balance-tested.
+
+### 8.2 Keystones
+
+A **keystone** is a target that:
+1. has **exactly one** valid decomposition given the pool,
+2. sits **late** in the queue, and
+3. whose operands are **contested** — at least one earlier target has an alternative decomposition that consumes them.
+
+Condition 3 is what makes the trap live. If the keystone's operands were useless to earlier targets, the player would stumble into the correct line by accident. The trap exists because `3 + 5 = 8` is *tempting and looks correct*.
+
+**Lookahead distance** = `(keystone position) − (earliest target that can steal from it)`
+
+This is the primary difficulty metric — the number of targets the player must hold in mind. In the canonical example: keystone at 3, theft possible at 1 → distance **2**.
+
+**Two overlapping keystones** — where reserving for one pressures the other — is where the game gets genuinely hard without getting longer. This is the target structure for World 4 and Expert mode.
+
+### 8.3 Algorithm
+
+Build backwards, then measure exhaustively. **Never forward-search.**
+
+```
+1. CONSTRUCT
+   Pick T operand pairs + operators. Compute each target.
+   → A valid solution exists by construction.
+
+2. DESIGNATE KEYSTONE(S)
+   Choose a late target. Verify it has exactly one decomposition
+   given the full pool. Adjust pool if not.
+
+3. VERIFY TRAP IS LIVE
+   Confirm ≥1 earlier target has an alternative decomposition
+   consuming a keystone operand.
+   → If not, REGENERATE. This step is what makes it a trap
+     rather than merely a level.
+
+4. ADD DECOYS (if S > 0)
+   Each decoy must create a false decomposition. Reject inert decoys.
+
+5. SOLVE EXHAUSTIVELY
+   State = (remaining multiset, target index, operator budget)
+   Memoized DFS. Enumerate every path and every dead end.
+   N ≤ 18, T ≤ 7 → milliseconds.
+
+6. MEASURE + REJECT
+   Compute metrics (§8.4). Outside the tier band → discard, regenerate.
+```
+
+Rejection sampling against a fitness function. Cheap, fully controllable, and structurally identical to Traffic Bomb's balance simulator — but with a **stronger guarantee**, because the solver *proves* solvability rather than estimating balance.
+
+### 8.4 Metrics
+
+| Metric | Definition | Use |
+|---|---|---|
+| `dStart_i` | Legal decompositions of target `i` **from the starting pool** | Structure; keystone detection. Path-independent. |
+| `dPath_i` | Legal decompositions of target `i` **from the pool as reached along the intended winning line** | Search burden. This is what the player actually faces. |
+| **Decision points** | Count of targets where `dPath_i ≥ 2` | Search burden |
+| **Lookahead distance** | See §8.2 | Primary difficulty dial |
+| **Total solution paths** | Distinct winning lines | Uniqueness / forgiveness |
+| **Trap depth** | Moves a wrong branch survives before failing | Frustration control |
+
+Notes:
+**`dStart` systematically inflates `decisionPoints`, and the inflation scales with `T`.** On a Late board (`T=6–7`, `N=13–16`), target 5 is reached with only 3–6 tiles left in hand — such targets are usually *forced* in play while appearing to branch when measured against the full starting pool. Banding on `dStart` therefore rejects large boards that are correctly difficult. **`decisionPoints` must be computed on `dPath`.**
+
+The two diverge. In the canonical level `dStart = [2, 4, 1]` but `dPath = [2, 3, 1]` — `4 − 1 = 3` is counted at the start yet is unavailable by the time target 1 is reached, because `2 × 4` consumed the 4. **Keystones are measured on `dStart`; difficulty is measured on `dPath`.** Reporting only one of them is a spec error.
+
+- `dPath_i = 1` means a **forced move**. Not a design failure — forced moves are breathing room and the right place for tutorial beats.
+- Raw combinatorics are large (8 numbers × 4 binary ops ≈ 168 candidate expressions) but the "equals the current target" filter is brutal — real `dPath_i` is typically 1–4. The player's search stays head-sized.
+- **Target 2–4 decision points per level, mostly binary** (measured on `dPath`). 3 binary decision points = 8 paths — tractable and satisfying. Every target branching 3 ways = 729 paths — the player stops reasoning and starts guessing.
+
+### 8.5 Operator budgets are solved for, not authored
+
+**Confirmed on the canonical level:** the winning line `2×4`, `1+2`, `3×5` requires `×` twice and `+` once. A budget of `{+:2, −:1, ×:1}` admits zero winning paths — the level is unsolvable despite being generously supplied. Hand-authored budgets will do this routinely.
+
+**Rule: mode budgets are generator output.** For each level and each mode, search for a budget that (a) admits at least one winning path and (b) meets the mode's scarcity contract:
+
+| Mode | Contract |
+|---|---|
+| Casual | Unlimited |
+| Normal | Counted; total budget > `T`, with slack |
+| Expert | Consumed; **total budget exactly `T + U`**, one operator per move, where `U` = unary transforms in the intended line |
+
+Levels admitting no valid Expert budget are excluded from Expert, not forced.
+
+### 8.6 Metrics are per-mode, not per-level
+
+Operator scarcity changes **trap structure**, not merely solvability.
+
+On the canonical level under `{+:1, ×:2}`: `3 + 5 = 8` spends the only `+`, so `3` becomes unreachable from `{1, 2, 2, 4}` using `×` alone. The trap dies one move sooner — **depth 2 under free operators, depth 1 under consumed.**
+
+Same board, three genuinely different puzzles.
+
+**Consequences for Phase 2 curation:**
+- Run `analyse()` once **per level per mode** — three metric blocks, not one
+- Band against tier targets **per mode**
+- A level may qualify as Mid in Normal and Late in Expert; that is expected, not an error
+- Store metrics keyed by mode in the level JSON (§10)
+
+### 8.7 Tier table
+
+| Tier | `T` | `S` | Operators | Op scarcity | Keystones | Lookahead | Decision pts |
+|---|---|---|---|---|---|---|---|
+| Tutorial | 3 | 0 | `+ −` | Free | 1 | 1 | 0–1 |
+| Early | 4–5 | 0 | `+ − ×` | Free | 1 | 1–2 | 1–2 |
+| Mid | 5–6 | 1 | `+ − × ÷` | Counted | 1–2 | 2–3 | 2–3 |
+| Late | 6–7 | 1–2 | all + `√` | Counted | 2 | 3–4 | 3–4 |
+| Expert | 6–7 | 2 | all | Consumed | 2+ overlapping | 5+ | 5+ |
+
+**Bands must not touch.** Late and Expert previously overlapped at 4, making them the same difficulty with Expert merely unbounded above. Expert now starts where Late ends. All `decisionPoints` figures are measured on `dPath` (§8.4) — banding on `dStart` will reject correctly-difficult large boards.
+
+**Solution uniqueness** is an additional axis: Casual permits multiple winning lines (forgiving); Expert enforces a unique solution (precise).
+
+---
+
+## 9. Art direction
+
+### 9.1 Backgrounds — single pre-rendered image
+
+**Rule: composite where things move, single image where nothing does.**
+
+Traffic Bomb composited backgrounds from pieces because the background was a *playfield* — cars drove on it, lanes aligned to gameplay coordinates, it scrolled. Lane Math's background is *wallpaper*: one fixed lane, nothing traverses the scenery, nothing scrolls.
+
+So: **one full-resolution generated image per world.** Four images total. This is not a shortcut; it is the correct answer to a different problem.
+
+**Contrast is the hard constraint, not aesthetics.** A math puzzle dies if `6` reads as `8`.
+
+Generation requirements:
+- Dark, desaturated, **low-detail centre**. Visual interest pushed to the edges. This is the opposite of what image models produce by default — prompt for it explicitly.
+- No text, no signage, no busy high-frequency detail anywhere the lane or pool sits.
+- Generate at **9:21** (tall) with a defined safe zone; crop from the edges for shorter devices.
+- Fix the prompt skeleton across all four worlds, vary only the subject. Style drift across a set is the main failure mode of generated art.
+
+**CI gate — reuse the Traffic Bomb brightness sampler.** The per-world 5-point median sampler already exists. Extend it: sample under the lane and pool zones, compute contrast ratio against token colour, **fail the build below threshold.** This problem was already solved once.
+
+File size: backgrounds are the worst offender for bundle bloat (Traffic Bomb: 46 MB → 1.84 MB). A low-detail background upscales invisibly — ship **~720×1560 WebP q75**, not full native resolution.
+
+### 9.2 Tokens — sprite atlas (composited)
+
+Tokens move, so they keep the atlas pipeline. Backgrounds are the only thing changing approach.
+
+**The art has one job: communicate scarcity.** Numbers are consumed permanently, so they must look like physical objects you spend — chunky bevelled tiles, Scrabble weight, slight drop shadow. Text reads as *information*; a tile reads as *a finite thing*.
+
+**Shape-code, don't colour-code** — faster to parse, colourblind-safe:
+
+| Element | Shape | Treatment |
+|---|---|---|
+| **Targets** (in lane) | Hexagonal plate | Cool palette, flat, recessed |
+| **Pool numbers** | Rounded square tile | Warm, bevelled, tactile |
+| **Operators** | Circle | Distinct from numbers → slot affordance is unambiguous |
+
+Different shapes for numbers and operators mean the player can never wonder what goes where.
+
+**Typography:** heavy geometric sans, tabular figures, unambiguous `6`/`9`/`0`/`8`. Digits are the entire UI — this is not a place to be stylish at legibility's expense.
+
+### 9.3 The commit animation
+
+The emotional core. When `=` fires correctly, the two number tiles and the operator must **shatter into** the target — not fade, not slide off. Destruction must read as destruction.
+
+This single animation teaches "gone forever" better than any tutorial text. Traffic Bomb's 23-gate animation quality standard applies directly.
+
+**Optional:** leave a ghost outline in the pool where a consumed tile was. Free information display reinforcing scarcity — prototype it, cut it if it reads as clutter.
+
+**Do not visually mark keystones by default** — that is a free hint. Reserve the highlight for purchased hints.
+
+---
+
+## 10. Level format
+
+```json
+{
+  "id": "1-04",
+  "world": 1,
+  "pool": [1, 2, 2, 3, 4, 5],
+  "targets": [8, 3, 15],
+  "rules": { "allowNegative": false, "integerOnly": true },
+
+  "modes": {
+    "casual": {
+      "budget":  { "+": null, "-": null, "*": null },
+      "tier":    "tutorial",
+      "metrics": {
+        "solvable": true, "solutionPaths": 1,
+        "dStart": [2, 4, 1], "dPath": [2, 3, 1],
+        "decisionPoints": 2, "keystones": [2],
+        "lookaheadDistance": 2, "maxTrapDepth": 2
+      }
+    },
+    "normal": {
+      "budget":  { "+": 2, "-": 1, "*": 2 },
+      "tier":    "tutorial",
+      "metrics": { "solvable": true, "solutionPaths": 1, "maxTrapDepth": 2 }
+    },
+    "expert": {
+      "budget":  { "+": 1, "*": 2 },
+      "tier":    "early",
+      "metrics": { "solvable": true, "solutionPaths": 1, "maxTrapDepth": 1 }
+    }
+  },
+
+  "surplus": 0
+}
+```
+
+`null` = unlimited. Budgets are **generator output** (§8.5), never hand-authored. Metrics are per-mode (§8.6), used by CI and difficulty tuning — never read by gameplay code.
+
+Expert budget sums to exactly `T = 3`. Note `maxTrapDepth` differs by mode on the same board.
+
+A mode may be absent if no valid budget exists for it. Gameplay must handle a level that is not offered in Expert.
+
+---
+
+## 11. Reuse from Traffic Bomb
+
+### Take
+
+| Asset | Why |
+|---|---|
+| **GitHub Actions + Pages + Capacitor + signed keystore** | Highest-value reuse by far. Weeks of plumbing, near-zero carry cost. |
+| **AdMob integration** | Rewarded ads for life refills — already shipped and working. |
+| **Director/Renderer split via command pattern** | Same architecture, much simpler brain. The structural reuse that matters. |
+| **Headless-simulator-in-CI *pattern*** | Not the code — the *role*. Here it's a solver, and it gives a stronger guarantee: proof of solvability, not an estimate of balance. |
+| **Brightness sampler** | Direct reuse as the background contrast gate (§9.1). |
+| **Sprite compression pipeline** | 46 MB → 1.84 MB. Directly applicable. |
+| **PixiJS v8 setup + asset pipeline** | Straight lift. |
+| **CLAUDE.md process rules** | Screenshot review loop, branch-first, wait-condition antipattern, instrument rule, verification cost bound. Pure process, fully portable. |
+| **CI asset-presence check** | Traffic Bomb shipped placeholder bugs from gitignored raw sprites causing silent 404s. Keep the guard. |
+
+### Leave
+
+| Asset | Why |
+|---|---|
+| **Three.js** | Present only for 3D car models. Lane Math renders digits. Large bundle win, one less dependency. |
+| **Balance simulator logic** | HP, spawn budgets, damage carry-over — none of it maps. |
+| **DDA / fail-streak mercy** | **Critical.** A deterministic puzzle with a known solution must never have hidden difficulty adjustment — it breaks the fairness contract that makes planning worth doing. The honest equivalent is the hint shop, which already exists. |
+| **Tiled/composited background system** | Superseded by §9.1. |
+| **World scene system (9 scenes)** | Overweight for 4 static backgrounds. |
+| **The 642 tests** | Reuse the harness, not the tests. |
+
+### Principal risk
+
+Traffic Bomb's architecture is built for a real-time stochastic simulation. **Lane Math's entire appeal is that it is small, tight, and deterministic.** The generator being simple enough to exhaustively verify is a *feature*. Porting weight over "because it exists" is the failure mode to guard against.
+
+---
+
+## 12. Build order
+
+| Phase | Deliverable | Gate |
+|---|---|---|
+| **1** | Headless solver + generator, no rendering | Generates 1000 valid levels; every one provably solvable; metrics computed |
+| **2** | Level curation — pick 40, tune tier bands | Full ladder passes metric bands |
+| **3** | PixiJS renderer: lane, pools, slots, `=`, drag/tap | Playable, no juice |
+| **4** | Failure, restart, stars, lives, hint shop | Full loop closed |
+| **5** | Art pass: backgrounds, tokens, commit animation | Brightness CI gate green; 23-gate animation pass |
+| **6** | Capacitor build, AdMob, CI/CD, signed release | Shipped |
+
+Phase 1 is the whole design de-risked. **If the generator can't reliably produce live traps at the target lookahead distances, the game doesn't work — and that is knowable before a single pixel is drawn.**
+
+---
+
+## 13. Risk register
+
+Audited before Phase 1. Severity 1 items must be resolved in the spec before implementation begins.
+
+### Severity 1 — could invalidate a design decision
+
+| Risk | Resolution |
+|---|---|
+| ~~**Cross-mode solvability is not free.**~~ **DOWNGRADED.** The canonical-level failure (`{+:2, −:1, ×:1}` → zero paths) was an artifact of *hand-authoring* the budget. A budget derived from a real winning line always sums correctly and is always executable, so Expert unsolvability essentially never fires. | Budgets are solved for, not authored (§8.5) — this fully resolves solvability. What remains is the **uniqueness** rule, a design choice rather than a constraint. Still verify per mode. |
+| **Operator scarcity changes trap structure, not just solvability. CONFIRMED:** `3+5=8` is trap depth 2 under free operators, depth 1 under `{+:1, ×:2}`. | Metrics banded **per mode** (§8.6). Phase 2 curation cost is ~3× the original estimate. |
+| **`d_i` was ambiguous** — starting pool or pool-as-reached? They diverge (`[2,4,1]` vs `[2,3,1]` on the canonical level). | Split into `dStart` (structure, keystones) and `dPath` (search burden, decision points). §8.4. |
+| **Keystone uniqueness is ambiguous** — unique from the *starting* pool or the pool *as reached*? | **Starting pool.** That is what the player can see and reason about at level open. Any other definition makes the keystone unknowable in advance. |
+| **Commutative pairs inflate every metric.** `3+5` and `5+3` are one decomposition. | Canonicalize at enumeration. Without this, `d_i` roughly doubles for `+` and `×` and every tier band is wrong. |
+| **The design front-loads all thinking.** Full queue visibility means a strong player solves the level mentally before the first tap, then executes. | Accepted (chess-puzzle model), but it means juice, animation and pacing carry the entire minute-to-minute experience, and the win screen carries most of the reward. Budget Phase 5 accordingly. |
+
+### Severity 2 — bugs and exploits
+
+| Risk | Resolution |
+|---|---|
+| Failure counter lost on app kill → free 3 stars | Persist with save data, not session state |
+| Device-clock exploit on life regeneration | Server timestamp on refill; detect and refuse clock jumps |
+| **Hard-lock**: zero lives, zero gold, ad fails or offline | Guaranteed slow regeneration that ignores all other state, or one free life on cold start after an interval |
+| Hint bought, level failed, restart — is it still revealed? | **Yes.** Never charge twice for the same information on the same level |
+| `÷ 0` and `0 ×` undefined in generator | Pool values are **positive integers only** |
+| **Trap liveness ≠ trap temptation.** Generator verifies a false decomposition *exists*, not that anyone would take it. | Weight the check: the false path must be at least as *natural* as the correct one (smaller numbers, `+`/`×` over `÷`). A trap nobody falls into is not a trap. |
+
+### Severity 3 — cheap guards
+
+- Hash `(pool, targets)` and dedupe the generated batch
+- Measure solver latency on real low-end Android (Casual runs it every commit); keep off the render thread
+- Persist in-progress equation state on backgrounding, or clear cleanly on resume
+- **Version the save schema from day one** (City Repair migration precedent)
+- Sample the background contrast gate at the **extremes** of the supported aspect range, not just the design ratio
+
+---
+
+## 14. Deferred
+
+- Gold economy and IAP
+- Tournaments and leaderboards
+- Endless / Daily mode
+- Practice mode (regenerated equivalents of cleared levels)
+- `x²` beyond World 4
+
+---
+
+## 15. Sources
+
+FTUE and onboarding practice in §7 draws on:
+
+- Game Developer — *Best practices for a successful FTUE*
+- Keewano — *First-Time User Experience: 5 Tips for Mobile Games*
+- Mistplay — *Mobile game player retention: comprehensive guide* (AppsFlyer churn data)
+- Playio — *Onboarding Decides Your D1: First-Session Design and the FTUE Metrics That Matter*
+- Gamigion — *How to Design Difficulty in Puzzle Games* (Playliner attempt-based tuning)
+- Mobile Game Doctor — *Illuminating Level Creation For Free-to-play Puzzle Games* (saw curve; auto-play AI caution)
+- GameDesignSkills — *Puzzle Game Design: Principles, Levels, Template* (invisible tutorial; Portal/Baba Is You teaching model)
+- Mark Brown / *Super Mario 3D World's 4 Step Level Design* (introduce → develop → twist → conclude)
