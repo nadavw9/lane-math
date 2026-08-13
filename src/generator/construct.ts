@@ -44,11 +44,17 @@ function buildPair(op: BinaryOp, tier: TierSpec, rng: Rng): Pair | null {
   const max = tier.operandMax;
 
   switch (op) {
+    // Every branch samples INSIDE the legal range rather than sampling freely
+    // and discarding misses. Sample-and-reject looks harmless but it silently
+    // throttled the top tiers: with operandMax 12, only ~30% of division rolls
+    // produced a dividend that fits the pool, and at T=6 that compounded into
+    // ~70% of all attempts dying before a single design rule was evaluated.
     case "+": {
       const a = rng.int(1, max);
-      const b = rng.int(1, max);
-      const result = a + b;
-      return result <= tier.targetMax ? { a, b, op, result } : null;
+      const bMax = Math.min(max, tier.targetMax - a);
+      if (bMax < 1) return null;
+      const b = rng.int(1, bMax);
+      return { a, b, op, result: a + b };
     }
     case "-": {
       const a = rng.int(2, max);
@@ -60,15 +66,19 @@ function buildPair(op: BinaryOp, tier: TierSpec, rng: Rng): Pair | null {
     case "*": {
       // x1 is a degenerate pair: it reads as a non-move and clutters d_i.
       const a = rng.int(2, Math.min(max, 9));
-      const b = rng.int(2, Math.min(max, 9));
-      const result = a * b;
-      return result <= tier.targetMax ? { a, b, op, result } : null;
+      const bMax = Math.min(max, 9, Math.floor(tier.targetMax / a));
+      if (bMax < 2) return null;
+      const b = rng.int(2, bMax);
+      return { a, b, op, result: a * b };
     }
     case "/": {
-      const b = rng.int(2, Math.min(max, 6));
-      const result = rng.int(2, Math.min(max, 9));
-      const a = b * result;
-      return a <= max ? { a, b, op, result } : null;
+      // The dividend a = b*q has to be a pool tile, so bound the quotient by
+      // the divisor rather than rolling both and hoping the product fits.
+      const b = rng.int(2, Math.max(2, Math.floor(max / 2)));
+      const quotientMax = Math.min(9, Math.floor(max / b));
+      if (quotientMax < 2) return null;
+      const result = rng.int(2, quotientMax);
+      return { a: b * result, b, op, result };
     }
   }
 }

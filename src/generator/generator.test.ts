@@ -12,6 +12,7 @@ import {
 } from "../solver/index.js";
 import { CANONICAL } from "../solver/__fixtures__/canonical.js";
 import { casualBudget, distinctUsages, solveExpertBudget, usageOf } from "./budgets.js";
+import { construct } from "./construct.js";
 import { addDecoys } from "./decoys.js";
 import { attempt, bandAgainst, hashBoard, type AttemptContext } from "./pipeline.js";
 import { makeRng } from "./rng.js";
@@ -222,6 +223,51 @@ describe("the central constraint — accepted levels are valid in all three mode
       for (const index of level.metrics.keystones) {
         const decomps = enumerate(tiles, level.targets[index]!, budget, level.rules);
         expect(decomps.length, `${level.id} keystone ${index}`).toBe(1);
+      }
+    }
+  });
+});
+
+describe("construction samples inside the legal range", () => {
+  // Regression: buildPair used to roll operands freely and discard results that
+  // did not fit, which threw away ~70% of attempts at the top tiers before any
+  // design rule ran — and made the measured yield an artefact of the sampler.
+  it.each(["tutorial", "early", "mid", "late", "expert"] as const)(
+    "%s wastes almost no attempts on construction misses",
+    (name) => {
+      const tier = tierByName(name);
+      const rng = makeRng(31337);
+      const casual = casualBudget(tier);
+      const count = (pool: readonly number[], target: number): number =>
+        enumerate(makePool(pool), target, casual, DEFAULT_RULES).length;
+
+      let misses = 0;
+      const trials = 400;
+      for (let i = 0; i < trials; i++) {
+        if (!construct(tier, rng, "random", count)) misses++;
+      }
+      expect(misses / trials, `${name} construction miss rate`).toBeLessThan(0.05);
+    },
+  );
+
+  it("never emits a target above the tier ceiling or a non-positive pool value", () => {
+    for (const tier of TIERS) {
+      const rng = makeRng(777);
+      const casual = casualBudget(tier);
+      const count = (pool: readonly number[], target: number): number =>
+        enumerate(makePool(pool), target, casual, DEFAULT_RULES).length;
+
+      for (let i = 0; i < 200; i++) {
+        const built = construct(tier, rng, "random", count);
+        if (!built) continue;
+        for (const target of built.targets) {
+          expect(target, `${tier.name} target`).toBeGreaterThan(0);
+          expect(target, `${tier.name} target`).toBeLessThanOrEqual(tier.targetMax);
+        }
+        for (const value of built.pool) {
+          expect(Number.isInteger(value) && value > 0, `${tier.name} pool ${value}`).toBe(true);
+        }
+        expect(built.pool.length).toBe(2 * built.targets.length);
       }
     }
   });
