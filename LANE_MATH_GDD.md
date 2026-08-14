@@ -523,6 +523,19 @@ Rejection sampling against a fitness function. Cheap, fully controllable, and st
 | **Trap depth** | Moves a wrong branch survives before failing | Frustration control |
 | `survivalRate` | `solutionPaths / totalLinesExplored` | Forgiveness. `solutionPaths` alone is uninterpretable — 337 winning lines out of 4000 is brutal, out of 400 is a walkover. |
 
+**Composite difficulty score.** Ordering within a world uses a single weighted score, not any metric alone:
+
+| Input | Weight | Rationale |
+|---|---|---|
+| `lookaheadDistance` | 3.0 | §8.2 names it the primary metric |
+| `decisionPoints` (dPath) | 2.0 | Search burden at the moment reached |
+| `1 − survivalRate` | 2.0 | Punishment for not planning |
+| `maxTrapDepth` | 1.5 | Distance from mistake to failure |
+| `T` | 1.0 | Length; §4.5 says structure over length |
+| `1 / log2(solutionPaths + 1)` | 1.0 | Uniqueness, log-scaled so a 1–4000 range cannot dominate |
+
+**Composite and `survivalRate` measure different things and both are required.** Composite measures how much reasoning a level *demands*; `survivalRate` measures how much a player is *punished for skipping it*. A level can rank highest on composite and still be the most forgiving board in its world — this happened at 4-10 in the first curation, where the finale won ~1 random walk in 4 while the level two slots below it won 1 in 90. A finale requires both.
+
 Notes:
 **`dStart` systematically inflates `decisionPoints`, and the inflation scales with `T`.** On a Late board (`T=6–7`, `N=13–16`), target 5 is reached with only 3–6 tiles left in hand — such targets are usually *forced* in play while appearing to branch when measured against the full starting pool. Banding on `dStart` therefore rejects large boards that are correctly difficult. **`decisionPoints` must be computed on `dPath`.**
 
