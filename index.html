@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lane Math — Phase 3</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #0e1015;
+        color: #f2f4f8;
+        font-family: system-ui, sans-serif;
+        display: flex;
+        gap: 16px;
+        padding: 16px;
+        align-items: flex-start;
+      }
+      #app canvas { display: block; border-radius: 8px; }
+      #levels {
+        display: grid;
+        grid-template-columns: repeat(4, auto);
+        gap: 4px;
+        align-content: start;
+      }
+      #levels button {
+        font: 11px system-ui, sans-serif;
+        padding: 4px 6px;
+        background: #232833;
+        color: #8a909c;
+        border: 1px solid #333c47;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #levels button.active { background: #3f6ea8; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="levels"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
