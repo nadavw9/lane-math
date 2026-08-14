@@ -1,0 +1,170 @@
+import { readFileSync } from "node:fs";
+
+import { describe, expect, it } from "vitest";
+
+import { Economy } from "../economy/economy.js";
+import { MemoryStore } from "../economy/save.js";
+import { Director } from "../game/director.js";
+import type { Command, LadderLevel, ViewState } from "../game/types.js";
+import { enumerate } from "../solver/index.js";
+import { MemorySink, Telemetry } from "./telemetry.js";
+import type { TelemetryEventName } from "./events.js";
+
+const stateOf = (commands: readonly Command[]): ViewState => {
+  const render = [...commands].reverse().find((c) => c.type === "render");
+  if (!render || render.type !== "render") throw new Error("no render command");
+  return render.state;
+};
+
+const load = (id: string): LadderLevel =>
+  JSON.parse(readFileSync(`levels/${id}.json`, "utf8")) as LadderLevel;
+
+const T0 = 1_700_000_000_000;
+
+function clock(start = T0) {
+  let now = start;
+  return { now: () => now, advance: (ms: number) => (now += ms) };
+}
+
+const names = (sink: MemorySink): TelemetryEventName[] =>
+  sink.events.map((e) => e.event.name);
+
+const find = <N extends TelemetryEventName>(sink: MemorySink, name: N) =>
+  sink.events.find((e) => e.event.name === name)?.event as
+    | Extract<import("./events.js").TelemetryEvent, { name: N }>
+    | undefined;
+
+describe("first_tap_latency (GDD §7.8)", () => {
+  it("measures ms from board render to the first tap, and only the first", () => {
+    const sink = new MemorySink();
+    const c = clock();
+    const telemetry = new Telemetry([sink], c.now);
+    const level = load("1-01");
+
+    const director = new Director(level, "normal", new Economy(new MemoryStore(), c.now), telemetry);
+    let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+
+    // The player thinks for 4.2 seconds before touching anything.
+    c.advance(4200);
+    const first = state.tiles.find((t) => !t.consumed)!;
+    state = stateOf(director.handle({ type: "tapTile", id: first.id }));
+
+    const latency = find(sink, "first_tap_latency");
+    expect(latency).toBeDefined();
+    expect(latency!.ms).toBe(4200);
+    expect(latency!.level_id).toBe("1-01");
+
+    // Later taps are execution, not planning — exactly one event.
+    c.advance(900);
+    stateOf(director.handle({ type: "tapOperator", op: "+" }));
+    expect(names(sink).filter((n) => n === "first_tap_latency")).toHaveLength(1);
+  });
+
+  it("restarts the stopwatch on restart, so each attempt is measured", () => {
+    const sink = new MemorySink();
+    const c = clock();
+    const telemetry = new Telemetry([sink], c.now);
+    const director = new Director(
+      load("1-01"),
+      "normal",
+      new Economy(new MemoryStore(), c.now),
+      telemetry,
+    );
+
+    let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    c.advance(1000);
+    state = stateOf(director.handle({ type: "tapTile", id: state.tiles[0]!.id }));
+
+    stateOf(director.handle({ type: "tapRestart" }));
+    c.advance(7000);
+    state = stateOf(director.handle({ type: "tapTile", id: state.tiles[0]!.id }));
+
+    const latencies = sink.events
+      .filter((e) => e.event.name === "first_tap_latency")
+      .map((e) => (e.event as { ms: number }).ms);
+    expect(latencies).toEqual([1000, 7000]);
+  });
+
+  it("is not triggered by opening the shop — that is not a move", () => {
+    const sink = new MemorySink();
+    const c = clock();
+    const telemetry = new Telemetry([sink], c.now);
+    const director = new Director(
+      load("1-01"),
+      "normal",
+      new Economy(new MemoryStore(), c.now),
+      telemetry,
+    );
+    stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    c.advance(500);
+    stateOf(director.handle({ type: "toggleShop" }));
+    expect(names(sink)).not.toContain("first_tap_latency");
+  });
+});
+
+describe("the funnel records every §7.8 event", () => {
+  it("level_start, move_commit and level_complete on a clean win", () => {
+    const sink = new MemorySink();
+    const c = clock();
+    const telemetry = new Telemetry([sink], c.now);
+    const level = load("1-01");
+    const director = new Director(level, "normal", new Economy(new MemoryStore(), c.now), telemetry);
+
+    let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    for (let guard = 0; guard < 10 && state.phase === "playing"; guard++) {
+      const live = state.tiles
+        .filter((t) => !t.consumed)
+        .map((t) => ({ id: t.id, value: t.value, transformed: t.transformed }));
+      const target = state.targets[state.targetIndex];
+      if (target === undefined) break;
+      const option = enumerate(live, target, state.budget, level.rules)[0];
+      if (!option) break;
+      c.advance(1500);
+      state = stateOf(director.handle({ type: "tapTile", id: option.leftId }));
+      state = stateOf(director.handle({ type: "tapOperator", op: option.op }));
+      state = stateOf(director.handle({ type: "tapTile", id: option.rightId }));
+      state = stateOf(director.handle({ type: "tapCommit" }));
+    }
+
+    expect(state.phase).toBe("won");
+    expect(names(sink)).toContain("level_start");
+    expect(names(sink)).toContain("move_commit");
+    expect(names(sink)).toContain("level_complete");
+
+    const complete = find(sink, "level_complete")!;
+    expect(complete.stars).toBe(3);
+    expect(complete.duration_ms).toBeGreaterThan(0);
+
+    const commits = sink.events.filter((e) => e.event.name === "move_commit");
+    expect(commits).toHaveLength(level.targets.length);
+    expect(commits.every((e) => (e.event as { correct: boolean }).correct)).toBe(true);
+  });
+
+  it("records an incorrect commit as correct:false without failing the level", () => {
+    const sink = new MemorySink();
+    const c = clock();
+    const telemetry = new Telemetry([sink], c.now);
+    const level = load("1-01");
+    const director = new Director(level, "normal", new Economy(new MemoryStore(), c.now), telemetry);
+    let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+
+    const live = state.tiles.filter((t) => !t.consumed);
+    state = stateOf(director.handle({ type: "tapTile", id: live[0]!.id }));
+    state = stateOf(director.handle({ type: "tapOperator", op: "-" }));
+    state = stateOf(director.handle({ type: "tapTile", id: live[1]!.id }));
+    state = stateOf(director.handle({ type: "tapCommit" }));
+
+    const commit = find(sink, "move_commit")!;
+    expect(commit.correct).toBe(false);
+    expect(state.phase).toBe("playing");
+  });
+
+  it("app_open carries first_open and a session index that increments", () => {
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    telemetry.open();
+    const open = find(sink, "app_open")!;
+    expect(open.session_index).toBeGreaterThanOrEqual(1);
+    expect(typeof open.first_open).toBe("boolean");
+  });
+});

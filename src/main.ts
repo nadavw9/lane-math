@@ -3,6 +3,9 @@ import { LocalStorageStore } from "./economy/save.js";
 import { Director } from "./game/director.js";
 import type { Command, InputEvent, LadderLevel, ViewState } from "./game/types.js";
 import { Renderer } from "./renderer/renderer.js";
+import { setEffectSpeed } from "./renderer/effects.js";
+import { WinnabilityService } from "./game/winnability-service.js";
+import { ConsoleSink, LocalStorageSink, Telemetry } from "./telemetry/telemetry.js";
 import { enumerate, enumerateTransforms } from "./solver/index.js";
 
 /**
@@ -39,8 +42,20 @@ await renderer.init(host);
 // One economy for the whole session, persisted to localStorage.
 const economy = new Economy(new LocalStorageStore());
 
+// §7.8 funnel, local sinks only. The remote sink plugs in at Phase 6 by
+// implementing TelemetrySink and adding it to this list.
+const localSink = new LocalStorageSink();
+const telemetry = new Telemetry([new ConsoleSink(), localSink]);
+telemetry.open();
+
+// Winnability off the render thread. The Phase 5 commit animation occupies the
+// pause the warm-up used to sit in, so it had to move before the animation.
+const winnability = new WinnabilityService(
+  () => new Worker(new URL("./solver/winnability.worker.ts", import.meta.url), { type: "module" }),
+);
+
 let currentLevel = levels.get(LEVEL_IDS[0]!)!;
-let director = new Director(currentLevel, economy.selectedMode, economy);
+let director = new Director(currentLevel, economy.selectedMode, economy, telemetry, winnability);
 let lastState: ViewState | null = null;
 
 function apply(commands: readonly Command[]): void {
@@ -59,8 +74,9 @@ function send(input: InputEvent): void {
 
 function open(level: LadderLevel): void {
   currentLevel = level;
-  director = new Director(level, economy.selectedMode, economy);
-  apply(director.loadLevel(level));
+  director = new Director(level, economy.selectedMode, economy, telemetry, winnability);
+  void renderer.setWorld(level.world);
+  apply(director.firstRender());
 }
 
 renderer.onInput(send);
@@ -132,5 +148,9 @@ Object.assign(window, {
     playIntoFailure,
     economy: () => economy.state,
     state: () => lastState,
+    setEffectSpeed,
+    telemetry: () => localSink.read(),
+    clearTelemetry: () => localSink.clear(),
+    offThread: () => winnability.offThread,
   },
 });

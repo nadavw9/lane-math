@@ -3,11 +3,9 @@ import {
   applyBinary,
   applyMove,
   enumerate,
-  createWinnabilityCache,
   enumerateTransforms,
   exactSqrt,
   hasBudget,
-  isWinnable,
   spend,
   type BinaryOp,
   type Level,
@@ -20,7 +18,9 @@ import {
 import { livesActiveFor, starsFor } from "../economy/config.js";
 import type { Economy } from "../economy/economy.js";
 import { ALL_UNLOCKED, unlocksFor } from "../economy/unlocks.js";
+import type { Telemetry } from "../telemetry/telemetry.js";
 import { HINT_COST, HINT_LABEL, generateHint, hintContext, type HintType } from "./hints.js";
+import { WinnabilityService } from "./winnability-service.js";
 import type {
   Affordance,
   Command,
@@ -74,19 +74,35 @@ export class Director {
   private shopOpen = false;
   /** GDD §7.5: 1-4's free rewind is granted once, and is not a failure. */
   private scriptedRewindUsed = false;
-  /** Shared across commits so the warning is a lookup, not a re-walk. */
-  private winnability = createWinnabilityCache();
+  /** Answers winnability, off the render thread where a worker exists. */
+  private readonly winnability: WinnabilityService;
 
-  constructor(level: LadderLevel, mode: Mode, economy: Economy | null = null) {
+  constructor(
+    level: LadderLevel,
+    mode: Mode,
+    economy: Economy | null = null,
+    private readonly telemetry: Telemetry | null = null,
+    winnability: WinnabilityService = new WinnabilityService(),
+  ) {
     this.level = level;
     this.mode = mode;
     this.economy = economy;
+    this.winnability = winnability;
+    this.winnability.reset(level.id);
     // GDD §5.1: the counter belongs to the level, not to the session. Seeded
     // from the save here so a relaunch starts with the failures already banked
     // — an in-memory zero is exactly the force-quit exploit §13 warns about.
     this.failures = economy?.progressFor(level.id).failCount ?? 0;
     this.reset();
     this.warmWarning();
+    this.startTelemetry();
+  }
+
+  private startTelemetry(): void {
+    this.telemetry?.levelStart(this.level.id, this.failures + 1, this.mode);
+    // The board is on screen as soon as the first render lands, which is the
+    // same turn as construction — so the first_tap stopwatch starts here.
+    this.telemetry?.boardRendered();
   }
 
   /**
@@ -117,10 +133,10 @@ export class Director {
       budget: this.budget,
     };
 
-    for (const option of enumerate(this.live, target, this.budget, this.level.rules)) {
-      const next = applyMove(state, { ...option, kind: "binary", targetIndex: this.targetIndex });
-      isWinnable(level, budget, next, this.winnability);
-    }
+    const states = enumerate(this.live, target, this.budget, this.level.rules).map((option) =>
+      applyMove(state, { ...option, kind: "binary", targetIndex: this.targetIndex }),
+    );
+    this.winnability.warm(level, budget, states);
   }
 
   /** Restart to level start (GDD §4.3). Rewind is to the start, never to the fatal move. */
@@ -165,13 +181,24 @@ export class Director {
     };
   }
 
+  /**
+   * The first render for a freshly constructed Director.
+   *
+   * Separate from `loadLevel` because the constructor already opened the level
+   * and emitted `level_start`; calling loadLevel again to get a render emitted
+   * it twice and would have double-counted every attempt in the funnel.
+   */
+  firstRender(): Command[] {
+    return this.render();
+  }
+
   loadLevel(level: LadderLevel): Command[] {
     this.level = level;
     // GDD §5.1: the counter belongs to the level and persists across restarts
     // AND app kills, so it is read from the save rather than zeroed here.
     this.failures = this.economy?.progressFor(level.id).failCount ?? 0;
     this.lastFailureExempt = false;
-    this.winnability = createWinnabilityCache();
+    this.winnability.reset(level.id);
     this.scriptedRewindUsed = false;
     this.reset();
     this.warmWarning();
@@ -212,6 +239,14 @@ export class Director {
       return this.reject(`${HINT_LABEL[type]} costs ${cost}★ — you have ${this.economy.starsAvailable}★`);
     }
     this.message = `${HINT_LABEL[type]} revealed`;
+    if (!owned) {
+      this.telemetry?.record({
+        name: "hint_purchased",
+        level_id: this.level.id,
+        hint_type: type,
+        stars_spent: cost,
+      });
+    }
     return this.render();
   }
 
@@ -375,9 +410,21 @@ export class Director {
         return this.replay();
       }
       this.reset();
+      this.startTelemetry();
       return this.render();
     }
     if (this.phase !== "playing") return this.render();
+
+    // §7.8: ms from board render to first tap, the planning-vs-guessing proxy.
+    // Only board interactions count; opening the shop is not a move.
+    if (
+      input.type === "tapTile" ||
+      input.type === "tapOperator" ||
+      input.type === "tapUnary" ||
+      input.type === "tapSlot"
+    ) {
+      this.telemetry?.firstTap();
+    }
 
     switch (input.type) {
       case "tapTile":
@@ -474,6 +521,12 @@ export class Director {
     this.budget = spend(this.budget, op);
     this.transformOp = null;
     this.message = `${op} ${tile.value} → ${to}`;
+    this.telemetry?.record({
+      name: "unary_transform",
+      level_id: this.level.id,
+      from: tile.value,
+      to,
+    });
     return this.checkStuck();
   }
 
@@ -507,6 +560,13 @@ export class Director {
       return this.reject(`${left.value} ${op} ${right.value} is not allowed here`);
     }
     if (result !== target) {
+      this.telemetry?.record({
+        name: "move_commit",
+        level_id: this.level.id,
+        expression: `${left.value} ${op} ${right.value}`,
+        correct: false,
+        target_index: this.targetIndex,
+      });
       this.slots = { leftTileId: null, op: null, rightTileId: null };
       return this.reject(`${left.value} ${op} ${right.value} = ${result}, not ${target}`);
     }
@@ -515,6 +575,14 @@ export class Director {
     // (and 1-4 in any mode) checks whether it dooms the level.
     const blocked = this.checkFatalMove(left, right, op);
     if (blocked) return blocked;
+
+    this.telemetry?.record({
+      name: "move_commit",
+      level_id: this.level.id,
+      expression: `${left.value} ${op} ${right.value}`,
+      correct: true,
+      target_index: this.targetIndex,
+    });
 
     // Consumed BY ID, never by value (GDD §3.5).
     this.consumed.add(left.id);
@@ -527,6 +595,7 @@ export class Director {
     if (this.targetIndex >= this.level.targets.length) {
       this.phase = "won";
       const award = this.economy?.recordClear(this.level.id);
+      this.telemetry?.levelComplete(this.level.id, award?.stars ?? 0, this.failures + 1);
       this.message = award ? `cleared — ${award.stars} star${award.stars === 1 ? "" : "s"}` : "cleared";
       return this.render();
     }
@@ -565,7 +634,7 @@ export class Director {
     });
 
     const budget = this.level.modes[this.mode]?.budget ?? {};
-    if (isWinnable(this.asSolverLevel(), budget, next, this.winnability)) return null;
+    if (this.winnability.isWinnable(this.asSolverLevel(), budget, next)) return null;
 
     // Refused. Nothing is consumed and nothing is recorded — the equation
     // simply rewinds, free (§7.5 step 5).
@@ -605,7 +674,7 @@ export class Director {
     });
 
     const budget = this.level.modes[this.mode]?.budget ?? {};
-    if (isWinnable(this.asSolverLevel(), budget, next, this.winnability)) return null;
+    if (this.winnability.isWinnable(this.asSolverLevel(), budget, next)) return null;
 
     const keystone = this.keystoneAhead();
     this.transformOp = null;
@@ -670,6 +739,15 @@ export class Director {
       this.failures = outcome?.failCount ?? this.failures + 1;
       this.lastFailureExempt = outcome?.firstFailureExempt ?? false;
       this.message = `${target} cannot be made from what is left`;
+      this.telemetry?.record({
+        name: "level_fail",
+        level_id: this.level.id,
+        target_index_of_failure: this.targetIndex,
+        attempt_number: this.failures,
+      });
+      if (outcome?.lifeSpent && outcome.livesRemaining === 0) {
+        this.telemetry?.record({ name: "life_depleted", level_id: this.level.id });
+      }
     }
     return this.render();
   }

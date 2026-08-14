@@ -1,47 +1,55 @@
-Lane Math — Phase 4B review: assists, modes, disclosure
-Taken at PHONE aspect (393x852, GDD §9.1). Phase 3/4A shots were desktop-shaped,
-which is how the failure banner ended up below the fold.
+Lane Math — Phase 4C + Phase 5 review: telemetry, worker, art pass
+Phone aspect (393x852, GDD §9.1).
 
-Mode is back to Normal by default (Phase 3 brief). Casual is now reachable and
-complete: unlimited operators AND the fatal-move warning, per §6.
+p5-01-tokens.png
+    Level 4-01. Tokens are PROCEDURAL (§9.2 as amended) — Graphics + text, no
+    atlas, no compression step, no resolution ceiling.
+    SHAPE-CODED, not colour-coded:
+      hexagonal plates   targets, cool, FLAT and recessed — you spend tiles ON
+                         them, so they must not read as pickable
+      rounded squares    pool numbers, warm, bevelled, drop shadow — Scrabble
+                         weight, a finite thing you spend
+      circles            operators, unmistakably not numbers
+    Empty equation slots are dashed sockets, so the row reads as a sentence with
+    gaps. Dimmed tiles lose their bevel as well as their colour, so bold-active/
+    dim-inactive (§3.5) is carried by FORM as well as hue.
+    Note the target plate colour changed this phase — see the gate note below.
 
-b1-nothing-unlocked.png
-    Fresh save, level 1-01. NOTHING is on screen that has not unlocked (§7.6):
-    no star counter, no lives, no hint shop, no mode selector. Absent, not greyed —
-    a greyed shop still teaches "this is not for me". Status reads "normal".
+p5-02-shatter.png
+    Mid-commit, slowed ~16x to be photographable. 9 + 5 = 14 has just been
+    committed: the operator has burst into green wedges in its slot and the two
+    number tiles are breaking apart in the pool, all of it thrown INTO the
+    target they paid for. Debris, not confetti; it burns out on arrival rather
+    than drifting (§9.3 — "destruction must read as destruction").
+    The 14 is already dimmed and the 5 has become the front target.
 
-b2-scripted-trap.png
-    Level 1-4, the scripted trap (§7.5), committing 3 + 1 = 4 — correct arithmetic
-    that spends the only + and takes a 3, when target 9 can only be made as 3 + 6.
-    The commit is held mid-flight; one line of text, "Wait — what makes the 9?",
-    with the real target substituted; the 3 and the 6 pulse in the pool as the only
-    two numbers that make it; the move is rewound free — no star, no life, no
-    failure (fails 0, target still 1/3).
-    Note the mode: NORMAL. 1-4 warns regardless of mode, because it is the teaching
-    device. 1-6 repeats the shape with the warning OFF, which is where it is tested.
+    Ghost outlines: PROTOTYPED AND KEPT. On a 13-16 tile World 4 board the gaps
+    alone read as a reshuffled layout rather than as loss; the outlines make
+    "gone forever" legible. They are stroke-only at 22% so they do not compete
+    with live tiles.
 
-b3-shop-unlocked.png
-    After World 1-3 cleared. Everything now present: lives 5/5, star counter 90★,
-    hint shop open with all three types priced, and the mode selector.
-    Compare against b1 — same screen, nothing added but progress.
+p5-03-failure-pulse.png
+    The failure moment, rebuilt per §9.4. The front target 2 has gone red and
+    been SHOVED out of alignment with the plates below it — the lane rejecting
+    the number, refusing to advance, settling back into its slot. It never
+    leaves the slot, because not advancing is the whole message.
+    NO banner. NO modal. NO "no solution exists" text. The status line carries
+    nothing about the failure; `restart` is the single exit and it was already
+    there. Ghost outlines show the pool visibly cannot feed the target.
 
-b4-three-hints.png
-    All three hints owned on 1-06. None reveals a keystone (§5.4):
-      Narrow      "One of the last 2 targets has only one solution." — marks nothing
-      Contested   "The 9 is contested." — names the scarce number, outlines the 9s,
-                  never says what needs it
-      Branch      "Your instinct here is wrong: 5 - 1 loses the level." — kills the
-                  tempting fatal option and outlines its tiles, without naming which
-                  of the remaining options is correct
-    Bought, then failed and restarted: all three are still revealed and re-buying
-    charges nothing (starsSpent 12 before and after) — §13, never charge twice for
-    the same information on the same level.
+p5-04-brightness-gate.txt
+    The CI gate, green on placeholders. Four flat vignetted gradients at
+    720x1560, sampled with the Traffic Bomb 5-point median under the lane,
+    operator and pool zones, against the REAL token colours, at three aspects
+    including the extremes (§13) rather than only the 9:21 design ratio.
 
-b5-casual-warning.png
-    Same level 1-06, mode switched to CASUAL, same 5 - 1 move that branch
-    elimination named. Casual intercepts it: "Wait — what makes the 17?",
-    "5 - 1 loses the level", "got it". Nothing consumed, fails 0, target still 1/3.
-    In Normal this move commits and the level is lost two targets later — that is
-    the whole difference between the modes, and only disclosure changed.
-    Note the plain "got it" here versus 1-4's scripted teaching copy and its
-    explicit "rewound free" line.
+    The gate earned itself immediately: it failed at 1.6:1, and the cause was
+    the TOKEN, not the image. targetPlate was 0x2c3a52, dark enough that 3:1
+    against it is mathematically unreachable — even a pure black background
+    reaches only 1.84:1, so the plate read as a hole rather than an object.
+    Lightened to 0x5a6a92 and the gate clears at 3.10-3.21:1 everywhere.
+    That is the gate doing its job before any real art exists.
+
+    Real backgrounds drop into assets/bg/ as world-N.webp. The gate REFUSES to
+    skip a format it cannot decode — a silently skipped image is how Traffic
+    Bomb shipped placeholder bugs.

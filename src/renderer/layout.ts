@@ -10,8 +10,15 @@ export const DESIGN = { width: 420, height: 900 } as const;
 export const PALETTE = {
   background: 0x14161c,
   lane: 0x1d212b,
-  targetPlate: 0x2c3a52,
-  targetFront: 0x3f6ea8,
+  /**
+   * Target plates must clear 3:1 against the background they sit on (§9.1
+   * gate). The Phase 3 placeholder value 0x2c3a52 could not: its luminance is
+   * low enough that even a pure black background reaches only 1.84:1, so the
+   * plate read as a hole rather than an object. Lightened until the silhouette
+   * survives on the darkest background we would ship.
+   */
+  targetPlate: 0x5a6a92,
+  targetFront: 0x4f86c6,
   targetCleared: 0x232833,
   tile: 0xb0854a,
   tileDim: 0x4a4237,
