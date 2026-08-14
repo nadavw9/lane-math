@@ -40,6 +40,22 @@ export class Renderer {
     });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.root);
+
+    // Scale to fit the viewport. The design surface is a fixed 420x900; without
+    // this the status band at the bottom — which is where FAILED and CLEARED
+    // are reported — falls off the bottom of a short window and the player
+    // cannot see why the level stopped.
+    const fit = (): void => {
+      const scale = Math.min(
+        1,
+        (window.innerHeight - 32) / DESIGN.height,
+        (window.innerWidth - 32) / DESIGN.width,
+      );
+      this.app.canvas.style.width = `${Math.round(DESIGN.width * scale)}px`;
+      this.app.canvas.style.height = `${Math.round(DESIGN.height * scale)}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
   }
 
   onInput(handler: (input: InputEvent) => void): void {
@@ -185,7 +201,6 @@ export class Renderer {
         : s.affordance === "operators";
       const enabled = !spent && (isUnary ? true : s.affordance === "operators");
 
-      const count = remaining === null ? "" : `\n${remaining}`;
       this.root.addChild(
         this.box(
           r.x,
@@ -193,7 +208,7 @@ export class Renderer {
           r.w,
           r.h,
           enabled && active ? PALETTE.operator : PALETTE.operatorDim,
-          `${LABEL[op] ?? op}${count}`,
+          `${LABEL[op] ?? op}`,
           enabled && active ? PALETTE.text : PALETTE.textDim,
           spent
             ? undefined
@@ -236,6 +251,52 @@ export class Renderer {
       );
     }
 
+    // --- economy HUD: lives left, stars banked, stars this attempt earns ---
+    const eco = s.economy;
+    if (eco) {
+      const hud = this.text(
+        eco.livesActive
+          ? `${"♥".repeat(eco.lives)}${"·".repeat(Math.max(0, eco.maxLives - eco.lives))}  ${eco.lives}/${eco.maxLives}`
+          : "lives off",
+        14,
+        eco.lives === 0 && eco.livesActive ? PALETTE.failed : PALETTE.text,
+      );
+      hud.position.set(LANE.x + 8, LANE.y + 6);
+      this.root.addChild(hud);
+
+      const stars = this.text(
+        `${"★".repeat(eco.bestStars)}${"☆".repeat(3 - eco.bestStars)}  ${eco.totalStars}★ total`,
+        13,
+        PALETTE.highlight,
+      );
+      stars.anchor.set(1, 0);
+      stars.position.set(LANE.x + LANE.width - 8, LANE.y + 6);
+      this.root.addChild(stars);
+
+      const pending = this.text(
+        s.phase === "playing" ? `this run: ${eco.starsIfCleared}★` : "",
+        12,
+        PALETTE.textDim,
+      );
+      pending.position.set(LANE.x + 8, LANE.y + 26);
+      this.root.addChild(pending);
+
+      if (eco.firstFailureExempt) {
+        const exempt = this.text("free first failure — no life lost", 12, PALETTE.won);
+        exempt.anchor.set(1, 0);
+        exempt.position.set(LANE.x + LANE.width - 8, LANE.y + 26);
+        this.root.addChild(exempt);
+      }
+
+      // Hard-lock exit (GDD §13): out of lives must never be a dead end.
+      if (eco.lockedOut) {
+        const lock = this.text("out of lives — waiting for a refill", 13, PALETTE.failed);
+        lock.anchor.set(0.5, 0);
+        lock.position.set(DESIGN.width / 2, LANE.y + LANE.height - 26);
+        this.root.addChild(lock);
+      }
+    }
+
     // --- status line + restart ---
     const banner =
       s.phase === "won"
@@ -270,6 +331,44 @@ export class Renderer {
         () => this.emit({ type: "tapRestart" }),
       ),
     );
+
+    // Terminal state gets a banner across the lane, not just a line of text at
+    // the bottom of the board. A player who cannot see why the level stopped
+    // will report that it did not stop.
+    if (s.phase !== "playing") {
+      const won = s.phase === "won";
+      const bannerY = LANE.y + LANE.height / 2 - 44;
+      this.root.addChild(
+        new Graphics()
+          .roundRect(LANE.x + 8, bannerY, LANE.width - 16, 88, 8)
+          .fill({ color: won ? PALETTE.won : PALETTE.failed, alpha: 0.94 }),
+      );
+      const headline = this.text(won ? "CLEARED" : "FAILED", 30, PALETTE.text);
+      headline.anchor.set(0.5);
+      headline.position.set(DESIGN.width / 2, bannerY + 26);
+      this.root.addChild(headline);
+
+      const detail = this.text(
+        won ? `${s.targets.length}/${s.targets.length} targets` : (s.message ?? ""),
+        14,
+        PALETTE.text,
+      );
+      detail.anchor.set(0.5);
+      detail.position.set(DESIGN.width / 2, bannerY + 58);
+      this.root.addChild(detail);
+
+      const again = this.box(
+        DESIGN.width / 2 - 60,
+        bannerY + 96,
+        120,
+        34,
+        PALETTE.slotFilled,
+        won ? "replay" : "try again",
+        PALETTE.text,
+        () => this.emit({ type: "tapRestart" }),
+      );
+      this.root.addChild(again);
+    }
 
     // Equation band backdrop drawn last would cover the row, so draw beneath.
     this.root.addChildAt(

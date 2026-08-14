@@ -54,6 +54,22 @@ export interface ViewState {
   readonly affordance: Affordance;
   readonly message: string | null;
   readonly failures: number;
+  /** Economy view. Null until the economy is attached. */
+  readonly economy: EconomyView | null;
+}
+
+export interface EconomyView {
+  readonly lives: number;
+  readonly maxLives: number;
+  /** False in World 1 and before the 2-08 unlock (GDD §7.2, §7.6). */
+  readonly livesActive: boolean;
+  readonly bestStars: number;
+  /** Stars this attempt would earn if cleared now. */
+  readonly starsIfCleared: number;
+  readonly totalStars: number;
+  /** Set on the failure that was absorbed by the free first failure (§5.2). */
+  readonly firstFailureExempt: boolean;
+  readonly lockedOut: boolean;
 }
 
 /** Input the renderer emits. It never decides anything. */
@@ -64,7 +80,9 @@ export type InputEvent =
   | { readonly type: "tapSlot"; readonly index: 0 | 1 | 2 }
   | { readonly type: "tapCommit" }
   | { readonly type: "tapRestart" }
-  | { readonly type: "loadLevel"; readonly id: string };
+  | { readonly type: "loadLevel"; readonly id: string }
+  /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
+  | { readonly type: "tick" };
 
 /**
  * Commands the Director emits. The Renderer applies them to its own view model

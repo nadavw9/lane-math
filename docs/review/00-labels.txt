@@ -1,42 +1,47 @@
-Lane Math — Phase 3 renderer review
-Playable gate: load, tap, win, fail, restart. Placeholder rects, system font, no juice.
-Mode hardcoded to Normal. Design surface 420x900.
+Lane Math — Phase 4A review: persistence and economy
+Stars, lives, save data. Hints/shop/ads/gold are 4B and absent.
+Mode is Casual (§6 = unlimited operators), so operator counts are gone from the board.
 
-01-initial-1-01.png
-    Level 1-01 on load. FULL target queue visible from open (GDD 4.2) — 14, 5, 15
-    stacked bottom-up with the FRONT target (14) at the bottom, gold outline.
-    Empty equation row, operator row showing Normal budgets (+ x3, - x2), pool of 6.
+Also fixes a Phase 3 report: "front target 45 with no way to reach it and the game
+didn't fail". The game DID fail — failure detection was correct and is now covered by
+a replay test across five levels. The failure was invisible: FAILED lived in a status
+strip at y=800 on a fixed 900px canvas, and a shorter window cut it off below the pool.
+Two fixes: the canvas now scales to the viewport, and the terminal state draws a banner
+across the lane where the player is actually looking.
 
-02-equation-filled.png
-    After tapping the 9. Slot 1 filled; affordance flipped to "operators" — operator
-    row bright, number pool dimmed. GDD 3.5's rule that bold-active is always paired
-    with dim-inactive, never bold alone.
+p4-01-fresh-save.png
+    Cleared save, level 1-01. HUD top-left reads "lives off" — World 1 runs with lives
+    disabled entirely (§7.2), and they unlock at 2-08 (§7.6). Top-right shows banked
+    stars and the running total. "this run: 3★" is what a clear would pay right now.
+    Operator row shows + and − with NO counts: Casual is unlimited.
 
-03-ready-to-commit.png
-    9 + 5 staged. "=" is bright with a gold outline; operators now dim, pool bright
-    again except the two tiles held in slots. "=" is inert until all three slots fill.
+p4-02-world1-fail-no-life.png
+    1-04 played into its trap. The FAILED banner is now unmissable — this is the fix for
+    the report. Lives still "off": a World 1 failure never costs one. fails 1, so a
+    clear from here would pay 2★.
 
-04-won.png
-    Cleared. All three targets greyed, pool empty, + budget spent 3 -> 0,
-    status CLEARED, target 3/3.
+p4-03-first-failure-exempt.png
+    3-05, first failure. Lives are active here (♥♥♥♥♥ 5/5) but none was spent —
+    "free first failure — no life lost" (§5.2, new amendment). Stars are still charged:
+    the run now pays 2★, not 3★.
 
-05-failed.png
-    Level 1-04, the scripted trap, walked into deliberately. 3 + 1 = 4 is arithmetically
-    correct and spends the only +, which also takes a 3 — and target 9 can only be made
-    as 3 + 6. Failure fires on the FRONT target being unreachable (GDD 4.1), not on a
-    solver verdict about the level: "FAILED - 9 cannot be made from what is left".
-    Note fails 1.
+p4-04-second-failure-costs-life.png
+    3-05, second failure. 4/5 lives, exemption gone, fails 2, run now pays 1★.
+    The exemption is per level and consumed once.
 
-06-restarted.png
-    After restart. Board back to level start — full pool, budgets restored, target 1/3.
-    The failure counter PERSISTS at 1 (GDD 5.1: if it reset, every failure would be free).
+p4-05-survived-reload.png
+    After a full page reload — the app kill. 4/5 lives, fails 2 and "this run: 1★" all
+    intact. This is the §13 Severity 2 exploit closed: fail, force-quit, reopen and an
+    in-memory counter would have handed back 3 stars.
 
-07-transform-mode.png
-    Level 4-03, sqrt tapped. TRANSFORM MODE: every perfect square in the pool highlights
-    (the 4 and the 9) and everything else dims (GDD 3.5). The sqrt button itself shows
-    active. Tapping sqrt again cancels. Full 6-target queue visible.
+p4-06-cleared-3-stars.png
+    1-01 cleared with no failures: CLEARED banner, ★★★ banked, 3★ total. The button
+    reads "replay" rather than "try again" — a replay of a cleared level resets the
+    failure counter so a better rating can be re-earned (§5.1), and still costs a life,
+    so it is not farmable.
 
-08-transformed.png
-    The 9 tapped: rewritten in place to 3, keeping its tile id, marked transformed
-    (purple) so it can never be transformed again — no cascading (GDD 3.5). sqrt budget
-    spent 1 -> 0. The queue did NOT advance: still target 1/6, tile not consumed.
+p4-07-out-of-lives.png
+    Drained to 0/5 on 3-05. "out of lives — waiting for a refill". Not a dead end:
+    regeneration is unconditional (1 per 20 min, no gold/ad/network needed), and a
+    monotonic-clock fallback guarantees an exit even if the device clock is broken or
+    wound backward. 1-01's 3★ survives untouched.

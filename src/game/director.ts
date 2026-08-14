@@ -11,9 +11,12 @@ import {
   type Tile,
   type UnaryOp,
 } from "../solver/index.js";
+import { livesActiveFor, starsFor } from "../economy/config.js";
+import type { Economy } from "../economy/economy.js";
 import type {
   Affordance,
   Command,
+  EconomyView,
   InputEvent,
   LadderLevel,
   Phase,
@@ -36,6 +39,12 @@ import type {
 export class Director {
   private level: LadderLevel;
   private readonly mode: Mode;
+  /**
+   * Optional economy. Phase 3's fail/restart behaviour is untouched — the
+   * economy is attached to those events, not woven through them.
+   */
+  private readonly economy: Economy | null;
+  private lastFailureExempt = false;
 
   private tiles: Tile[] = [];
   private consumed = new Set<number>();
@@ -48,9 +57,14 @@ export class Director {
   /** GDD §5.1: persists across restarts within a level. */
   private failures = 0;
 
-  constructor(level: LadderLevel, mode: Mode) {
+  constructor(level: LadderLevel, mode: Mode, economy: Economy | null = null) {
     this.level = level;
     this.mode = mode;
+    this.economy = economy;
+    // GDD §5.1: the counter belongs to the level, not to the session. Seeded
+    // from the save here so a relaunch starts with the failures already banked
+    // — an in-memory zero is exactly the force-quit exploit §13 warns about.
+    this.failures = economy?.progressFor(level.id).failCount ?? 0;
     this.reset();
   }
 
@@ -68,9 +82,36 @@ export class Director {
 
   loadLevel(level: LadderLevel): Command[] {
     this.level = level;
-    this.failures = 0;
+    // GDD §5.1: the counter belongs to the level and persists across restarts
+    // AND app kills, so it is read from the save rather than zeroed here.
+    this.failures = this.economy?.progressFor(level.id).failCount ?? 0;
+    this.lastFailureExempt = false;
     this.reset();
     return this.render();
+  }
+
+  /** GDD §5.1: a replay of a CLEARED level may re-earn a better rating. */
+  replay(): Command[] {
+    this.economy?.beginReplay(this.level.id);
+    this.failures = this.economy?.progressFor(this.level.id).failCount ?? 0;
+    this.lastFailureExempt = false;
+    this.reset();
+    return this.render();
+  }
+
+  private economyView(): EconomyView | null {
+    if (!this.economy) return null;
+    const progress = this.economy.progressFor(this.level.id);
+    return {
+      lives: this.economy.lives,
+      maxLives: this.economy.config.maxLives,
+      livesActive: livesActiveFor(this.level.id, this.economy.config),
+      bestStars: progress.bestStars,
+      starsIfCleared: starsFor(this.failures, this.economy.config),
+      totalStars: this.economy.state.totalStars,
+      firstFailureExempt: this.lastFailureExempt,
+      lockedOut: !this.economy.canPlay(this.level.id),
+    };
   }
 
   private get live(): Tile[] {
@@ -128,6 +169,7 @@ export class Director {
       affordance: this.affordance(),
       message: this.message,
       failures: this.failures,
+      economy: this.economyView(),
     };
   }
 
@@ -140,7 +182,19 @@ export class Director {
   }
 
   handle(input: InputEvent): Command[] {
+    if (input.type === "tick") {
+      // Regeneration is time-based, so poll for the hard-lock exit too — being
+      // out of lives must never be a state with no way forward (GDD §13).
+      if (this.economy && !this.economy.canPlay(this.level.id)) {
+        this.economy.grantHardLockLife();
+      }
+      return this.render();
+    }
     if (input.type === "tapRestart") {
+      // A cleared level replays fresh (§5.1); anything else keeps its counter.
+      if (this.phase === "won" && this.economy?.progressFor(this.level.id).cleared) {
+        return this.replay();
+      }
       this.reset();
       return this.render();
     }
@@ -282,7 +336,8 @@ export class Director {
 
     if (this.targetIndex >= this.level.targets.length) {
       this.phase = "won";
-      this.message = "cleared";
+      const award = this.economy?.recordClear(this.level.id);
+      this.message = award ? `cleared — ${award.stars} star${award.stars === 1 ? "" : "s"}` : "cleared";
       return this.render();
     }
     return this.checkStuck();
@@ -305,7 +360,11 @@ export class Director {
 
     if (decompositions.length === 0 && transforms.length === 0) {
       this.phase = "failed";
-      this.failures++;
+      const outcome = this.economy?.recordFailure(this.level.id);
+      // The economy owns the counter once attached, so it stays authoritative
+      // across an app kill rather than being re-derived in memory.
+      this.failures = outcome?.failCount ?? this.failures + 1;
+      this.lastFailureExempt = outcome?.firstFailureExempt ?? false;
       this.message = `${target} cannot be made from what is left`;
     }
     return this.render();
