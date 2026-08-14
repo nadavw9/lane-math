@@ -252,7 +252,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
 
   // 2/3. KEYSTONE + LIVENESS on the base pool. Cheap, so it runs before decoys.
   const baseUnique = uniqueDecompositionTargets(built.pool, built.targets, casual, rules);
-  if (baseUnique.length === 0) {
+  if (tier.requireLiveTrap && baseUnique.length === 0) {
     return done({ accepted: false, reason: "no-keystone", detail: "pre-decoy" });
   }
 
@@ -292,7 +292,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
   // A decoy can destroy keystone uniqueness, so re-verify against the FINAL
   // starting pool — that is the pool the player sees (GDD §13).
   const finalUnique = uniqueDecompositionTargets(pool, targets, casual, rules);
-  if (finalUnique.length === 0) {
+  if (tier.requireLiveTrap && finalUnique.length === 0) {
     return done({
       accepted: false,
       reason: "no-keystone",
@@ -313,7 +313,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
 
   // analyse() only calls something a keystone once its operands are contested,
   // so a unique target with no keystone entry is precisely a dead trap.
-  if (casualMetrics.keystones.length === 0) {
+  if (tier.requireLiveTrap && casualMetrics.keystones.length === 0) {
     return done({
       accepted: false,
       reason: "trap-not-live",
@@ -329,7 +329,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
   // A keystone whose operands are contested but where no move actually loses
   // the level is a dead trap, not an untempting one. Separate reasons, because
   // they call for different fixes.
-  if (traps.length === 0) {
+  if (tier.requireLiveTrap && traps.length === 0) {
     return done({
       accepted: false,
       reason: "trap-not-live",
@@ -339,7 +339,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
   }
 
   const temptation = peakTemptation(traps);
-  if (temptation < ctx.temptationThreshold) {
+  if (tier.requireLiveTrap && temptation < ctx.temptationThreshold) {
     return done({
       accepted: false,
       reason: "trap-not-tempting",

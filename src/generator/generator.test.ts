@@ -278,7 +278,7 @@ describe("construction samples inside the legal range", () => {
   // Regression: buildPair used to roll operands freely and discard results that
   // did not fit, which threw away ~70% of attempts at the top tiers before any
   // design rule ran — and made the measured yield an artefact of the sampler.
-  it.each(["tutorial", "early", "mid", "late", "expert"] as const)(
+  it.each(["tutorial", "early", "mid", "late", "master"] as const)(
     "%s wastes almost no attempts on construction misses",
     (name) => {
       const tier = tierByName(name);

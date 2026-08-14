@@ -13,7 +13,7 @@ import {
 import { renderReport, type RunReport, type TierRun } from "./report.js";
 import { TEMPTATION_THRESHOLD } from "./temptation.js";
 import { hashString, makeRng } from "./rng.js";
-import { TIERS, type TierSpec } from "./tiers.js";
+import { LAUNCH_TIERS, TIERS, type TierSpec } from "./tiers.js";
 import { verifyGenerated } from "./verify.js";
 
 export interface RunOptions {
@@ -33,7 +33,9 @@ export const DEFAULT_OPTIONS: RunOptions = {
   attemptsPerTier: 3000,
   seed: 20260813,
   strategies: ["random", "directed"],
-  tiers: TIERS,
+  // Launch tiers only. Master is post-launch (§8.7) and its intersection yield
+  // is ~2/1000 — hours of compute for content that is not shippable.
+  tiers: LAUNCH_TIERS,
   maxCollected: 4000,
   targetAccepted: 200,
   bandingSampleCap: 2000,
@@ -181,8 +183,11 @@ export function parseArgs(argv: readonly string[]): RunOptions {
   return options;
 }
 
-export function writeOutput(report: RunReport, outDir: string): void {
-  rmSync(outDir, { recursive: true, force: true });
+export function writeOutput(report: RunReport, outDir: string, append = false): void {
+  // Long runs are worth composing from several invocations: one cheap pass over
+  // the fast tiers, another over a slow one. Without this the second call
+  // silently wipes the first.
+  if (!append) rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
 
   let written = 0;
@@ -196,9 +201,10 @@ export function writeOutput(report: RunReport, outDir: string): void {
     }
   }
 
-  writeFileSync(join(outDir, "report.md"), renderReport(report, TIERS));
+  const suffix = append ? `-${report.runs.map((r) => r.tier).join("-")}` : "";
+  writeFileSync(join(outDir, `report${suffix}.md`), renderReport(report, TIERS));
   writeFileSync(
-    join(outDir, "report.json"),
+    join(outDir, `report${suffix}.json`),
     JSON.stringify(
       {
         ...report,
@@ -212,14 +218,14 @@ export function writeOutput(report: RunReport, outDir: string): void {
   process.stdout.write(`\nWrote ${written} levels + report to ${outDir}\n`);
 }
 
-export function main(argv: readonly string[], outDir = "generated"): RunReport {
+export function main(argv: readonly string[], outDir = "generated", append = false): RunReport {
   const options = parseArgs(argv);
   process.stdout.write(
     `Generating: seed ${options.seed}, ${options.attemptsPerTier} attempts/tier, ` +
       `strategies ${options.strategies.join("+")}, tiers ${options.tiers.map((t) => t.name).join(",")}\n`,
   );
   const report = runAll(options);
-  writeOutput(report, outDir);
+  writeOutput(report, outDir, append);
 
   // Re-derive everything from the files just written. If the generator can
   // produce a level it cannot verify, the yield number means nothing.

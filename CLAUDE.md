@@ -4,6 +4,25 @@ Single-lane arithmetic puzzle. **`LANE_MATH_GDD.md` is the source of truth.** Re
 changing behaviour. If code and GDD disagree, the GDD wins or the GDD gets amended — never a
 silent divergence.
 
+### The GDD is maintained in-repo
+
+**The copy on disk is the only copy.** Amendments arrive as dictated text in the prompt and get
+applied to `LANE_MATH_GDD.md` here, in their own commit, before any work that depends on them.
+
+This exists because three amendments were lost: the file was arriving as a browser download named
+`LANE_MATH_GDD_2.md`, `_3.md` and so on, never overwriting, so the repo kept whichever copy
+happened to be picked up while the spec had already moved on. Two sessions of work were done
+against stale bands.
+
+Consequences that matter:
+
+- **Never work from a file outside the repo**, and never assume a newer copy exists somewhere.
+  If the prompt says a section changed and the section on disk has not, say so immediately rather
+  than guessing at the wording.
+- **Never invent amendment wording.** If something is missing, name it and ask.
+- When touching the GDD for one amendment, it is cheap to audit the neighbouring sections against
+  what the code already implements. Drift is silent and compounds.
+
 The one-line premise, because it decides arguments: **the arithmetic is trivial on purpose so
 that all difficulty lands on resource planning.** Anything that makes the mental math harder
 (fractions, huge numbers, cascading transforms) is working against the design.

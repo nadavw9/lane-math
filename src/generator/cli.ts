@@ -10,5 +10,6 @@ import { main } from "./run.js";
 const argv = process.argv.slice(2);
 const outIndex = argv.indexOf("--out");
 const outDir = outIndex >= 0 ? (argv[outIndex + 1] ?? "generated") : "generated";
+const append = argv.includes("--append");
 
-main(argv, outDir);
+main(argv, outDir, append);

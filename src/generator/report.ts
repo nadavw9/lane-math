@@ -81,15 +81,15 @@ export function renderReport(report: RunReport, tiers: readonly TierSpec[]): str
   );
   w();
 
-  w("## Go / no-go: Late and Expert");
+  w("## Top of the ladder: Late");
   w();
   w(
-    "The question this run exists to answer: can rejection sampling reliably produce Late and Expert boards — lookahead 3–4, two overlapping keystones, a valid Expert budget?",
+    "Late is the deepest tier in launch scope — §7.2 maps World 4 to Late, and Master is post-launch (§8.7).",
   );
   w();
   w("| Tier | Strategy | Yield | Accepted | Reached banding | Attempts per accepted level |");
   w("|---|---|---:|---:|---:|---:|");
-  for (const run of report.runs.filter((r) => r.tier === "late" || r.tier === "expert")) {
+  for (const run of report.runs.filter((r) => r.tier === "late" || r.tier === "master")) {
     const perLevel = run.accepted === 0 ? "∞" : (run.attempts / run.accepted).toFixed(0);
     w(
       `| ${run.tier} | ${run.strategy} | ${pct(run.accepted, run.attempts)} | ${run.accepted} | ${run.bandingSamples.length} | ${perLevel} |`,

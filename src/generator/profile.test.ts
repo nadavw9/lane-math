@@ -14,7 +14,7 @@ import { tierByName } from "./tiers.js";
  */
 describe("where generation time goes on an expert-shaped board", () => {
   it("attributes cost per stage", () => {
-    const tier = tierByName("expert");
+    const tier = tierByName("master");
     const rng = makeRng(4242);
     const casual = casualBudget(tier);
     const count = (pool: readonly number[], target: number): number =>
