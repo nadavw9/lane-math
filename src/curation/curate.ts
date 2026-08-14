@@ -290,8 +290,34 @@ function curateWorld(
 
   const twoKeystoneSlots = world === 4 ? [8, 9, 10] : [];
   if (twoKeystoneSlots.length > 0) {
-    const available = pool.filter(isTwoKeystone).sort((a, b) => a.score - b.score);
-    const picks = spread(available, twoKeystoneSlots.length);
+    const need = twoKeystoneSlots.length;
+    const others = 10 - need;
+    const available = pool.filter(isTwoKeystone);
+
+    // The reserved slots sit at the TOP of the world, so every one of them must
+    // outrank every non-reserved slot — otherwise slot 10 is not the world peak
+    // and the curve dips into its own climax.
+    //
+    // Take the HIGHEST threshold that still leaves enough two-keystone boards
+    // above it and enough boards below it. The lowest qualifying cut also keeps
+    // the ordering monotonic, but it strands the seven non-reserved slots in a
+    // narrow band and stacks the whole climb into two jumps at the end.
+    let threshold = Number.POSITIVE_INFINITY;
+    for (const candidate of [...pool].reverse()) {
+      const above = available.filter((c) => c.score >= candidate.score).length;
+      const below = pool.filter((c) => c.score < candidate.score).length;
+      if (above >= need && below >= others) {
+        threshold = candidate.score;
+        break;
+      }
+    }
+
+    const eligible =
+      threshold === Number.POSITIVE_INFINITY
+        ? available
+        : available.filter((c) => c.score >= threshold);
+    const picks = spread(eligible, need);
+
     twoKeystoneSlots.forEach((slot, i) => {
       const candidate = take(pool, picks[i]);
       if (candidate) {
@@ -302,10 +328,17 @@ function curateWorld(
           slot,
           id: slotId(world, slot),
           role: "two-keystone",
-          reason: `only ${available.length} two-keystone ${tier.name} boards with all three modes; needed ${twoKeystoneSlots.length}`,
+          reason: `only ${available.length} two-keystone ${tier.name} boards with all three modes; needed ${need}`,
         });
       }
     });
+
+    // Non-reserved slots must stay below the reserved block.
+    if (threshold !== Number.POSITIVE_INFINITY) {
+      for (let i = pool.length - 1; i >= 0; i--) {
+        if (pool[i]!.score >= threshold) pool.splice(i, 1);
+      }
+    }
   }
 
   // Slot 1 is the valley: minimum score in this world, at the floor of the

@@ -1,0 +1,213 @@
+{
+  "id": "gen-mid-3970",
+  "world": 3,
+  "pool": [
+    10,
+    1,
+    8,
+    3,
+    9,
+    3,
+    2,
+    8,
+    5,
+    5,
+    2,
+    3,
+    12
+  ],
+  "targets": [
+    11,
+    5,
+    27,
+    16,
+    25,
+    6
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null,
+        "*": null,
+        "/": null
+      },
+      "tier": "mid",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 9,
+        "dStart": [
+          4,
+          6,
+          1,
+          2,
+          1,
+          6
+        ],
+        "dPath": [
+          4,
+          2,
+          1,
+          1,
+          1,
+          2
+        ],
+        "decisionPoints": 3,
+        "keystones": [
+          2,
+          4
+        ],
+        "lookaheadDistance": 3,
+        "maxTrapDepth": 5,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "+": 3,
+        "*": 4
+      },
+      "tier": "mid",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          3,
+          2,
+          1,
+          2,
+          1,
+          3
+        ],
+        "dPath": [
+          3,
+          1,
+          1,
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          2,
+          4
+        ],
+        "lookaheadDistance": 3,
+        "maxTrapDepth": 5,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "expert": {
+      "budget": {
+        "+": 1,
+        "-": 1,
+        "*": 4
+      },
+      "tier": null,
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          4,
+          4,
+          1,
+          2,
+          1,
+          5
+        ],
+        "dPath": [
+          4,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          2,
+          4
+        ],
+        "lookaheadDistance": 3,
+        "maxTrapDepth": 5,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 1,
+  "generator": {
+    "seed": 20260813,
+    "strategy": "random",
+    "targetTier": "mid",
+    "hash": "1.2.2.3.3.3.5.5.8.8.9.10.12|11.5.27.16.25.6",
+    "peakTemptation": 0.5,
+    "traps": [
+      {
+        "targetIndex": 3,
+        "fatal": "2 * 8 = 16",
+        "correct": "8 + 8 = 16",
+        "fatalNaturalness": 0.6,
+        "correctNaturalness": 0.556,
+        "temptation": 0.519,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "2 * 8 = 16",
+        "correct": "8 + 8 = 16",
+        "fatalNaturalness": 0.6,
+        "correctNaturalness": 0.556,
+        "temptation": 0.519,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 0,
+        "fatal": "3 + 8 = 11",
+        "correct": "1 + 10 = 11",
+        "fatalNaturalness": 0.645,
+        "correctNaturalness": 0.645,
+        "temptation": 0.5,
+        "trapDepth": 5,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 0,
+        "fatal": "2 + 9 = 11",
+        "correct": "1 + 10 = 11",
+        "fatalNaturalness": 0.645,
+        "correctNaturalness": 0.645,
+        "temptation": 0.5,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 1,
+        "fatal": "10 - 5 = 5",
+        "correct": "2 + 3 = 5",
+        "fatalNaturalness": 0.343,
+        "correctNaturalness": 0.8,
+        "temptation": 0.3,
+        "trapDepth": 3,
+        "stealsKeystoneOperand": true
+      }
+    ],
+    "decoys": [
+      {
+        "value": 12,
+        "newDecompositions": 2,
+        "affectedTargets": [
+          0,
+          5
+        ]
+      }
+    ],
+    "expertBudgetsSolvable": 7,
+    "expertBudgetsUnique": 6
+  }
+}
