@@ -652,6 +652,14 @@ This single animation teaches "gone forever" better than any tutorial text. Traf
 
 **Do not visually mark keystones by default** — that is a free hint. Reserve the highlight for purchased hints.
 
+### 9.4 The failure moment
+
+Failure must read as **the lane rejecting the number**, not as a system verdict. The front target sits in place, pulses, and refuses to advance; the pool visibly cannot feed it.
+
+Do **not** announce failure with a banner, modal or status text reading "no solution exists". The rule in §4.1 is legible by construction — the player can verify it on the board — so the board should say it. Text is a fallback for when the visual fails, not the primary channel.
+
+An interim banner is acceptable during Phases 3–4 for debuggability and must be replaced in the Phase 5 art pass.
+
 ---
 
 ## 10. Level format
