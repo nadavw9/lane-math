@@ -626,9 +626,13 @@ File size: backgrounds are the worst offender for bundle bloat (Traffic Bomb: 46
 
 ### 9.2 Tokens — sprite atlas (composited)
 
-Tokens move, so they keep the atlas pipeline. Backgrounds are the only thing changing approach.
+Tokens move, but they are geometry rather than imagery — see below.
 
 **The art has one job: communicate scarcity.** Numbers are consumed permanently, so they must look like physical objects you spend — chunky bevelled tiles, Scrabble weight, slight drop shadow. Text reads as *information*; a tile reads as *a finite thing*.
+
+**Tokens are drawn procedurally, not atlased.** Rounded squares, hexagons and circles are geometry — PixiJS Graphics plus BitmapText renders them crisper at every scale than any sprite sheet, with no atlas, no compression step, no resolution ceiling, and trivial recolouring for state changes. The sprite-atlas approach in §11 was inherited from Traffic Bomb, where the moving objects were cars. Digits are not cars.
+
+**Backgrounds remain the only raster assets in the game** (§9.1).
 
 **Shape-code, don't colour-code** — faster to parse, colourblind-safe:
 
@@ -756,6 +760,7 @@ Traffic Bomb's architecture is built for a real-time stochastic simulation. **La
 | **2** | Level curation — pick 40, tune tier bands | Full ladder passes metric bands |
 | **3** | PixiJS renderer: lane, pools, slots, `=`, drag/tap | Playable, no juice |
 | **4** | Failure, restart, stars, lives, hint shop | Full loop closed |
+| **4C** | Telemetry: the §7.8 event funnel, local sink | `first_tap_latency` recorded on every level |
 | **5** | Art pass: backgrounds, tokens, commit animation | Brightness CI gate green; 23-gate animation pass |
 | **6** | Capacitor build, AdMob, CI/CD, signed release | Shipped |
 
