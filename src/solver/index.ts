@@ -9,7 +9,16 @@
 
 export { enumerate, applyBinary } from "./enumerate.js";
 export { enumerateTransforms, applyUnary, exactSqrt } from "./unary.js";
-export { solve, isWinnable, legalMoves, applyMove, stateKey, type State } from "./solve.js";
+export {
+  solve,
+  isWinnable,
+  countLines,
+  legalMoves,
+  applyMove,
+  stateKey,
+  type State,
+  type LineCount,
+} from "./solve.js";
 export { analyse } from "./analyse.js";
 export { validateLevel } from "./validate.js";
 export { makePool, poolKey, tileClass, compareTiles } from "./pool.js";

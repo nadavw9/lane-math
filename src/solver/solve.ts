@@ -44,8 +44,30 @@ export function resolveBudget(level: Level, mode: Mode | OperatorBudget): Operat
   return typeof mode === "string" ? level.operators[mode] : mode;
 }
 
+/**
+ * Memo key for winnability and survival depth. A value-class multiset, so two
+ * states holding interchangeable tiles share an answer — which is correct,
+ * because whether a board can still be won depends on values, not on which
+ * physical tile carries them.
+ */
 export function stateKey(state: State): string {
   return `${poolKey(state.tiles)}#${state.targetIndex}#${budgetKey(state.budget)}`;
+}
+
+/**
+ * Cache key for legal moves. Identifies the exact tiles in hand — id AND
+ * current value AND transform state.
+ *
+ * The id is needed because a Move names the tiles it consumes and those ids
+ * must exist in the state receiving it. The value is needed because a unary
+ * transform rewrites a tile in place, keeping its id: `16` and `4` can be the
+ * same tile at different moments, and they do not offer the same moves.
+ */
+export function movesKey(state: State): string {
+  const tiles = state.tiles
+    .map((t) => `${t.id}:${t.value}${t.transformed ? "'" : ""}`)
+    .sort();
+  return `${tiles.join(".")}#${state.targetIndex}#${budgetKey(state.budget)}`;
 }
 
 export function isComplete(ctx: Pick<Ctx, "targets">, state: State): boolean {
@@ -61,7 +83,16 @@ export function isComplete(ctx: Pick<Ctx, "targets">, state: State): boolean {
  * available `sqrt` is not yet dead.
  */
 export function legalMoves(ctx: Ctx, state: State): readonly Move[] {
-  const key = stateKey(state);
+  // Keyed by concrete tile IDS, never by stateKey.
+  //
+  // stateKey is a value-class multiset, which is the right key for winnability
+  // — that genuinely depends only on values. It is the WRONG key for moves,
+  // because a Move carries the ids of the tiles it consumes. Pool [4,…,4,…]
+  // reaching the same value signature by consuming different 4s produces two
+  // distinct states with one stateKey; the second would receive moves naming
+  // tiles it does not hold, applyMove's id filter would remove nothing, and the
+  // state would advance a target while keeping a full pool.
+  const key = movesKey(state);
   const cached = ctx.moves.get(key);
   if (cached !== undefined) return cached;
 
@@ -253,6 +284,72 @@ export function solve(
     truncated: winningPaths.length >= cap || fatalMoves.length >= cap,
     states: ctx.states,
   };
+}
+
+export interface LineCount {
+  /** Complete play-throughs that clear the queue. */
+  readonly winning: number;
+  /** Complete play-throughs, win or dead end. */
+  readonly total: number;
+  readonly truncated: boolean;
+}
+
+/**
+ * Count every distinct play-through from the opening board to a terminal state
+ * — cleared queue or stuck lane.
+ *
+ * GDD §8.4: `survivalRate = solutionPaths / totalLinesExplored`. The winning
+ * count alone says nothing about forgiveness; 337 winning lines is brutal out
+ * of 4000 and a walkover out of 400.
+ *
+ * Lines are counted, not stored, and moves are already canonicalised per state,
+ * so this agrees with `solutionPaths` by construction. Memoisation would be
+ * wrong here: the same state reached by two prefixes is two distinct lines.
+ */
+export function countLines(
+  level: Level,
+  mode: Mode | OperatorBudget,
+  maxLines = 2_000_000,
+): LineCount {
+  validateLevel(level);
+
+  const budget = resolveBudget(level, mode);
+  const ctx: Ctx = {
+    targets: level.targets,
+    rules: level.rules,
+    winnable: new Map(),
+    survival: new Map(),
+    moves: new Map(),
+    states: 0,
+  };
+
+  let winning = 0;
+  let total = 0;
+  let truncated = false;
+
+  const walk = (state: State): void => {
+    if (truncated) return;
+    if (isComplete(ctx, state)) {
+      winning++;
+      total++;
+      return;
+    }
+    const moves = legalMoves(ctx, state);
+    if (moves.length === 0) {
+      total++;
+      return;
+    }
+    for (const move of moves) {
+      if (total >= maxLines) {
+        truncated = true;
+        return;
+      }
+      walk(applyMove(state, move));
+    }
+  };
+
+  walk({ tiles: makePool(level.pool), targetIndex: 0, budget });
+  return { winning, total, truncated };
 }
 
 /**
