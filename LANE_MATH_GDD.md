@@ -620,6 +620,10 @@ Generation requirements:
 - Generate at **9:21** (tall) with a defined safe zone; crop from the edges for shorter devices.
 - Fix the prompt skeleton across all four worlds, vary only the subject. Style drift across a set is the main failure mode of generated art.
 
+**Worlds darken monotonically.** Measured peak luminance across the shipped set: world 1 0.0446, world 2 0.0330, world 3 0.0221, world 4 0.0173. The player descends into darkness as difficulty rises. This emerged from the subjects rather than being designed, but it is now a constraint: any regenerated background must preserve the ordering.
+
+**Backdrops are for separation, not contrast.** The shipped set clears 3:1 with no backdrop at all. Band backdrop opacity is therefore a visual-separation choice, and the brightness gate must still be measured through whatever opacity is set, so a future brighter background cannot hide behind it.
+
 **CI gate — reuse the Traffic Bomb brightness sampler.** The per-world 5-point median sampler already exists. Extend it: sample under the lane and pool zones, compute contrast ratio against token colour, **fail the build below threshold.** This problem was already solved once.
 
 File size: backgrounds are the worst offender for bundle bloat (Traffic Bomb: 46 MB → 1.84 MB). A low-detail background upscales invisibly — ship **~720×1560 WebP q75**, not full native resolution.
