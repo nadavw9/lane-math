@@ -37,6 +37,17 @@ import type { TierSpec } from "../generator/tiers.js";
 export const WEIGHTS = {
   lookaheadDistance: 3.0,
   decisionPoints: 2.0,
+  /**
+   * `1 - survivalRate` (GDD §8.4). Punishment for not planning, weighted
+   * between decisionPoints and lookahead because it is a real difficulty
+   * component rather than a tiebreaker.
+   *
+   * Composite and survivalRate are not substitutes: composite measures how much
+   * reasoning a level DEMANDS, survivalRate how much a player is PUNISHED for
+   * skipping it. Without this term a level can top its world on composite and
+   * still be the most forgiving board in it — which is exactly what 4-10 did.
+   */
+  forgivenessPenalty: 2.0,
   maxTrapDepth: 1.5,
   targetCount: 1.0,
   uniqueness: 1.0,
@@ -54,6 +65,9 @@ export interface ScoreBreakdown {
   readonly targetCount: number;
   readonly solutionPaths: number;
   readonly uniqueness: number;
+  /** null when the level predates survivalRate and the term is omitted. */
+  readonly survivalRate: number | null;
+  readonly forgivenessPenalty: number;
   /** Composite including the uniqueness term. The ordering of record. */
   readonly total: number;
   /** Composite without uniqueness, kept so the term's effect is measurable. */
@@ -70,9 +84,15 @@ export function scoreLevel(level: GeneratedLevel, tier: TierSpec): ScoreBreakdow
   const m = block.metrics;
   const targetCount = level.targets.length;
 
+  // Present on curated levels, absent on corpus boards generated before
+  // survivalRate existed. Omitted rather than guessed when missing.
+  const survivalRate = typeof m.survivalRate === "number" ? m.survivalRate : null;
+  const forgivenessPenalty = survivalRate === null ? 0 : 1 - survivalRate;
+
   const base =
     WEIGHTS.lookaheadDistance * m.lookaheadDistance +
     WEIGHTS.decisionPoints * m.decisionPoints +
+    WEIGHTS.forgivenessPenalty * forgivenessPenalty +
     WEIGHTS.maxTrapDepth * m.maxTrapDepth +
     WEIGHTS.targetCount * targetCount;
 
@@ -85,6 +105,8 @@ export function scoreLevel(level: GeneratedLevel, tier: TierSpec): ScoreBreakdow
     targetCount,
     solutionPaths: m.solutionPaths,
     uniqueness: round(uniqueness),
+    survivalRate,
+    forgivenessPenalty: round(forgivenessPenalty),
     total: round(base + WEIGHTS.uniqueness * uniqueness),
     totalWithoutUniqueness: round(base),
   };

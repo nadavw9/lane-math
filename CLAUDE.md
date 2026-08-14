@@ -160,6 +160,19 @@ that way.
 2. **Tiles are consumed by index, not by value.** Pool `[2,2]` holds two distinguishable tiles.
    The renderer needs to know *which* one shattered. Enumeration canonicalises by value class;
    moves still carry tile ids.
+
+   **Any cache keyed on a value-class multiset is unsafe on pools with repeated values.** This
+   already cost a corpus. `legalMoves` was cached on `stateKey` — a value-class key — while the
+   `Move` objects it returned carried concrete tile ids. Two states reaching the same value
+   signature by consuming different tiles shared one entry, the second got moves naming tiles it
+   did not hold, and `applyMove`'s id filter removed nothing while the target index advanced.
+   No crash; just wrong numbers on exactly the large duplicate-heavy boards that matter most.
+
+   A move cache must be keyed by tile **identity**: id *and* current value *and* transform state.
+   The id alone is not enough — a unary transform rewrites a tile in place and keeps its id, so
+   `16` and `4` can be the same tile at different moments and do not offer the same moves.
+   Memoising *winnability* on the value-class key stays correct, because whether a board can be
+   won genuinely depends on values rather than on which tile carries them.
 3. **Integers only, positive pool.** `÷` is legal only on exact division, `√` only on perfect
    squares. Pool values are positive integers — this is what makes `÷0` unrepresentable rather
    than merely guarded.

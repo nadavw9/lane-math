@@ -71,6 +71,12 @@ export interface ModeBlock {
     readonly lookaheadDistance: number;
     readonly maxTrapDepth: number;
     readonly overlappingKeystonePairs: number;
+    /**
+     * GDD §8.4. Written by the metrics refresh on curated levels; absent on
+     * corpus boards generated before the metric existed.
+     */
+    readonly totalLinesExplored?: number;
+    readonly survivalRate?: number;
   };
 }
 
