@@ -1,4 +1,5 @@
 import type { BinaryOp, Mode, OperatorBudget, Rules, UnaryOp } from "../solver/index.js";
+import type { Unlocks } from "../economy/unlocks.js";
 
 /** A level as stored in levels/ (GDD §10). */
 export interface LadderLevel {
@@ -56,6 +57,13 @@ export interface ViewState {
   readonly failures: number;
   /** Economy view. Null until the economy is attached. */
   readonly economy: EconomyView | null;
+  /** GDD §7.6: systems absent before their unlock, not greyed out. */
+  readonly unlocks: Unlocks;
+  /** A blocked fatal move awaiting acknowledgement. */
+  readonly warning: WarningView | null;
+  readonly hints: readonly HintView[];
+  readonly shop: readonly ShopEntry[];
+  readonly shopOpen: boolean;
 }
 
 export interface EconomyView {
@@ -70,6 +78,43 @@ export interface EconomyView {
   /** Set on the failure that was absorbed by the free first failure (§5.2). */
   readonly firstFailureExempt: boolean;
   readonly lockedOut: boolean;
+  readonly starsAvailable: number;
+}
+
+/**
+ * A blocked fatal move (GDD §6 Casual, §7.5 the scripted trap).
+ *
+ * The move was legal and correct arithmetic; committing it would have made the
+ * level unwinnable. Casual blocks it and says so. At 1-4 the block is the
+ * teaching device and the rewind is free regardless of mode.
+ */
+export interface WarningView {
+  /** The move that was refused, e.g. "3 + 1 = 4". */
+  readonly move: string;
+  /** The keystone target the move would have starved, if one is known. */
+  readonly keystoneTarget: number | null;
+  readonly keystoneTargetIndex: number | null;
+  /** Pool tiles that make the keystone — pulsed, per §7.5 step 4. */
+  readonly keystoneTileIds: readonly number[];
+  /** §7.5: the scripted trap at 1-4 is taught, not merely refused. */
+  readonly scripted: boolean;
+  readonly line: string;
+}
+
+export interface HintView {
+  readonly type: string;
+  readonly text: string;
+  readonly tileIds: readonly number[];
+  readonly targetIndex: number | null;
+  readonly forbidden: { readonly leftId: number; readonly rightId: number } | null;
+}
+
+export interface ShopEntry {
+  readonly type: string;
+  readonly label: string;
+  readonly cost: number;
+  readonly owned: boolean;
+  readonly affordable: boolean;
 }
 
 /** Input the renderer emits. It never decides anything. */
@@ -82,7 +127,12 @@ export type InputEvent =
   | { readonly type: "tapRestart" }
   | { readonly type: "loadLevel"; readonly id: string }
   /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
-  | { readonly type: "tick" };
+  | { readonly type: "tick" }
+  /** Acknowledge a blocked fatal move; the equation rewinds free. */
+  | { readonly type: "dismissWarning" }
+  | { readonly type: "selectMode"; readonly mode: Mode }
+  | { readonly type: "toggleShop" }
+  | { readonly type: "buyHint"; readonly hint: string };
 
 /**
  * Commands the Director emits. The Renderer applies them to its own view model

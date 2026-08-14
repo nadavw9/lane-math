@@ -14,7 +14,13 @@ const rejection = (commands: readonly Command[]): string | null => {
   return r && r.type === "reject" ? r.reason : null;
 };
 
-/** The canonical level (GDD §1) as a ladder level, free operators. */
+/**
+ * These exercise the raw rules, so they run in NORMAL. Casual intercepts
+ * level-killing moves (GDD §6), which is the right behaviour and the wrong
+ * setting for testing what happens when one is committed.
+ *
+ * The canonical level (GDD §1) as a ladder level, free operators.
+ */
 const CANONICAL: LadderLevel = {
   id: "test-canonical",
   world: 1,
@@ -51,7 +57,7 @@ const idOfValue = (state: ViewState, value: number, skip = 0): number => {
 
 describe("tap state machine (GDD §3.5)", () => {
   it("walks IDLE -> number -> operator -> number -> commit", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
     expect(s.affordance).toBe("numbers");
 
@@ -69,12 +75,12 @@ describe("tap state machine (GDD §3.5)", () => {
   });
 
   it("refuses an operator before a number", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     expect(rejection(d.handle({ type: "tapOperator", op: "+" }))).toBe("pick a number first");
   });
 
   it("tapping slot 0 clears the whole row; slot 1 rewinds to the operator step", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "tapTile", id: 0 }));
     s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
     s = stateOf(d.handle({ type: "tapTile", id: 1 }));
@@ -90,12 +96,12 @@ describe("tap state machine (GDD §3.5)", () => {
   });
 
   it("= is refused until all three slots are filled", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     expect(rejection(d.handle({ type: "tapCommit" }))).toBe("fill all three slots first");
   });
 
   it("wrong arithmetic is rejected without failing the level", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "tapTile", id: idOfValue(stateOf(d.handle({ type: "loadLevel", id: "x" })), 1) }));
     s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
     s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 2) }));
@@ -108,7 +114,7 @@ describe("tap state machine (GDD §3.5)", () => {
 
 describe("consumption is by tile id, not value (GDD §3.5)", () => {
   it("consumes the tapped 2, leaving the other 2 in the pool", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
     const firstTwo = idOfValue(s, 2, 0);
     const secondTwo = idOfValue(s, 2, 1);
@@ -125,7 +131,7 @@ describe("consumption is by tile id, not value (GDD §3.5)", () => {
 
 describe("winning and failing", () => {
   it("clears the canonical level along 2x4, 1+2, 3x5", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
 
     const play = (a: number, op: "+" | "-" | "*", b: number): void => {
@@ -143,7 +149,7 @@ describe("winning and failing", () => {
 
   it("fails when the FRONT target becomes unreachable (GDD §4.1)", () => {
     // 3+5=8 is legal and fatal: it survives target 1 and dies at target 2.
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
 
     s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
@@ -163,7 +169,7 @@ describe("winning and failing", () => {
   });
 
   it("restart returns to the level start and keeps the failure count", () => {
-    const d = new Director(CANONICAL, "casual");
+    const d = new Director(CANONICAL, "normal");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
     s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
     s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
@@ -187,7 +193,7 @@ describe("winning and failing", () => {
 
 describe("unary transform mode (GDD §3.3, §3.5)", () => {
   it("tapping sqrt highlights perfect squares only", () => {
-    const d = new Director(UNARY, "casual");
+    const d = new Director(UNARY, "normal");
     const s = stateOf(d.handle({ type: "tapUnary", op: "sqrt" }));
     expect(s.transformOp).toBe("sqrt");
     expect(s.affordance).toBe("transform");
@@ -195,14 +201,14 @@ describe("unary transform mode (GDD §3.3, §3.5)", () => {
   });
 
   it("tapping sqrt again cancels", () => {
-    const d = new Director(UNARY, "casual");
+    const d = new Director(UNARY, "normal");
     d.handle({ type: "tapUnary", op: "sqrt" });
     const s = stateOf(d.handle({ type: "tapUnary", op: "sqrt" }));
     expect(s.transformOp).toBeNull();
   });
 
   it("transforms in place, keeping the tile id, and does not advance the queue", () => {
-    const d = new Director(UNARY, "casual");
+    const d = new Director(UNARY, "normal");
     d.handle({ type: "tapUnary", op: "sqrt" });
     const s = stateOf(d.handle({ type: "tapTile", id: 0 }));
 
@@ -215,7 +221,7 @@ describe("unary transform mode (GDD §3.3, §3.5)", () => {
   });
 
   it("the transformed tile can then be used to win", () => {
-    const d = new Director(UNARY, "casual");
+    const d = new Director(UNARY, "normal");
     d.handle({ type: "tapUnary", op: "sqrt" });
     let s = stateOf(d.handle({ type: "tapTile", id: 0 }));
     s = stateOf(d.handle({ type: "tapTile", id: 1 }));
@@ -226,7 +232,7 @@ describe("unary transform mode (GDD §3.3, §3.5)", () => {
   });
 
   it("does not cascade — a transformed tile cannot be transformed again", () => {
-    const d = new Director(UNARY, "casual");
+    const d = new Director(UNARY, "normal");
     d.handle({ type: "tapUnary", op: "sqrt" });
     d.handle({ type: "tapTile", id: 0 });
     // 4 is a perfect square, but tile 0 has already been transformed.

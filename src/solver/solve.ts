@@ -353,21 +353,46 @@ export function countLines(
 }
 
 /**
+ * Memo tables that survive between `isWinnable` calls.
+ *
+ * Casual re-asks the same question on every commit, and a fresh context re-walks
+ * the whole tree each time — measured at up to 28ms on a T=7, N=16 board, which
+ * blows a 60fps frame and would be several times worse on the low-end Android
+ * §13 names. Sharing the memo across a level makes every call after the first a
+ * lookup.
+ *
+ * Safe to reuse for one level: the keys carry the target index and the operator
+ * budget, so a spent budget cannot collide with an unspent one.
+ */
+export interface WinnabilityCache {
+  readonly winnable: Map<string, boolean>;
+  readonly survival: Map<string, Survival>;
+  readonly moves: Map<string, readonly Move[]>;
+}
+
+export function createWinnabilityCache(): WinnabilityCache {
+  return { winnable: new Map(), survival: new Map(), moves: new Map() };
+}
+
+/**
  * Cheap solvability check for a live board — what Casual mode calls on every
  * commit to decide whether to warn. Skips path and dead-branch collection.
+ *
+ * Pass a `cache` to share memo tables across calls on the same level.
  */
 export function isWinnable(
   level: Level,
   mode: Mode | OperatorBudget,
   state?: State,
+  cache?: WinnabilityCache,
 ): boolean {
   const budget = resolveBudget(level, mode);
   const ctx: Ctx = {
     targets: level.targets,
     rules: level.rules,
-    winnable: new Map(),
-    survival: new Map(),
-    moves: new Map(),
+    winnable: cache?.winnable ?? new Map(),
+    survival: cache?.survival ?? new Map(),
+    moves: cache?.moves ?? new Map(),
     states: 0,
   };
   return winnable(

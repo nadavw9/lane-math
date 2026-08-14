@@ -1,47 +1,47 @@
-Lane Math — Phase 4A review: persistence and economy
-Stars, lives, save data. Hints/shop/ads/gold are 4B and absent.
-Mode is Casual (§6 = unlimited operators), so operator counts are gone from the board.
+Lane Math — Phase 4B review: assists, modes, disclosure
+Taken at PHONE aspect (393x852, GDD §9.1). Phase 3/4A shots were desktop-shaped,
+which is how the failure banner ended up below the fold.
 
-Also fixes a Phase 3 report: "front target 45 with no way to reach it and the game
-didn't fail". The game DID fail — failure detection was correct and is now covered by
-a replay test across five levels. The failure was invisible: FAILED lived in a status
-strip at y=800 on a fixed 900px canvas, and a shorter window cut it off below the pool.
-Two fixes: the canvas now scales to the viewport, and the terminal state draws a banner
-across the lane where the player is actually looking.
+Mode is back to Normal by default (Phase 3 brief). Casual is now reachable and
+complete: unlimited operators AND the fatal-move warning, per §6.
 
-p4-01-fresh-save.png
-    Cleared save, level 1-01. HUD top-left reads "lives off" — World 1 runs with lives
-    disabled entirely (§7.2), and they unlock at 2-08 (§7.6). Top-right shows banked
-    stars and the running total. "this run: 3★" is what a clear would pay right now.
-    Operator row shows + and − with NO counts: Casual is unlimited.
+b1-nothing-unlocked.png
+    Fresh save, level 1-01. NOTHING is on screen that has not unlocked (§7.6):
+    no star counter, no lives, no hint shop, no mode selector. Absent, not greyed —
+    a greyed shop still teaches "this is not for me". Status reads "normal".
 
-p4-02-world1-fail-no-life.png
-    1-04 played into its trap. The FAILED banner is now unmissable — this is the fix for
-    the report. Lives still "off": a World 1 failure never costs one. fails 1, so a
-    clear from here would pay 2★.
+b2-scripted-trap.png
+    Level 1-4, the scripted trap (§7.5), committing 3 + 1 = 4 — correct arithmetic
+    that spends the only + and takes a 3, when target 9 can only be made as 3 + 6.
+    The commit is held mid-flight; one line of text, "Wait — what makes the 9?",
+    with the real target substituted; the 3 and the 6 pulse in the pool as the only
+    two numbers that make it; the move is rewound free — no star, no life, no
+    failure (fails 0, target still 1/3).
+    Note the mode: NORMAL. 1-4 warns regardless of mode, because it is the teaching
+    device. 1-6 repeats the shape with the warning OFF, which is where it is tested.
 
-p4-03-first-failure-exempt.png
-    3-05, first failure. Lives are active here (♥♥♥♥♥ 5/5) but none was spent —
-    "free first failure — no life lost" (§5.2, new amendment). Stars are still charged:
-    the run now pays 2★, not 3★.
+b3-shop-unlocked.png
+    After World 1-3 cleared. Everything now present: lives 5/5, star counter 90★,
+    hint shop open with all three types priced, and the mode selector.
+    Compare against b1 — same screen, nothing added but progress.
 
-p4-04-second-failure-costs-life.png
-    3-05, second failure. 4/5 lives, exemption gone, fails 2, run now pays 1★.
-    The exemption is per level and consumed once.
+b4-three-hints.png
+    All three hints owned on 1-06. None reveals a keystone (§5.4):
+      Narrow      "One of the last 2 targets has only one solution." — marks nothing
+      Contested   "The 9 is contested." — names the scarce number, outlines the 9s,
+                  never says what needs it
+      Branch      "Your instinct here is wrong: 5 - 1 loses the level." — kills the
+                  tempting fatal option and outlines its tiles, without naming which
+                  of the remaining options is correct
+    Bought, then failed and restarted: all three are still revealed and re-buying
+    charges nothing (starsSpent 12 before and after) — §13, never charge twice for
+    the same information on the same level.
 
-p4-05-survived-reload.png
-    After a full page reload — the app kill. 4/5 lives, fails 2 and "this run: 1★" all
-    intact. This is the §13 Severity 2 exploit closed: fail, force-quit, reopen and an
-    in-memory counter would have handed back 3 stars.
-
-p4-06-cleared-3-stars.png
-    1-01 cleared with no failures: CLEARED banner, ★★★ banked, 3★ total. The button
-    reads "replay" rather than "try again" — a replay of a cleared level resets the
-    failure counter so a better rating can be re-earned (§5.1), and still costs a life,
-    so it is not farmable.
-
-p4-07-out-of-lives.png
-    Drained to 0/5 on 3-05. "out of lives — waiting for a refill". Not a dead end:
-    regeneration is unconditional (1 per 20 min, no gold/ad/network needed), and a
-    monotonic-clock fallback guarantees an exit even if the device clock is broken or
-    wound backward. 1-01's 3★ survives untouched.
+b5-casual-warning.png
+    Same level 1-06, mode switched to CASUAL, same 5 - 1 move that branch
+    elimination named. Casual intercepts it: "Wait — what makes the 17?",
+    "5 - 1 loses the level", "got it". Nothing consumed, fails 0, target still 1/3.
+    In Normal this move commits and the level is lost two targets later — that is
+    the whole difference between the modes, and only disclosure changed.
+    Note the plain "got it" here versus 1-4's scripted teaching copy and its
+    explicit "rewound free" line.

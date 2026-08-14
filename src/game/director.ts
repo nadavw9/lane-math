@@ -1,29 +1,43 @@
 import {
+  analyse,
   applyBinary,
+  applyMove,
   enumerate,
+  createWinnabilityCache,
   enumerateTransforms,
   exactSqrt,
   hasBudget,
+  isWinnable,
   spend,
   type BinaryOp,
+  type Level,
   type Mode,
   type OperatorBudget,
+  type State,
   type Tile,
   type UnaryOp,
 } from "../solver/index.js";
 import { livesActiveFor, starsFor } from "../economy/config.js";
 import type { Economy } from "../economy/economy.js";
+import { ALL_UNLOCKED, unlocksFor } from "../economy/unlocks.js";
+import { HINT_COST, HINT_LABEL, generateHint, hintContext, type HintType } from "./hints.js";
 import type {
   Affordance,
   Command,
   EconomyView,
+  HintView,
   InputEvent,
   LadderLevel,
   Phase,
+  ShopEntry,
   SlotsView,
   TileView,
   ViewState,
+  WarningView,
 } from "./types.js";
+
+/** GDD §7.5. The one level whose warning is on regardless of mode. */
+export const SCRIPTED_TRAP_LEVEL = "1-04";
 
 /**
  * The Director owns game state and is the only thing that decides anything.
@@ -56,6 +70,12 @@ export class Director {
   private message: string | null = null;
   /** GDD §5.1: persists across restarts within a level. */
   private failures = 0;
+  private warning: WarningView | null = null;
+  private shopOpen = false;
+  /** GDD §7.5: 1-4's free rewind is granted once, and is not a failure. */
+  private scriptedRewindUsed = false;
+  /** Shared across commits so the warning is a lookup, not a re-walk. */
+  private winnability = createWinnabilityCache();
 
   constructor(level: LadderLevel, mode: Mode, economy: Economy | null = null) {
     this.level = level;
@@ -66,6 +86,41 @@ export class Director {
     // — an in-memory zero is exactly the force-quit exploit §13 warns about.
     this.failures = economy?.progressFor(level.id).failCount ?? 0;
     this.reset();
+    this.warmWarning();
+  }
+
+  /**
+   * Pre-evaluate every move available at the CURRENT target, so the warning is
+   * a memo lookup when the player commits.
+   *
+   * Warming the start state alone is not enough: proving a move fatal means
+   * walking its whole subtree to show no win exists, and those subtrees are
+   * exactly the ones a winning-line warm-up never touches. Measured cold at up
+   * to 28ms on a T=7 N=16 board, and still 14ms with only the start warmed —
+   * both above a 60fps frame, and worse on the low-end Android §13 names.
+   *
+   * Called at load and after each commit, so the cost lands in the pause that
+   * already exists between moves rather than inside one. A worker thread is the
+   * proper answer and belongs with the Phase 5 animation work; this keeps the
+   * cost off the commit path in the meantime.
+   */
+  private warmWarning(): void {
+    if (!this.warningActive) return;
+    const target = this.frontTarget;
+    if (target === undefined) return;
+
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    const level = this.asSolverLevel();
+    const state: State = {
+      tiles: this.live,
+      targetIndex: this.targetIndex,
+      budget: this.budget,
+    };
+
+    for (const option of enumerate(this.live, target, this.budget, this.level.rules)) {
+      const next = applyMove(state, { ...option, kind: "binary", targetIndex: this.targetIndex });
+      isWinnable(level, budget, next, this.winnability);
+    }
   }
 
   /** Restart to level start (GDD §4.3). Rewind is to the start, never to the fatal move. */
@@ -78,6 +133,36 @@ export class Director {
     this.phase = "playing";
     this.transformOp = null;
     this.message = null;
+    this.warning = null;
+  }
+
+  /**
+   * Is the fatal-move warning active right now?
+   *
+   * GDD §6: Casual warns, Normal and Expert do not. GDD §7.5: level 1-4 is the
+   * scripted trap and warns REGARDLESS of mode — it is the teaching device that
+   * converts the central mechanic from a punishment into an insight. §7.4 is
+   * equally explicit that 1-6 repeats the shape with the warning OFF, which is
+   * where the lesson is tested, so 1-6 must never opt in.
+   */
+  private get warningActive(): boolean {
+    if (this.level.id === SCRIPTED_TRAP_LEVEL) return true;
+    return this.mode === "casual";
+  }
+
+  private get scriptedTrapLevel(): boolean {
+    return this.level.id === SCRIPTED_TRAP_LEVEL;
+  }
+
+  private asSolverLevel(): Level {
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    return {
+      id: this.level.id,
+      pool: this.level.pool,
+      targets: this.level.targets,
+      operators: { casual: budget, normal: budget, expert: budget },
+      rules: this.level.rules,
+    };
   }
 
   loadLevel(level: LadderLevel): Command[] {
@@ -86,7 +171,10 @@ export class Director {
     // AND app kills, so it is read from the save rather than zeroed here.
     this.failures = this.economy?.progressFor(level.id).failCount ?? 0;
     this.lastFailureExempt = false;
+    this.winnability = createWinnabilityCache();
+    this.scriptedRewindUsed = false;
     this.reset();
+    this.warmWarning();
     return this.render();
   }
 
@@ -97,6 +185,73 @@ export class Director {
     this.lastFailureExempt = false;
     this.reset();
     return this.render();
+  }
+
+  /**
+   * Buy a hint, or re-reveal one already owned.
+   *
+   * GDD §13: a hint bought and then failed must still be revealed after the
+   * restart — never charge twice for the same information on the same level.
+   * The economy owns that rule; this just asks.
+   */
+  private buyHint(type: HintType): Command[] {
+    if (!this.economy) return this.reject("no shop here");
+    const cost = HINT_COST[type];
+
+    // Generate BEFORE charging. Branch elimination has nothing to say when no
+    // move available right now is fatal, and taking stars for a hint that
+    // renders nothing is indefensible.
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    const ctx = hintContext(this.asSolverLevel(), this.live, this.targetIndex, budget);
+    const owned = this.economy.hintsPurchased(this.level.id).includes(type);
+    if (!owned && generateHint(type, ctx) === null) {
+      return this.reject(`${HINT_LABEL[type]} has nothing to reveal on this board`);
+    }
+
+    if (!this.economy.purchaseHint(this.level.id, type, cost)) {
+      return this.reject(`${HINT_LABEL[type]} costs ${cost}★ — you have ${this.economy.starsAvailable}★`);
+    }
+    this.message = `${HINT_LABEL[type]} revealed`;
+    return this.render();
+  }
+
+  /** Hints owned on this level, re-derived from the current board. */
+  private hintViews(): HintView[] {
+    if (!this.economy) return [];
+    const owned = this.economy.hintsPurchased(this.level.id);
+    if (owned.length === 0) return [];
+
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    const ctx = hintContext(this.asSolverLevel(), this.live, this.targetIndex, budget);
+
+    const views: HintView[] = [];
+    for (const type of owned) {
+      const hint = generateHint(type as HintType, ctx);
+      if (!hint) continue;
+      views.push({
+        type: hint.type,
+        text: hint.text,
+        tileIds: hint.tileIds,
+        targetIndex: hint.targetIndex,
+        forbidden: hint.forbiddenMove
+          ? { leftId: hint.forbiddenMove.leftId, rightId: hint.forbiddenMove.rightId }
+          : null,
+      });
+    }
+    return views;
+  }
+
+  private shopEntries(): ShopEntry[] {
+    if (!this.economy) return [];
+    const owned = this.economy.hintsPurchased(this.level.id);
+    const available = this.economy.starsAvailable;
+    return (["narrow", "contested", "branch"] as HintType[]).map((type) => ({
+      type,
+      label: HINT_LABEL[type],
+      cost: HINT_COST[type],
+      owned: owned.includes(type),
+      affordable: available >= HINT_COST[type],
+    }));
   }
 
   private economyView(): EconomyView | null {
@@ -111,6 +266,7 @@ export class Director {
       totalStars: this.economy.state.totalStars,
       firstFailureExempt: this.lastFailureExempt,
       lockedOut: !this.economy.canPlay(this.level.id),
+      starsAvailable: this.economy.starsAvailable,
     };
   }
 
@@ -170,6 +326,11 @@ export class Director {
       message: this.message,
       failures: this.failures,
       economy: this.economyView(),
+      unlocks: this.economy ? unlocksFor(this.economy.state) : ALL_UNLOCKED,
+      warning: this.warning,
+      hints: this.hintViews(),
+      shop: this.shopEntries(),
+      shopOpen: this.shopOpen,
     };
   }
 
@@ -189,6 +350,24 @@ export class Director {
         this.economy.grantHardLockLife();
       }
       return this.render();
+    }
+    if (input.type === "dismissWarning") {
+      // §7.5 step 5: the move is rewound for free — no star, no life, no
+      // failure recorded. Nothing was ever consumed, so there is nothing to
+      // undo beyond clearing the notice.
+      this.warning = null;
+      return this.render();
+    }
+    if (input.type === "selectMode") {
+      this.economy?.selectMode(input.mode);
+      return this.render();
+    }
+    if (input.type === "toggleShop") {
+      this.shopOpen = !this.shopOpen;
+      return this.render();
+    }
+    if (input.type === "buyHint") {
+      return this.buyHint(input.hint as HintType);
     }
     if (input.type === "tapRestart") {
       // A cleared level replays fresh (§5.1); anything else keeps its counter.
@@ -283,6 +462,12 @@ export class Director {
     const to = op === "sqrt" ? exactSqrt(tile.value) : tile.value * tile.value;
     if (to === null) return this.reject(`${op} cannot act on ${tile.value}`);
 
+    // A transform is a move (§3.5) and can strip the pool of what a later
+    // target needed, so Casual must warn on it too — otherwise the mode
+    // promises to catch level-killing moves and misses a whole class of them.
+    const blockedTransform = this.checkFatalTransform(tile, op, to);
+    if (blockedTransform) return blockedTransform;
+
     this.tiles = this.tiles.map((t) =>
       t.id === tile.id ? { id: t.id, value: to, transformed: true } : t,
     );
@@ -326,6 +511,11 @@ export class Director {
       return this.reject(`${left.value} ${op} ${right.value} = ${result}, not ${target}`);
     }
 
+    // The move is legal and correct. Before it becomes irreversible, Casual
+    // (and 1-4 in any mode) checks whether it dooms the level.
+    const blocked = this.checkFatalMove(left, right, op);
+    if (blocked) return blocked;
+
     // Consumed BY ID, never by value (GDD §3.5).
     this.consumed.add(left.id);
     this.consumed.add(right.id);
@@ -340,7 +530,121 @@ export class Director {
       this.message = award ? `cleared — ${award.stars} star${award.stars === 1 ? "" : "s"}` : "cleared";
       return this.render();
     }
-    return this.checkStuck();
+    const commands = this.checkStuck();
+    // Warm the new front target while the player reads the board.
+    if (this.phase === "playing") this.warmWarning();
+    return commands;
+  }
+
+  /**
+   * The fatal-move warning (GDD §6 Casual, §7.5 the scripted trap).
+   *
+   * Uses `isWinnable` — the cheap memoised boolean the solver already exposes.
+   * No path collection, no dead-branch enumeration: this runs on every commit
+   * and must stay off the critical path (§13 Severity 3).
+   *
+   * Returns commands when the move is refused, or null to let it through.
+   */
+  private checkFatalMove(left: Tile, right: Tile, op: BinaryOp): Command[] | null {
+    if (!this.warningActive) return null;
+
+    const state: State = {
+      tiles: this.live,
+      targetIndex: this.targetIndex,
+      budget: this.budget,
+    };
+    const next = applyMove(state, {
+      kind: "binary",
+      left: left.value,
+      right: right.value,
+      op,
+      result: this.frontTarget!,
+      leftId: left.id,
+      rightId: right.id,
+      targetIndex: this.targetIndex,
+    });
+
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    if (isWinnable(this.asSolverLevel(), budget, next, this.winnability)) return null;
+
+    // Refused. Nothing is consumed and nothing is recorded — the equation
+    // simply rewinds, free (§7.5 step 5).
+    const keystone = this.keystoneAhead();
+    this.slots = { leftTileId: null, op: null, rightTileId: null };
+    this.warning = {
+      move: `${left.value} ${op} ${right.value}`,
+      keystoneTarget: keystone?.target ?? null,
+      keystoneTargetIndex: keystone?.index ?? null,
+      keystoneTileIds: keystone?.tileIds ?? [],
+      scripted: this.scriptedTrapLevel && !this.scriptedRewindUsed,
+      line: keystone
+        ? `Wait — what makes the ${keystone.target}?`
+        : "That move loses the level.",
+    };
+    if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;
+    this.message = null;
+    return this.render();
+  }
+
+  /** The transform equivalent of checkFatalMove. */
+  private checkFatalTransform(tile: Tile, op: UnaryOp, to: number): Command[] | null {
+    if (!this.warningActive) return null;
+
+    const state: State = {
+      tiles: this.live,
+      targetIndex: this.targetIndex,
+      budget: this.budget,
+    };
+    const next = applyMove(state, {
+      kind: "unary",
+      op,
+      from: tile.value,
+      to,
+      tileId: tile.id,
+      targetIndex: this.targetIndex,
+    });
+
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    if (isWinnable(this.asSolverLevel(), budget, next, this.winnability)) return null;
+
+    const keystone = this.keystoneAhead();
+    this.transformOp = null;
+    this.warning = {
+      move: `${op} ${tile.value} → ${to}`,
+      keystoneTarget: keystone?.target ?? null,
+      keystoneTargetIndex: keystone?.index ?? null,
+      keystoneTileIds: keystone?.tileIds ?? [],
+      scripted: this.scriptedTrapLevel && !this.scriptedRewindUsed,
+      line: keystone ? `Wait — what makes the ${keystone.target}?` : "That move loses the level.",
+    };
+    if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;
+    return this.render();
+  }
+
+  /**
+   * The keystone the player is about to starve, with the pool tiles that make
+   * it — §7.5 steps 3 and 4, "the only two numbers that can make it pulse".
+   */
+  private keystoneAhead(): { target: number; index: number; tileIds: number[] } | null {
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    const metrics = analyse(this.asSolverLevel(), budget);
+    const detail = metrics.keystoneDetail.find((k) => k.index > this.targetIndex);
+    if (!detail) return null;
+
+    const target = this.level.targets[detail.index];
+    if (target === undefined) return null;
+
+    // Mark one live tile per operand value, by id.
+    const tileIds: number[] = [];
+    const taken = new Set<number>();
+    for (const value of detail.operands) {
+      const tile = this.live.find((t) => t.value === value && !taken.has(t.id));
+      if (tile) {
+        tileIds.push(tile.id);
+        taken.add(tile.id);
+      }
+    }
+    return { target, index: detail.index, tileIds };
   }
 
   /**

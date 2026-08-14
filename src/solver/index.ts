@@ -12,6 +12,8 @@ export { enumerateTransforms, applyUnary, exactSqrt } from "./unary.js";
 export {
   solve,
   isWinnable,
+  createWinnabilityCache,
+  type WinnabilityCache,
   countLines,
   legalMoves,
   applyMove,

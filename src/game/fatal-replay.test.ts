@@ -65,7 +65,11 @@ function playThroughDirector(level: LadderLevel, path: readonly Move[]): ViewSta
 }
 
 describe("walking into a fatal branch always ends the level (GDD §4.1)", () => {
-  const ids = ["4-03", "1-04", "2-10", "3-10", "4-10"];
+  // 1-04 is deliberately absent: it is the scripted trap and warns in every
+  // mode (GDD §7.5), so its fatal branch is intercepted rather than committed.
+  // 1-06 is the same structural shape with the warning off, which is exactly
+  // where the lesson is meant to bite.
+  const ids = ["4-03", "1-06", "2-10", "3-10", "4-10"];
 
   it.each(ids)("%s: every fatal branch the solver finds is failed by the Director", (id) => {
     const level = load(id);

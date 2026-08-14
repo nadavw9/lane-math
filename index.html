@@ -6,6 +6,11 @@
     <title>Lane Math — Phase 3</title>
     <style>
       :root { color-scheme: dark; }
+      /*
+        Phone-shaped by default. GDD §9.1 targets 9:21 portrait, and validating
+        layout against a desktop window is how the Phase 3 failure banner ended
+        up below the fold. 393x852 is the reference device.
+      */
       body {
         margin: 0;
         background: #0e1015;
@@ -13,10 +18,21 @@
         font-family: system-ui, sans-serif;
         display: flex;
         gap: 16px;
-        padding: 16px;
+        padding: 8px;
         align-items: flex-start;
       }
-      #app canvas { display: block; border-radius: 8px; }
+      #app {
+        width: 393px;
+        height: 852px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        border-radius: 18px;
+        overflow: hidden;
+        flex: 0 0 auto;
+      }
+      #app canvas { display: block; }
       #levels {
         display: grid;
         grid-template-columns: repeat(4, auto);

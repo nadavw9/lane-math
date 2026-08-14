@@ -1,3 +1,4 @@
+import type { Mode } from "../solver/index.js";
 import { DEFAULT_ECONOMY, livesActiveFor, starsFor, type EconomyConfig } from "./config.js";
 import {
   EMPTY_PROGRESS,
@@ -235,6 +236,43 @@ export class Economy {
     );
 
     return { stars, bestStars, improved, totalStars: this.save.totalStars };
+  }
+
+  /** Stars available to spend: banked minus already spent (GDD §5.4). */
+  get starsAvailable(): number {
+    return this.save.totalStars - this.save.starsSpent;
+  }
+
+  get selectedMode(): Mode {
+    return this.save.selectedMode;
+  }
+
+  selectMode(mode: Mode): void {
+    this.commit({ ...this.save, selectedMode: mode });
+  }
+
+  hintsPurchased(levelId: string): readonly string[] {
+    return this.progressFor(levelId).hintsPurchased;
+  }
+
+  /**
+   * Buy a hint, or re-reveal one already bought on this level.
+   *
+   * GDD §13: "Hint bought, level failed, restart — is it still revealed? YES.
+   * Never charge twice for the same information on the same level." A hint
+   * already in the list is free and always returns true.
+   */
+  purchaseHint(levelId: string, hint: string, cost: number): boolean {
+    const before = this.progressFor(levelId);
+    if (before.hintsPurchased.includes(hint)) return true;
+    if (this.starsAvailable < cost) return false;
+
+    this.setProgress(
+      levelId,
+      { ...before, hintsPurchased: [...before.hintsPurchased, hint] },
+      { starsSpent: this.save.starsSpent + cost },
+    );
+    return true;
   }
 
   /**

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { enumerate, enumerateTransforms, type Move } from "../solver/index.js";
+import { applyMove, enumerate, enumerateTransforms, isWinnable, type Move } from "../solver/index.js";
 import { DEFAULT_ECONOMY } from "../economy/config.js";
 import { Economy } from "../economy/economy.js";
 import { MemoryStore } from "../economy/save.js";
@@ -56,20 +56,53 @@ function playToEnd(director: Director, level: LadderLevel, start: ViewState): Vi
 }
 
 /**
- * Fail a level with a deliberate bad first move so the lane stalls.
- * 1-04's trap: 3 + 1 = 4 spends the only + and takes a 3, and target 9 can only
- * be made as 3 + 6.
+ * Fail a level by preferring moves the solver marks fatal.
+ *
+ * Runs on 1-06 rather than 1-04: 1-04 is the scripted trap and warns in every
+ * mode (GDD §7.5), so its fatal branch cannot be committed. 1-06 is the same
+ * shape with the warning off — §7.4's "TEACH → TEST completed".
  */
-function failLevel104(director: Director): ViewState {
-  const level = load("1-04");
-  let state = stateOf(director.handle({ type: "loadLevel", id: "1-04" }));
-  const idOf = (value: number) => state.tiles.find((t) => t.value === value && !t.consumed)!.id;
+const FAILABLE_LEVEL = "1-06";
 
-  state = stateOf(director.handle({ type: "tapTile", id: idOf(3) }));
-  state = stateOf(director.handle({ type: "tapOperator", op: "+" }));
-  state = stateOf(director.handle({ type: "tapTile", id: idOf(1) }));
-  state = stateOf(director.handle({ type: "tapCommit" }));
-  return playToEnd(director, level, state);
+function failLevel(director: Director): ViewState {
+  const level = load(FAILABLE_LEVEL);
+  const budget = level.modes.normal!.budget;
+  const solverLevel = {
+    id: level.id,
+    pool: level.pool,
+    targets: level.targets,
+    operators: { casual: budget, normal: budget, expert: budget },
+    rules: level.rules,
+  };
+
+  let state = stateOf(director.handle({ type: "loadLevel", id: FAILABLE_LEVEL }));
+
+  for (let guard = 0; guard < 24 && state.phase === "playing"; guard++) {
+    const live = state.tiles
+      .filter((t) => !t.consumed)
+      .map((t) => ({ id: t.id, value: t.value, transformed: t.transformed }));
+    const target = state.targets[state.targetIndex];
+    if (target === undefined) break;
+
+    const options = enumerate(live, target, state.budget, level.rules);
+    if (options.length === 0) break;
+
+    // Prefer a move that loses the level, so the lane actually stalls.
+    const fatal = options.find((option) => {
+      const next = applyMove(
+        { tiles: live, targetIndex: state.targetIndex, budget: state.budget },
+        { ...option, kind: "binary", targetIndex: state.targetIndex },
+      );
+      return !isWinnable(solverLevel, state.budget, next);
+    });
+    const pick = fatal ?? options[0]!;
+
+    state = stateOf(director.handle({ type: "tapTile", id: pick.leftId }));
+    state = stateOf(director.handle({ type: "tapOperator", op: pick.op }));
+    state = stateOf(director.handle({ type: "tapTile", id: pick.rightId }));
+    state = stateOf(director.handle({ type: "tapCommit" }));
+  }
+  return state;
 }
 
 const T0 = 1_700_000_000_000;
@@ -77,25 +110,25 @@ const T0 = 1_700_000_000_000;
 describe("the failure counter survives an app kill, end to end", () => {
   it("fail, kill the process, reload — the counter and the star cap are intact", () => {
     const store = new MemoryStore();
-    const level = load("1-04");
+    const level = load(FAILABLE_LEVEL);
 
     // --- session one: fail the level twice ---
-    const first = new Director(level, "casual", new Economy(store, () => T0));
-    let state = failLevel104(first);
+    const first = new Director(level, "normal", new Economy(store, () => T0));
+    let state = failLevel(first);
     expect(state.phase).toBe("failed");
     expect(state.failures).toBe(1);
 
     state = stateOf(first.handle({ type: "tapRestart" }));
     expect(state.failures).toBe(1); // survives restart (Phase 3 behaviour)
-    state = failLevel104(first);
+    state = failLevel(first);
     expect(state.failures).toBe(2);
 
     // --- kill: nothing in memory survives, only what reached the store ---
     const afterKill = MemoryStore.from(store.snapshot());
 
     // --- session two ---
-    const second = new Director(level, "casual", new Economy(afterKill, () => T0));
-    const reopened = stateOf(second.handle({ type: "loadLevel", id: "1-04" }));
+    const second = new Director(level, "normal", new Economy(afterKill, () => T0));
+    const reopened = stateOf(second.handle({ type: "loadLevel", id: FAILABLE_LEVEL }));
 
     expect(reopened.failures).toBe(2);
     // The exploit this guards (GDD §13): fail, force-quit, reopen, collect 3.
@@ -110,7 +143,7 @@ describe("the failure counter survives an app kill, end to end", () => {
     economy.recordFailure("1-01");
     economy.recordFailure("1-01");
 
-    const director = new Director(level, "casual", economy);
+    const director = new Director(level, "normal", economy);
     let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
     expect(state.failures).toBe(2);
 
@@ -118,14 +151,14 @@ describe("the failure counter survives an app kill, end to end", () => {
     expect(state.phase).toBe("won");
     expect(state.economy!.bestStars).toBe(1);
 
-    const reopened = new Director(level, "casual", new Economy(MemoryStore.from(store.snapshot()), () => T0));
+    const reopened = new Director(level, "normal", new Economy(MemoryStore.from(store.snapshot()), () => T0));
     expect(stateOf(reopened.handle({ type: "loadLevel", id: "1-01" })).economy!.bestStars).toBe(1);
   });
 
   it("clearing with no failures banks 3 stars", () => {
     const store = new MemoryStore();
     const level = load("1-01");
-    const director = new Director(level, "casual", new Economy(store, () => T0));
+    const director = new Director(level, "normal", new Economy(store, () => T0));
     let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
     state = playToEnd(director, level, state);
     expect(state.phase).toBe("won");
@@ -138,9 +171,9 @@ describe("lives attach to the existing fail/restart loop", () => {
   it("World 1 failures never cost a life", () => {
     const store = new MemoryStore();
     const economy = new Economy(store, () => T0);
-    const director = new Director(load("1-04"), "casual", economy);
+    const director = new Director(load(FAILABLE_LEVEL), "normal", economy);
 
-    const state = failLevel104(director);
+    const state = failLevel(director);
     expect(state.economy!.livesActive).toBe(false);
     expect(state.economy!.lives).toBe(DEFAULT_ECONOMY.maxLives);
   });
@@ -163,7 +196,7 @@ describe("lives attach to the existing fail/restart loop", () => {
     const store = new MemoryStore();
     const level = load("1-01");
     const economy = new Economy(store, () => T0);
-    const director = new Director(level, "casual", economy);
+    const director = new Director(level, "normal", economy);
 
     let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
     state = playToEnd(director, level, state);

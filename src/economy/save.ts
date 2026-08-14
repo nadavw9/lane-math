@@ -20,6 +20,12 @@ export interface LevelProgress {
   readonly cleared: boolean;
   /** GDD §5.2: the per-level free first failure, consumed on first use. */
   readonly firstFailureUsed: boolean;
+  /**
+   * Hints bought on this level. GDD §13: "Hint bought, level failed, restart —
+   * is it still revealed? YES. Never charge twice for the same information on
+   * the same level." Persisted per level so a restart re-reveals them free.
+   */
+  readonly hintsPurchased: readonly string[];
 }
 
 export interface SaveData {
@@ -32,6 +38,8 @@ export interface SaveData {
   readonly clockHighWater: number;
   readonly totalStars: number;
   readonly starsSpent: number;
+  /** GDD §6. Persisted so the choice survives a relaunch. */
+  readonly selectedMode: "casual" | "normal" | "expert";
 }
 
 export const EMPTY_PROGRESS: LevelProgress = {
@@ -39,6 +47,7 @@ export const EMPTY_PROGRESS: LevelProgress = {
   failCount: 0,
   cleared: false,
   firstFailureUsed: false,
+  hintsPurchased: [],
 };
 
 export function emptySave(now: number, maxLives: number): SaveData {
@@ -50,6 +59,9 @@ export function emptySave(now: number, maxLives: number): SaveData {
     clockHighWater: now,
     totalStars: 0,
     starsSpent: 0,
+    // GDD §6 and the Phase 3 brief: Normal is the default. Casual is a choice
+    // the player makes once the selector unlocks at 3-10 (§7.6).
+    selectedMode: "normal",
   };
 }
 
@@ -126,6 +138,7 @@ export function migrate(raw: unknown): SaveData | null {
     clockHighWater: migrated.clockHighWater ?? migrated.lastLifeGrantedAt ?? 0,
     totalStars: migrated.totalStars ?? 0,
     starsSpent: migrated.starsSpent ?? 0,
+    selectedMode: migrated.selectedMode ?? "normal",
   };
 }
 
