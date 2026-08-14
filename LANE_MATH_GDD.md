@@ -347,6 +347,10 @@ difficulty
 - W(N+1) slot 1 is the **minimum composite score within its own world**, and sits at the **floor of its tier band** on `lookahead` and `decisionPoints`. The new mechanic arrives with everything else dialled down.
 - Do **not** require W(N+1)-1 to score below W(N)-10. That is unsatisfiable by construction and asks the curve to fight the progression.
 
+**The finale is constrained on forgiveness, not score.** Slot 10 of each world must be the **minimum-`survivalRate` board in that world**, with composite breaking ties.
+
+This is a curation constraint rather than a scoring weight, because the composite measures reasoning *demanded* while `survivalRate` measures punishment for *skipping* it, and a structural lead on the former can outrank a 20× difference in the latter. In the first curation 4-10 led its block by ~1.1 composite points while winning ~1 random walk in 4, sitting above a board that won 1 in 90; and 3-09, at 44.4% survival, sat directly below a 4.0% finale. Reweighting to fix this distorts all 40 orderings to satisfy a rule that applies to 4 slots. Constrain the slot instead.
+
 **Measure cliffs, but treat direction asymmetrically.** The composite score measures *structural* difficulty only. Perceived difficulty is structural + novelty load, and novelty is invisible to the score. At a world boundary novelty peaks — which is precisely what the valley compensates for.
 
 - **Upward** boundary steps above ~2× the pooled within-world median are walls. Flag and fix.
