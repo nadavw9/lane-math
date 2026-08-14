@@ -92,14 +92,51 @@ export function medianColour(
 }
 
 /**
+ * The BRIGHTEST pixel in a zone — the worst single point for a dark background.
+ *
+ * A median tells you what the zone is typically like; it says nothing about the
+ * one bright highlight a digit happens to land on. Since the tokens are light
+ * on dark art, the failure mode is a bright spot, so the gate is measured
+ * against the extreme rather than the average.
+ *
+ * Sampled on a grid rather than every pixel: a full scan of 900x2100 per zone
+ * per aspect is slow enough to discourage running the gate, and a gate that is
+ * not run is not a gate.
+ */
+export function worstPointColour(
+  image: ImageData,
+  zone: { x: number; y: number; w: number; h: number },
+  token: Rgb,
+  step = 3,
+): Rgb {
+  let worst = pixelAt(image, zone.x, zone.y);
+  let worstRatio = Infinity;
+
+  for (let y = zone.y; y < zone.y + zone.h; y += step) {
+    for (let x = zone.x; x < zone.x + zone.w; x += step) {
+      const rgb = pixelAt(image, x, y);
+      const ratio = contrastRatio(rgb, token);
+      if (ratio < worstRatio) {
+        worstRatio = ratio;
+        worst = rgb;
+      }
+    }
+  }
+  return worst;
+}
+
+/**
  * Supported aspect range. §13: sample at the extremes, not just the design
  * ratio — 9:21 is the tall end and 3:4 covers a short tablet.
  */
 export const ASPECTS = [
-  { name: "9:21 (design)", ratio: 9 / 21 },
-  { name: "9:16 (common)", ratio: 9 / 16 },
-  { name: "3:4 (shortest)", ratio: 3 / 4 },
+  { name: "21:9 (design)", ratio: 9 / 21 },
+  { name: "16:9 (common)", ratio: 9 / 16 },
+  { name: "4:3 (shortest)", ratio: 3 / 4 },
 ] as const;
+
+/** The shipped background size. Anything else must fail loudly. */
+export const REQUIRED_SIZE = { width: 900, height: 2100 } as const;
 
 export interface ZoneSpec {
   readonly name: string;
@@ -166,7 +203,9 @@ export function checkBackground(
         w: frame.w * zone.w,
         h: frame.h * zone.h,
       };
-      const background = medianColour(image, box);
+      // Worst single point, not the median: the tokens are light on dark art,
+      // so the thing that breaks legibility is one bright spot under a digit.
+      const background = worstPointColour(image, box, rgbFromHex(zone.token));
       const ratio = contrastRatio(background, rgbFromHex(zone.token));
       results.push({
         aspect: aspect.name,

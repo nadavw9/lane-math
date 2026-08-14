@@ -61,7 +61,7 @@ export class Renderer {
     this.world = world;
 
     try {
-      const texture = await Assets.load<Texture>(`/assets/bg/world-${world}.png`);
+      const texture = await Assets.load<Texture>(`/assets/bg/world-${world}.webp`);
       this.background.removeChildren();
       const sprite = new Sprite(texture);
       // Cover the design surface, cropping from the edges for shorter frames
@@ -297,7 +297,7 @@ export class Renderer {
                 ? PALETTE.failed
                 : PALETTE.targetFront
               : PALETTE.targetPlate,
-          text: cleared ? PALETTE.textDim : PALETTE.text,
+          text: cleared ? PALETTE.tokenInkDim : PALETTE.tokenInk,
           bevel: 0, // recessed: targets are spent ON, not picked up
           outline: front
             ? this.rejecting
@@ -334,12 +334,12 @@ export class Renderer {
         index === 1
           ? operatorToken(Math.min(r.w, r.h), text, {
               fill: PALETTE.operator,
-              text: PALETTE.text,
+              text: PALETTE.tokenInk,
               bevel: 1,
             })
           : numberTile(r.w, r.h, text, {
               fill: PALETTE.tile,
-              text: PALETTE.text,
+              text: PALETTE.tokenInk,
               bevel: 1,
             });
       this.place(token, r.x + (index === 1 ? (r.w - Math.min(r.w, r.h)) / 2 : 0), r.y, tap);
@@ -382,7 +382,7 @@ export class Renderer {
       this.place(
         operatorToken(size, LABEL[op] ?? op, {
           fill: enabled && active ? PALETTE.operator : PALETTE.operatorDim,
-          text: enabled && active ? PALETTE.text : PALETTE.textDim,
+          text: enabled && active ? PALETTE.tokenInk : PALETTE.tokenInkDim,
           bevel: enabled && active ? 1 : 0.2,
           outline: s.transformOp === op ? PALETTE.highlight : undefined,
         }),
@@ -419,7 +419,7 @@ export class Renderer {
             : tile.transformed
               ? PALETTE.tileTransformed
               : PALETTE.tile,
-          text: dimmed ? PALETTE.textDim : PALETTE.text,
+          text: dimmed ? PALETTE.tokenInkDim : PALETTE.tokenInk,
           // Dimmed tiles lose their bevel too, so "inactive" is carried by
           // form as well as colour.
           bevel: dimmed ? 0.15 : 1,

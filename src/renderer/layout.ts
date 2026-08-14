@@ -11,20 +11,25 @@ export const PALETTE = {
   background: 0x14161c,
   lane: 0x1d212b,
   /**
-   * Target plates must clear 3:1 against the background they sit on (§9.1
-   * gate). The Phase 3 placeholder value 0x2c3a52 could not: its luminance is
-   * low enough that even a pure black background reaches only 1.84:1, so the
-   * plate read as a hole rather than an object. Lightened until the silhouette
-   * survives on the darkest background we would ship.
+   * Token colours are set against the SHIPPED backgrounds, which clear 3:1 with
+   * no backdrop at all (§9.1). Earlier values were tuned against placeholder
+   * gradients and were too dark to hold a silhouette on real art.
+   *
+   * Shape already separates the three families (§9.2), so hue only has to avoid
+   * ambiguity: cool blue plates, warm sand tiles, and a green operator that
+   * sits away from both on the hue circle rather than reading as a variant of
+   * either. Measured perceptual distance from the operator to each family is
+   * 130 — deliberately equidistant.
    */
-  targetPlate: 0x5a6a92,
-  targetFront: 0x4f86c6,
-  targetCleared: 0x232833,
-  tile: 0xb0854a,
-  tileDim: 0x4a4237,
-  tileTransformed: 0x8a6fa8,
-  operator: 0x4a6b52,
-  operatorDim: 0x333c35,
+  targetPlate: 0xa8b8dc,
+  targetFront: 0x7fa8e8,
+  targetCleared: 0x3a4152,
+  tile: 0xd9b98a,
+  tileDim: 0x6b6152,
+  tileTransformed: 0xc3a4de,
+  /** Luminance 0.5258, above the 0.453 floor. */
+  operator: 0x86d09c,
+  operatorDim: 0x4a5c50,
   slot: 0x262b36,
   slotFilled: 0x3a4152,
   commit: 0x5a8f5a,
@@ -32,6 +37,12 @@ export const PALETTE = {
   highlight: 0xe0c060,
   text: 0xf2f4f8,
   textDim: 0x8a909c,
+  /**
+   * Digits sit ON the tokens, and the tokens are now light. White on the plate
+   * would be 1.99:1 — unreadable. Dark ink against these fills runs 9-10:1.
+   */
+  tokenInk: 0x14161c,
+  tokenInkDim: 0x2a2f3a,
   won: 0x4f8f4f,
   failed: 0x9a4444,
 } as const;

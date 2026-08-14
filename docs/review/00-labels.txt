@@ -1,55 +1,58 @@
-Lane Math — Phase 4C + Phase 5 review: telemetry, worker, art pass
-Phone aspect (393x852, GDD §9.1).
+Lane Math — Phase 5 review: shipped backgrounds, recoloured tokens
+Phone aspect. One gameplay screenshot per world, real art, mid-level.
 
-p5-01-tokens.png
-    Level 4-01. Tokens are PROCEDURAL (§9.2 as amended) — Graphics + text, no
-    atlas, no compression step, no resolution ceiling.
-    SHAPE-CODED, not colour-coded:
-      hexagonal plates   targets, cool, FLAT and recessed — you spend tiles ON
-                         them, so they must not read as pickable
-      rounded squares    pool numbers, warm, bevelled, drop shadow — Scrabble
-                         weight, a finite thing you spend
-      circles            operators, unmistakably not numbers
-    Empty equation slots are dashed sockets, so the row reads as a sentence with
-    gaps. Dimmed tiles lose their bevel as well as their colour, so bold-active/
-    dim-inactive (§3.5) is carried by FORM as well as hue.
-    Note the target plate colour changed this phase — see the gate note below.
+p5b-world1.png   1-03, misty forest. One move committed: 13 cleared and recessed,
+                 5 now front, pool down to four tiles. Affordance state "numbers".
+p5b-world2.png   2-04, green canopy. A 4 staged in slot 1 — operators BRIGHT and
+                 bevelled, pool DIMMED and de-bevelled. §3.5's bold-active paired
+                 with dim-inactive, now in the real art rather than placeholder rects.
+p5b-world3.png   3-04, dark rock. Number and operator both staged, so the pool is lit
+                 again and the operator row has gone dim. Six targets, thirteen tiles.
+p5b-world4.png   4-05, the darkest world. Transform mode: only the perfect square
+                 stays lit, every other tile dims, √ ringed as the active mode.
 
-p5-02-shatter.png
-    Mid-commit, slowed ~16x to be photographable. 9 + 5 = 14 has just been
-    committed: the operator has burst into green wedges in its slot and the two
-    number tiles are breaking apart in the pool, all of it thrown INTO the
-    target they paid for. Debris, not confetti; it burns out on arrival rather
-    than drifting (§9.3 — "destruction must read as destruction").
-    The 14 is already dimmed and the 5 has become the front target.
+TOKEN RECOLOUR
+  target plate   0xa8b8dc  (as specified)
+  number tile    0xd9b98a  (as specified)
+  operator       0x86d09c  luminance 0.5258, above the 0.453 floor
+                 Chosen from ten candidates by MAXIMISING the smaller of its two
+                 perceptual distances, so it is not merely "not the plate" — it is
+                 equidistant from both families at 130, the best available balance.
+                 Green sits opposite both blue and sand on the hue circle, so it
+                 reads as a third family rather than a variant of either.
 
-    Ghost outlines: PROTOTYPED AND KEPT. On a 13-16 tile World 4 board the gaps
-    alone read as a reshuffled layout rather than as loss; the outlines make
-    "gone forever" legible. They are stroke-only at 22% so they do not compete
-    with live tiles.
+  Digit ink had to change with them: the tokens are now light, and white-on-plate
+  was 1.99:1. Dark ink (0x14161c) against these fills runs 9-10:1.
+  Bevel, drop shadow and dim-loses-bevel are unchanged.
 
-p5-03-failure-pulse.png
-    The failure moment, rebuilt per §9.4. The front target 2 has gone red and
-    been SHOVED out of alignment with the plates below it — the lane rejecting
-    the number, refusing to advance, settling back into its slot. It never
-    leaves the slot, because not advancing is the whole message.
-    NO banner. NO modal. NO "no solution exists" text. The status line carries
-    nothing about the failure; `restart` is the single exit and it was already
-    there. Ghost outlines show the pool visibly cannot feed the target.
+STRETCH — DEVIATED FROM THE 40% BAND, DELIBERATELY
+  All four sources are 1024x1536 and need +853px to reach 21:9.
+  The specified central-40% band concentrates all of it into 614 rows: a 2.39x
+  local scale, with vertical detail in the band retained at only 30-35% of
+  original and a centre/outer detail ratio of 0.57-0.71 — the centre visibly
+  softer than its surroundings. Worlds 2 and 3 carry MORE detail in the centre
+  than at the edges (2.32 vs 2.07, and 2.01 vs 1.46), which is the reeds and
+  rock columns.
+  A raised-cosine taper over 70% was WORSE at the peak (2.59x) — it piles every
+  extra pixel at the exact centre.
+  Shipped: 80% band, trapezoid profile with 25% ramps. Peak 1.93x, retention
+  36-43%, centre/outer 0.77-1.02. World 3, the worst case, lands at 1.02 —
+  the stretched region now reads at the same detail density as the untouched
+  margins. Scale is continuous at the seams, so there is no crease.
+  Re-run any single world with:  node tools/process-backgrounds.mjs 3
 
-p5-04-brightness-gate.txt
-    The CI gate, green on placeholders. Four flat vignetted gradients at
-    720x1560, sampled with the Traffic Bomb 5-point median under the lane,
-    operator and pool zones, against the REAL token colours, at three aspects
-    including the extremes (§13) rather than only the 9:21 design ratio.
+GATE — ALL FOUR PASS, worst single point, three aspects
+  world-1  4.51:1     world-2  4.08:1     world-3  3.33:1     world-4  6.08:1
+  Measured at the WORST SINGLE POINT under each token zone, not the median, and
+  against the bare background with no backdrop.
 
-    The gate earned itself immediately: it failed at 1.6:1, and the cause was
-    the TOKEN, not the image. targetPlate was 0x2c3a52, dark enough that 3:1
-    against it is mathematically unreachable — even a pure black background
-    reaches only 1.84:1, so the plate read as a hole rather than an object.
-    Lightened to 0x5a6a92 and the gate clears at 3.10-3.21:1 everywhere.
-    That is the gate doing its job before any real art exists.
+PEAK LUMINANCE — the approved figures are p99.9, not the maximum
+  p99.9      0.0430  0.0330  0.0254  0.0165   monotonic, matches the approved set
+  per-pixel  0.0461  0.0563  0.0932  0.0227   NOT monotonic
+  World 3 has specular highlights reaching 0.0932 on a handful of pixels while
+  being the third-darkest world by every other measure. The gate asserts the
+  ordering on p99.9.
 
-    Real backgrounds drop into assets/bg/ as world-N.webp. The gate REFUSES to
-    skip a format it cannot decode — a silently skipped image is how Traffic
-    Bomb shipped placeholder bugs.
+SIZES
+  world-1 17.7 KB   world-2 41.5 KB   world-3 37.9 KB   world-4 12.1 KB
+  backgrounds 109.3 KB total; JS 903.6 KB (193 KB gzipped); BUILD 0.99 MB.
