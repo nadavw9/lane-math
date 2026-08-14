@@ -86,6 +86,21 @@ const roleFor = (world: number, slot: number, original: string): string => {
 
 const results: { id: string; from: number; to: number; score: number; survival: number }[] = [];
 const assignments: { level: Ladder; world: number; slot: number }[] = [];
+const notes: string[] = [];
+
+/**
+ * GDD §7.3: slot 10 is the minimum-survivalRate board in its world, composite
+ * breaking ties. A constraint on the slot, not a term in the score — the
+ * composite measures reasoning demanded, survivalRate punishment for skipping
+ * it, and a structural lead on the former can outrank a 20x gap in the latter.
+ */
+const pickFinale = (candidates: readonly Ladder[]): Ladder | undefined =>
+  [...candidates].sort((a, b) => {
+    const sa = composite(a).survival;
+    const sb = composite(b).survival;
+    if (sa !== sb) return sa - sb;
+    return composite(b).total - composite(a).total;
+  })[0];
 
 for (let world = 1; world <= 4; world++) {
   const inWorld = levels.filter((l) => l.world === world);
@@ -100,15 +115,41 @@ for (let world = 1; world <= 4; world++) {
     if (level) slotOf.set(slot, level);
   }
 
-  // Two-keystone block: same three boards, re-ranked among themselves so the
-  // hardest of them finishes the world.
+  const pinnedBoards = new Set(slotOf.values());
+  const block = blockSlots
+    .map((s) => byOldSlot.get(s))
+    .filter((l): l is Ladder => l !== undefined);
+
+  // Slot 10 must come from the two-keystone block in World 4, and from any
+  // unpinned board elsewhere. Report a conflict rather than resolving it.
+  const finaleCandidates = world === 4 ? block : inWorld.filter((l) => !pinnedBoards.has(l));
+  const finale = pickFinale(finaleCandidates);
+
+  if (world === 4) {
+    const globalMin = pickFinale(inWorld.filter((l) => !pinnedBoards.has(l)));
+    if (globalMin && finale && globalMin !== finale) {
+      notes.push(
+        `CONFLICT world 4: minimum-survival board is ${globalMin.id} ` +
+          `(${(composite(globalMin).survival * 100).toFixed(1)}%) but it is not two-keystone; ` +
+          `finale falls to ${finale.id} (${(composite(finale).survival * 100).toFixed(1)}%). NOT RESOLVED.`,
+      );
+    } else {
+      notes.push(
+        `world 4: minimum-survival board is also two-keystone — finale constraint and ` +
+          `the 4-08..4-10 block agree.`,
+      );
+    }
+  }
+
+  if (finale) slotOf.set(10, finale);
+
+  // Remaining block members fill 8 and 9, ordered by composite.
   if (blockSlots.length > 0) {
-    const block = blockSlots
-      .map((s) => byOldSlot.get(s))
-      .filter((l): l is Ladder => l !== undefined)
+    const rest = block
+      .filter((l) => l !== finale)
       .sort((a, b) => composite(a).total - composite(b).total);
-    blockSlots.forEach((slot, i) => {
-      if (block[i]) slotOf.set(slot, block[i]!);
+    [8, 9].forEach((slot, i) => {
+      if (rest[i]) slotOf.set(slot, rest[i]!);
     });
   }
 
@@ -156,7 +197,14 @@ process.stdout.write(
 for (let world = 1; world <= 4; world++) {
   const rows = results.filter((r) => r.id.startsWith(`${world}-`));
   const changed = rows.filter((r) => r.from !== r.to).length;
+  const inWorld = assignments.filter((a) => a.world === world);
+  const finale = inWorld.find((a) => a.slot === 10)!;
+  const minSurvival = Math.min(...inWorld.map((a) => composite(a.level).survival));
+  const ok = composite(finale.level).survival === minSurvival;
   process.stdout.write(
-    `world ${world}: ${changed === 0 ? "UNCHANGED" : `${changed} of 10 moved`}\n`,
+    `world ${world}: ${changed === 0 ? "UNCHANGED" : `${changed} of 10 moved`}  ` +
+      `finale survival ${(composite(finale.level).survival * 100).toFixed(1)}% ` +
+      `(world min ${(minSurvival * 100).toFixed(1)}%) ${ok ? "OK" : "VIOLATED"}\n`,
   );
 }
+for (const note of notes) process.stdout.write(`\n${note}\n`);

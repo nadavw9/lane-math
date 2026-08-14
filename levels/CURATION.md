@@ -57,8 +57,8 @@ Every ladder level carries a valid Casual, Normal **and** Expert budget (§10: t
 | **4-06** | standard | late | 7 | 1 | 4 | 3 | 1 | 7 | 114 | 1329 | 8.6% | 36.47 |
 | **4-07** | standard | late | 7 | 1 | 4 | 4 | 1 | 6 | 10 | 252 | 4.0% | 38.21 |
 | **4-08** | two-keystone | late | 6 | 2 | 4 | 4 | 2 | 7 | 357 | 2123 | 16.8% | 38.28 |
-| **4-09** | two-keystone | late | 7 | 1 | 4 | 4 | 2 | 6 | 3 | 273 | 1.1% | 38.48 |
-| **4-10** | world-peak | late | 7 | 2 | 4 | 4 | 2 | 7 | 309 | 1270 | 24.3% | 39.13 |
+| **4-09** | two-keystone | late | 7 | 2 | 4 | 4 | 2 | 7 | 309 | 1270 | 24.3% | 39.13 |
+| **4-10** | world-peak | late | 7 | 1 | 4 | 4 | 2 | 6 | 3 | 273 | 1.1% | 38.48 |
 
 ## Difficulty curve
 
