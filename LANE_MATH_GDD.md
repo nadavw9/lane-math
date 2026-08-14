@@ -347,7 +347,12 @@ difficulty
 - W(N+1) slot 1 is the **minimum composite score within its own world**, and sits at the **floor of its tier band** on `lookahead` and `decisionPoints`. The new mechanic arrives with everything else dialled down.
 - Do **not** require W(N+1)-1 to score below W(N)-10. That is unsatisfiable by construction and asks the curve to fight the progression.
 
-**Measure cliffs, not direction.** The boundary risk is step *size*. Report the jump from W(N)-10 → W(N+1)-1 against the median within-world step. A boundary step more than ~2× the median is a wall regardless of sign, and the fix is to soften W(N)-10 or the incoming valley.
+**Measure cliffs, but treat direction asymmetrically.** The composite score measures *structural* difficulty only. Perceived difficulty is structural + novelty load, and novelty is invisible to the score. At a world boundary novelty peaks — which is precisely what the valley compensates for.
+
+- **Upward** boundary steps above ~2× the pooled within-world median are walls. Flag and fix.
+- **Downward** boundary steps are the saw curve working. Expected at every world boundary, since slot 1 sits at its tier floor while the previous slot 10 is a world peak. Report the magnitude; do not smooth it.
+
+Sanity check instead of the ratio: the incoming valley should land near a level the player cleared recently within the previous world, not below anything they have seen. Report which previous-world level each valley is nearest in score.
 
 **Tune on attempts, not win rate.** Industry heuristic: 1–3 attempts = easy, 20–35 = hard. The star system already counts attempts, so this is free telemetry.
 
@@ -484,6 +489,14 @@ Build backwards, then measure exhaustively. **Never forward-search.**
    → If not, REGENERATE. This step is what makes it a trap
      rather than merely a level.
 
+   EXCEPTION — the forced tier. §7.4 requires level 1-1 to be
+   near-forced: every dPath_i = 1, decisionPoints = 0. That is
+   mutually exclusive with trap liveness, because a live fatal move
+   implies a branch. The `tutorial-forced` tier therefore disables
+   the trap gate and pins decisionPoints to 0. It exists to supply
+   1-1 and nothing else, and must never be used elsewhere in the
+   ladder.
+
 4. ADD DECOYS (if S > 0)
    Each decoy must create a false decomposition. Reject inert decoys.
 
@@ -508,6 +521,7 @@ Rejection sampling against a fitness function. Cheap, fully controllable, and st
 | **Lookahead distance** | See §8.2 | Primary difficulty dial |
 | **Total solution paths** | Distinct winning lines | Uniqueness / forgiveness |
 | **Trap depth** | Moves a wrong branch survives before failing | Frustration control |
+| `survivalRate` | `solutionPaths / totalLinesExplored` | Forgiveness. `solutionPaths` alone is uninterpretable — 337 winning lines out of 4000 is brutal, out of 400 is a walkover. |
 
 Notes:
 **`dStart` systematically inflates `decisionPoints`, and the inflation scales with `T`.** On a Late board (`T=6–7`, `N=13–16`), target 5 is reached with only 3–6 tiles left in hand — such targets are usually *forced* in play while appearing to branch when measured against the full starting pool. Banding on `dStart` therefore rejects large boards that are correctly difficult. **`decisionPoints` must be computed on `dPath`.**
