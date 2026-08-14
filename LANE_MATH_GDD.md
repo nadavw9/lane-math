@@ -546,10 +546,17 @@ Same board, three genuinely different puzzles.
 | Tutorial | 3 | 0 | `+ −` | Free | 1 | 1 | 0–1 |
 | Early | 4–5 | 0 | `+ − ×` | Free | 1 | 1–2 | 1–2 |
 | Mid | 5–6 | 1 | `+ − × ÷` | Counted | 1–2 | 2–3 | 2–3 |
-| Late | 6–7 | 1–2 | all + `√` | Counted | 2 | 3–4 | 3–4 |
-| Expert | 6–7 | 2 | all | Consumed | 2+ overlapping | 5+ | 5+ |
+| Late | 6–7 | 1–2 | all + `√` | Counted | **1–2** | 3–4 | 3–4 |
+| Master ‡ | 6–7 | 2 | all | Consumed | 2+ overlapping | 4+ | 3–4 |
 
-**Bands must not touch.** Late and Expert previously overlapped at 4, making them the same difficulty with Expert merely unbounded above. Expert now starts where Late ends. All `decisionPoints` figures are measured on `dPath` (§8.4) — banding on `dStart` will reject correctly-difficult large boards.
+‡ **Master is post-launch.** Renamed from "Expert" to kill a collision: *Expert* is a **mode** (§6), applied to any level; *Master* is a **tier**. §7.2 maps World 4 to **Late**, so the 40-level launch ladder never uses Master. Master exists for Endless, Daily and tournaments. **Do not generate Master during launch curation** — its intersection yield is ~2/1000 and it buys nothing shippable.
+
+**Two structural facts about banding, both learned the hard way:**
+
+1. **All `decisionPoints` figures are measured on `dPath`** (§8.4). Banding on `dStart` inflates by ~1.4 at Late and rejects correctly-difficult large boards.
+2. **Master cannot band above Late on `decisionPoints`.** Consumed operators prune legal decompositions, so Master's `dPath` mean (3.13) sits *below* Late's (3.79). Master's difficulty comes from operator scarcity and overlapping keystones, not decision volume. Banding it higher is compound tightening and collapses yield 10–25×.
+
+**Late keystones widened to 1–2.** §7.2 calls World 4 "the *first* two-keystone levels" — not all of them. 318 of 415 Late candidates have exactly one keystone; requiring two at every Late slot was the actual yield gate. Curation enforces the two-keystone requirement on **specific late World 4 slots**, not on the tier band.
 
 **Solution uniqueness** is an additional axis: Casual permits multiple winning lines (forgiving); Expert enforces a unique solution (precise).
 
@@ -648,7 +655,15 @@ This single animation teaches "gone forever" better than any tutorial text. Traf
 
 Expert budget sums to exactly `T = 3`. Note `maxTrapDepth` differs by mode on the same board.
 
-A mode may be absent if no valid budget exists for it. Gameplay must handle a level that is not offered in Expert.
+**Mode absence is scope-dependent:**
+
+| Scope | Policy |
+|---|---|
+| **Generated corpus** | A mode may be absent. Accepting a board without Expert is correct — it stays available for Casual/Normal use. |
+| **The curated 40-level ladder** | **All three modes mandatory.** Curate with `--require-all-modes`. |
+| **Endless / Daily / Practice** | Absence permitted; serve the modes a board supports. |
+
+Rationale: §6 promises the same 40 levels across three modes. A ladder level lacking Expert leaves an Expert player with a hole in progression and nothing coherent to track. The corpus can be permissive; the ladder cannot.
 
 ---
 
