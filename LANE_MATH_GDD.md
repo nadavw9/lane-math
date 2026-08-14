@@ -342,6 +342,13 @@ difficulty
               = valley  = valley
 ```
 
+**The valley is within-world, not cross-world.** `T` is fixed per world by §7.2, so absolute difficulty *must* rise at every boundary — and should, since player skill rises too. The valley rule is therefore:
+
+- W(N+1) slot 1 is the **minimum composite score within its own world**, and sits at the **floor of its tier band** on `lookahead` and `decisionPoints`. The new mechanic arrives with everything else dialled down.
+- Do **not** require W(N+1)-1 to score below W(N)-10. That is unsatisfiable by construction and asks the curve to fight the progression.
+
+**Measure cliffs, not direction.** The boundary risk is step *size*. Report the jump from W(N)-10 → W(N+1)-1 against the median within-world step. A boundary step more than ~2× the median is a wall regardless of sign, and the fix is to soften W(N)-10 or the incoming valley.
+
 **Tune on attempts, not win rate.** Industry heuristic: 1–3 attempts = easy, 20–35 = hard. The star system already counts attempts, so this is free telemetry.
 
 ### 7.4 Session one, beat by beat
