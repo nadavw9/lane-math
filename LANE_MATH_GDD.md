@@ -253,6 +253,8 @@ Candy Crush model:
 - Regenerate **1 per 20 minutes** (full refill ≈ 100 min)
 - At 0: rewarded ad for +1, or spend gold
 
+**The first failure on a never-cleared level costs stars but not a life.** Rationale: a player meeting an unfamiliar mechanic should not hit a wall on first contact. Monetisation loss is negligible — players rarely stall on a level's first attempt — and the alternative is the worst possible new-player experience. The exemption is per level and consumed on first use; a second failure on the same level costs a life normally, and so does the first failure on any level already cleared.
+
 **The refill rate must be remote-configurable or at minimum a single JSON value** deployable without a store release. This number will be wrong on first guess and only retention data will show it.
 
 **Lives are not active during the tutorial worlds** (§7). A player must never lose a life to a mechanic they haven't been taught.
