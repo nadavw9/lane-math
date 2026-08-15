@@ -4,12 +4,15 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 /**
- * Peak luminance, measured several ways.
+ * Background luminance, measured several ways — DARK END FIRST.
  *
- * The reported set (0.0446 / 0.0330 / 0.0221 / 0.0173) disagrees with a
- * per-pixel maximum, so this reports the maximum alongside high percentiles to
- * find which statistic the two measurements actually share. A single specular
- * pixel moves a maximum and moves nothing else.
+ * The surfaces are light and the tokens are dark (§9.1), so the binding
+ * constraint is now the darkest background point, not the brightest: a dark
+ * digit dies in a shadow, not in a highlight. The bright end is kept only to
+ * confirm the surfaces are as uniformly lit as the direction claims.
+ *
+ * Percentiles are reported alongside the extremes because one pixel moves a
+ * minimum and moves nothing else.
  */
 const ch = (v) => {
   const c = v / 255;
@@ -27,27 +30,38 @@ async function measure(file) {
   const at = (p) => values[Math.min(values.length - 1, Math.floor(values.length * p))];
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   return {
-    max: values[values.length - 1],
-    p9999: at(0.9999),
-    p999: at(0.999),
-    p99: at(0.99),
-    p95: at(0.95),
+    min: values[0],
+    p001: at(0.0001),
+    p01: at(0.001),
+    p1: at(0.01),
+    p5: at(0.05),
     mean,
+    max: values[values.length - 1],
     size: `${info.width}x${info.height}`,
   };
 }
 
+/** Token ceiling: the luminance a token must stay below to clear `ratio`:1. */
+const ceilingFor = (backgroundLum, ratio = 3) => (backgroundLum + 0.05) / ratio - 0.05;
+
 for (const dir of ["assets/bg-raw", "assets/bg"]) {
   process.stdout.write(`\n=== ${dir} ===\n`);
   process.stdout.write(
-    `file            size        max      p99.99   p99.9    p99      p95      mean\n`,
+    `file            size        min      p0.01    p0.1     p1       p5       mean     max\n`,
   );
+  const mins = [];
   for (const name of readdirSync(dir).filter((f) => /^world-[1-4]\./.test(f)).sort()) {
     const m = await measure(join(dir, name));
+    mins.push({ name, min: m.min, p01: m.p01 });
     process.stdout.write(
       `${name.padEnd(15)} ${m.size.padEnd(11)} ` +
-        `${m.max.toFixed(4)}   ${m.p9999.toFixed(4)}   ${m.p999.toFixed(4)}   ` +
-        `${m.p99.toFixed(4)}   ${m.p95.toFixed(4)}   ${m.mean.toFixed(4)}\n`,
+        `${m.min.toFixed(4)}   ${m.p001.toFixed(4)}   ${m.p01.toFixed(4)}   ` +
+        `${m.p1.toFixed(4)}   ${m.p5.toFixed(4)}   ${m.mean.toFixed(4)}   ${m.max.toFixed(4)}\n`,
     );
   }
+  const darkest = mins.reduce((a, b) => (b.min < a.min ? b : a));
+  process.stdout.write(
+    `  darkest point across the set: ${darkest.min.toFixed(4)} (${darkest.name})\n` +
+      `  tokens must stay below ${ceilingFor(darkest.min).toFixed(4)} luminance for 3:1\n`,
+  );
 }

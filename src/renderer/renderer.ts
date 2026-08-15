@@ -3,12 +3,11 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, type
 import type { BinaryOp, Mode, UnaryOp } from "../solver/index.js";
 import type { Command, InputEvent, ViewState } from "../game/types.js";
 import {
+  BACKDROP,
   DESIGN,
-  EQUATION,
-  LANE,
   PALETTE,
-  POOL,
-  STATUS,
+  type Bands,
+  bands,
   equationSlot,
   operatorSlot,
   poolSlot,
@@ -49,6 +48,21 @@ export class Renderer {
 
   private get rejecting(): boolean {
     return this.reject !== null;
+  }
+
+  /**
+   * Band geometry for a board (§9.1: bands size to content).
+   *
+   * Driven by the level's STARTING counts, not by what is left: `tiles` and
+   * `targets` both include spent entries, so the grid holds still while the
+   * level is played and only differs between levels.
+   */
+  private bandsFor(state: ViewState): Bands {
+    return bands({
+      targets: state.targets.length,
+      tiles: state.tiles.length,
+      hints: state.hints.length,
+    });
   }
 
   /**
@@ -147,9 +161,13 @@ export class Renderer {
       const consumed = previous.tiles.filter(
         (t) => !t.consumed && next.tiles.find((n) => n.id === t.id)?.consumed === true,
       );
-      const slot = targetSlot(previous.targetIndex, next.targets.length);
-      const targetX = slot.x + slot.w / 2;
-      const targetY = slot.y + slot.h / 2;
+      // The cleared target was the front one, and the front is always at
+      // offset 0 — the tiles shatter into where it still is, before the queue
+      // slides down over it.
+      const board = this.bandsFor(next);
+      const slot = targetSlot(0, board.lane);
+      const targetX = slot.x + slot.width / 2;
+      const targetY = slot.y + slot.height / 2;
 
       for (const tile of consumed) {
         const bounds = this.tileBounds.get(tile.id);
@@ -158,9 +176,9 @@ export class Renderer {
         this.spawnShatter(bounds, PALETTE.tile, targetX, targetY);
       }
       // The operator is destroyed with them — it was spent too.
-      const opSlot = equationSlot(1);
+      const opSlot = equationSlot(1, board.equation);
       this.spawnShatter(
-        { x: opSlot.x, y: opSlot.y, w: opSlot.w, h: opSlot.h },
+        { x: opSlot.x, y: opSlot.y, w: opSlot.width, h: opSlot.height },
         PALETTE.operator,
         targetX,
         targetY,
@@ -270,34 +288,47 @@ export class Renderer {
     const s = this.state;
     if (!s) return;
 
-    // --- lane: the FULL target queue, visible from level open (GDD §4.2) ---
+    const board = this.bandsFor(s);
+    const { lane, equation, operators, pool, status } = board;
+
+    // --- lane: the target queue, visible from level open (GDD §4.2) ---
     // Translucent so the world background reads through. The brightness gate
     // measures tokens against that background, so covering it with an opaque
     // panel would make the gate judge something the player never sees.
     this.root.addChild(
       new Graphics()
-        .roundRect(LANE.x, LANE.y, LANE.width, LANE.height, 8)
-        .fill({ color: PALETTE.lane, alpha: 0.55 }),
+        .roundRect(lane.x, lane.y, lane.width, lane.height, 8)
+        .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
     );
-    for (let i = s.targets.length - 1; i >= 0; i--) {
-      const slot = targetSlot(i, s.targets.length);
-      const cleared = i < s.targetIndex;
-      const front = i === s.targetIndex;
+
+    /*
+     * Cleared targets are REMOVED and the queue slides down (§2).
+     *
+     * They used to sit there greyed out, which quietly broke §9.4: the failure
+     * signal is the lane REFUSING TO ADVANCE, and a refusal to advance is only
+     * legible if advancing is what the player has watched happen all level. A
+     * queue that never moves has no state left to withhold.
+     *
+     * Drawn back-to-front so the front plate, the one that shudders, ends up on
+     * top of its neighbour.
+     */
+    for (let i = s.targets.length - 1; i >= s.targetIndex; i--) {
+      const offset = i - s.targetIndex;
+      const slot = targetSlot(offset, lane);
+      const front = offset === 0;
 
       // §9.4: the front target shudders and refuses to advance when the lane
       // rejects it. It never leaves its slot — not advancing IS the message.
       const shove = front && this.rejecting ? this.rejectOffset : { dx: 0, dy: 0, glow: 0 };
 
       this.place(
-        targetPlate(slot.w, slot.h, String(s.targets[i]), {
-          fill: cleared
-            ? PALETTE.targetCleared
-            : front
-              ? this.rejecting
-                ? PALETTE.failed
-                : PALETTE.targetFront
-              : PALETTE.targetPlate,
-          text: cleared ? PALETTE.tokenInkDim : PALETTE.tokenInk,
+        targetPlate(slot.width, slot.height, String(s.targets[i]), {
+          fill: front
+            ? this.rejecting
+              ? PALETTE.failed
+              : PALETTE.targetFront
+            : PALETTE.targetPlate,
+          text: PALETTE.tokenInk,
           bevel: 0, // recessed: targets are spent ON, not picked up
           outline: front
             ? this.rejecting
@@ -322,40 +353,50 @@ export class Renderer {
       [right ? String(right.value) : "_", right !== null, 2],
     ];
     slotSpecs.forEach(([text, filled, index]) => {
-      const r = equationSlot(index);
+      const r = equationSlot(index, equation);
       const tap = () => this.emit({ type: "tapSlot", index });
+      // The empty row is shape-coded too: square, circle, square. Slot 2 takes
+      // an operator and says so before anything is dropped into it.
+      const shape = index === 1 ? "circle" : "square";
       if (!filled) {
-        this.place(emptySlot(r.w, r.h), r.x, r.y, tap);
+        this.place(emptySlot(r.width, r.height, shape), r.x, r.y, tap);
         return;
       }
       // A filled slot keeps the SHAPE of what is in it: circle for the
       // operator, rounded square for a number. The row reads as a sentence.
       const token =
         index === 1
-          ? operatorToken(Math.min(r.w, r.h), text, {
+          ? operatorToken(Math.min(r.width, r.height), text, {
               fill: PALETTE.operator,
               text: PALETTE.tokenInk,
               bevel: 1,
             })
-          : numberTile(r.w, r.h, text, {
+          : numberTile(r.width, r.height, text, {
               fill: PALETTE.tile,
               text: PALETTE.tokenInk,
               bevel: 1,
             });
-      this.place(token, r.x + (index === 1 ? (r.w - Math.min(r.w, r.h)) / 2 : 0), r.y, tap);
+      this.place(
+        token,
+        r.x + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0),
+        r.y,
+        tap,
+      );
     });
 
     const canCommit = s.affordance === "commit";
-    const commitRect = equationSlot(3);
+    const commitRect = equationSlot(3, equation);
     this.root.addChild(
       this.box(
         commitRect.x,
         commitRect.y,
-        commitRect.w,
-        commitRect.h,
+        commitRect.width,
+        commitRect.height,
         canCommit ? PALETTE.commit : PALETTE.commitDim,
         "=",
-        canCommit ? PALETTE.text : PALETTE.textDim,
+        // An active commit is a dark button, so its label is cream; a dim one
+        // is light, so its label is ink. Both grounds exist in this UI now.
+        canCommit ? PALETTE.tokenInk : PALETTE.textDim,
         canCommit ? () => this.emit({ type: "tapCommit" }) : undefined,
         canCommit ? PALETTE.highlight : undefined,
       ),
@@ -367,7 +408,7 @@ export class Renderer {
       ...UNARY.filter((op) => s.budget[op] !== undefined),
     ];
     available.forEach((op, i) => {
-      const r = operatorSlot(i, available.length);
+      const r = operatorSlot(i, available.length, operators);
       const remaining = s.budget[op];
       const isUnary = (UNARY as readonly string[]).includes(op);
       const spent = remaining === 0;
@@ -378,7 +419,7 @@ export class Renderer {
 
       // §3.5: bold-active is ALWAYS paired with dim-inactive. Weight change
       // alone is easy to miss and poor for low-vision players.
-      const size = Math.min(r.w, r.h + 6);
+      const size = Math.min(r.width, r.height);
       this.place(
         operatorToken(size, LABEL[op] ?? op, {
           fill: enabled && active ? PALETTE.operator : PALETTE.operatorDim,
@@ -386,7 +427,7 @@ export class Renderer {
           bevel: enabled && active ? 1 : 0.2,
           outline: s.transformOp === op ? PALETTE.highlight : undefined,
         }),
-        r.x + (r.w - size) / 2,
+        r.x + (r.width - size) / 2,
         r.y,
         spent
           ? undefined
@@ -405,7 +446,7 @@ export class Renderer {
     let drawn = 0;
     for (const tile of s.tiles) {
       if (tile.consumed) continue;
-      const r = poolSlot(drawn++);
+      const r = poolSlot(drawn++, pool);
       const transformable = s.transformableTileIds.includes(tile.id);
       const dimmed =
         s.affordance === "transform"
@@ -413,7 +454,7 @@ export class Renderer {
           : s.affordance === "operators" || inSlot.has(tile.id);
 
       this.place(
-        numberTile(r.w, r.h, String(tile.value), {
+        numberTile(r.width, r.height, String(tile.value), {
           fill: dimmed
             ? PALETTE.tileDim
             : tile.transformed
@@ -432,12 +473,19 @@ export class Renderer {
         r.y,
         () => this.emit({ type: "tapTile", id: tile.id }),
       );
-      this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.w, h: r.h });
+      this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
     }
 
     // §9.3, prototyped: a ghost outline where a consumed tile used to be.
-    // KEPT — on a 13-16 tile World 4 board the gaps alone read as a shuffled
-    // layout rather than as loss, and the ghosts make "gone forever" legible.
+    //
+    // MEASURED NOT WORKING, and left alone deliberately rather than quietly
+    // changed. The pool re-packs — `drawn` only counts live tiles — so unless
+    // the spent tiles were the trailing ones, a ghost is drawn at a slot some
+    // OTHER tile now occupies, and a dark stroke at alpha 0.22 over a dark
+    // walnut tile is invisible. The holes the player actually sees are the
+    // trailing empty cells, which carry no ghost at all. Pre-existing, not
+    // introduced by the band resizing; the fix is to ghost the trailing slots
+    // instead, which is a §9.3 behaviour change and needs its own decision.
     if (this.ghosts.length > 0) {
       for (const ghost of this.ghosts) {
         this.root.addChild(
@@ -460,7 +508,7 @@ export class Renderer {
           14,
           eco.lives === 0 ? PALETTE.failed : PALETTE.text,
         );
-        hud.position.set(LANE.x + 8, LANE.y + 6);
+        hud.position.set(lane.x + 8, lane.y + 6);
         this.root.addChild(hud);
       }
 
@@ -469,10 +517,11 @@ export class Renderer {
         const stars = this.text(
           `${"★".repeat(eco.bestStars)}${"☆".repeat(3 - eco.bestStars)}  ${eco.totalStars}★`,
           13,
-          PALETTE.highlight,
+          // Gold is an outline colour for dark tokens; on paper it disappears.
+          PALETTE.highlightInk,
         );
         stars.anchor.set(1, 0);
-        stars.position.set(LANE.x + LANE.width - 8, LANE.y + 6);
+        stars.position.set(lane.x + lane.width - 8, lane.y + 6);
         this.root.addChild(stars);
 
         const pending = this.text(
@@ -480,14 +529,14 @@ export class Renderer {
           12,
           PALETTE.textDim,
         );
-        pending.position.set(LANE.x + 8, LANE.y + 26);
+        pending.position.set(lane.x + 8, lane.y + 26);
         this.root.addChild(pending);
       }
 
       if (eco.firstFailureExempt) {
         const exempt = this.text("free first failure — no life lost", 12, PALETTE.won);
         exempt.anchor.set(1, 0);
-        exempt.position.set(LANE.x + LANE.width - 8, LANE.y + 26);
+        exempt.position.set(lane.x + lane.width - 8, lane.y + 26);
         this.root.addChild(exempt);
       }
 
@@ -495,7 +544,7 @@ export class Renderer {
       if (eco.lockedOut) {
         const lock = this.text("out of lives — waiting for a refill", 13, PALETTE.failed);
         lock.anchor.set(0.5, 0);
-        lock.position.set(DESIGN.width / 2, LANE.y + LANE.height - 26);
+        lock.position.set(DESIGN.width / 2, lane.y + lane.height - 26);
         this.root.addChild(lock);
       }
     }
@@ -506,36 +555,37 @@ export class Renderer {
     const banner = s.phase === "failed" ? "" : (this.rejection ?? s.message ?? "");
     const colour = s.phase === "won" ? PALETTE.won : PALETTE.textDim;
 
-    const status = this.text(banner, 15, colour);
-    status.position.set(STATUS.x, STATUS.y);
-    this.root.addChild(status);
+    const statusText = this.text(banner, 15, colour);
+    statusText.position.set(status.x, status.y);
+    this.root.addChild(statusText);
 
     const meta = this.text(
       `${s.levelId}  ${s.mode}  target ${Math.min(s.targetIndex + 1, s.targets.length)}/${s.targets.length}  fails ${s.failures}`,
       12,
       PALETTE.textDim,
     );
-    meta.position.set(STATUS.x, STATUS.y + 22);
+    meta.position.set(status.x, status.y + 22);
     this.root.addChild(meta);
 
     this.root.addChild(
       this.box(
-        STATUS.x + STATUS.width - 90,
-        STATUS.y + 8,
+        status.x + status.width - 90,
+        status.y + 8,
         90,
         32,
         PALETTE.slotFilled,
         "restart",
-        PALETTE.text,
+        PALETTE.tokenInk,
         () => this.emit({ type: "tapRestart" }),
       ),
     );
 
     // --- hints already owned, re-shown free after a restart (GDD §13) ---
+    // Their own band, sized to how many are owned, so they neither overlap the
+    // pool on a small board nor reserve a strip nobody is using.
     s.hints.forEach((hint, i) => {
-      const y = POOL.y + POOL.height - 46 + i * 16;
-      const label = this.text(`◆ ${hint.text}`, 12, PALETTE.highlight);
-      label.position.set(POOL.x + 4, y);
+      const label = this.text(`◆ ${hint.text}`, 12, PALETTE.highlightInk);
+      label.position.set(board.hints.x + 4, board.hints.y + i * 16);
       this.root.addChild(label);
     });
 
@@ -543,29 +593,32 @@ export class Renderer {
     if (u.hintShop && eco) {
       this.root.addChild(
         this.box(
-          STATUS.x + STATUS.width - 190,
-          STATUS.y + 8,
+          status.x + status.width - 190,
+          status.y + 8,
           92,
           32,
           s.shopOpen ? PALETTE.commit : PALETTE.slotFilled,
           `hints ${eco.starsAvailable}★`,
-          PALETTE.text,
+          PALETTE.tokenInk,
           () => this.emit({ type: "toggleShop" }),
         ),
       );
 
       if (s.shopOpen) {
+        // A card laid on the desk, anchored above the status band rather than
+        // inside the pool: the pool is only one row tall on a small board and
+        // the panel would have hung off the top of it.
         const panelH = 30 + s.shop.length * 40;
-        const panelY = POOL.y + POOL.height - panelH - 4;
+        const panelY = status.y - panelH - 8;
         this.root.addChild(
           new Graphics()
-            .roundRect(POOL.x, panelY, POOL.width, panelH, 8)
-            .fill({ color: 0x22262f, alpha: 0.98 })
-            .roundRect(POOL.x, panelY, POOL.width, panelH, 8)
-            .stroke({ width: 2, color: PALETTE.highlight }),
+            .roundRect(pool.x, panelY, pool.width, panelH, 8)
+            .fill({ color: PALETTE.card, alpha: 0.98 })
+            .roundRect(pool.x, panelY, pool.width, panelH, 8)
+            .stroke({ width: 2, color: PALETTE.highlightInk }),
         );
         const title = this.text("hints — none reveals a keystone", 12, PALETTE.textDim);
-        title.position.set(POOL.x + 8, panelY + 7);
+        title.position.set(pool.x + 8, panelY + 7);
         this.root.addChild(title);
 
         s.shop.forEach((entry, i) => {
@@ -573,13 +626,13 @@ export class Renderer {
           const enabled = entry.owned || entry.affordable;
           this.root.addChild(
             this.box(
-              POOL.x + 8,
+              pool.x + 8,
               y,
-              POOL.width - 16,
+              pool.width - 16,
               34,
               entry.owned ? PALETTE.operator : enabled ? PALETTE.slotFilled : PALETTE.operatorDim,
               `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}★`}`,
-              enabled ? PALETTE.text : PALETTE.textDim,
+              enabled ? PALETTE.tokenInk : PALETTE.tokenInkDim,
               () => this.emit({ type: "buyHint", hint: entry.type }),
             ),
           );
@@ -592,17 +645,18 @@ export class Renderer {
       const modes: Mode[] = ["casual", "normal", "expert"];
       modes.forEach((mode, i) => {
         const w = 62;
-        const x = STATUS.x + i * (w + 6);
+        const x = status.x + i * (w + 6);
         const active = s.mode === mode;
         this.root.addChild(
           this.box(
             x,
-            STATUS.y + 44,
+            status.y + 44,
             w,
             26,
             active ? PALETTE.commit : PALETTE.slot,
             mode,
-            active ? PALETTE.text : PALETTE.textDim,
+            // Active is a dark chip, inactive a light one — opposite inks.
+            active ? PALETTE.tokenInk : PALETTE.textDim,
             () => this.emit({ type: "selectMode", mode }),
           ),
         );
@@ -612,13 +666,13 @@ export class Renderer {
     // --- blocked fatal move (GDD §6 Casual, §7.5 the scripted trap) ---
     if (s.warning) {
       const w = s.warning;
-      const panelY = LANE.y + 40;
+      const panelY = lane.y + 40;
       this.root.addChild(
         new Graphics()
-          .roundRect(LANE.x + 6, panelY, LANE.width - 12, 150, 8)
-          .fill({ color: 0x2b2f3d, alpha: 0.97 })
-          .roundRect(LANE.x + 6, panelY, LANE.width - 12, 150, 8)
-          .stroke({ width: 3, color: PALETTE.highlight }),
+          .roundRect(lane.x + 6, panelY, lane.width - 12, 150, 8)
+          .fill({ color: PALETTE.card, alpha: 0.97 })
+          .roundRect(lane.x + 6, panelY, lane.width - 12, 150, 8)
+          .stroke({ width: 3, color: PALETTE.highlightInk }),
       );
 
       // §7.5 step 3: one line of text. Not a modal, not a chain of Next.
@@ -651,7 +705,7 @@ export class Renderer {
           32,
           PALETTE.slotFilled,
           w.scripted ? "let me look" : "got it",
-          PALETTE.text,
+          PALETTE.tokenInk,
           () => this.emit({ type: "dismissWarning" }),
         ),
       );
@@ -664,13 +718,13 @@ export class Renderer {
     //
     // A win still needs an exit, so the cleared state offers one quietly.
     if (s.phase === "won") {
-      const bannerY = LANE.y + LANE.height / 2 - 30;
+      const bannerY = lane.y + lane.height / 2 - 30;
       this.root.addChild(
         new Graphics()
-          .roundRect(LANE.x + 20, bannerY, LANE.width - 40, 60, 10)
+          .roundRect(lane.x + 20, bannerY, lane.width - 40, 60, 10)
           .fill({ color: PALETTE.won, alpha: 0.92 }),
       );
-      const headline = this.text("CLEARED", 24, PALETTE.text);
+      const headline = this.text("CLEARED", 24, PALETTE.tokenInk);
       headline.anchor.set(0.5);
       headline.position.set(DESIGN.width / 2, bannerY + 30);
       this.root.addChild(headline);
@@ -683,7 +737,7 @@ export class Renderer {
           34,
           PALETTE.slotFilled,
           "replay",
-          PALETTE.text,
+          PALETTE.tokenInk,
           () => this.emit({ type: "tapRestart" }),
         ),
       );
@@ -694,16 +748,17 @@ export class Renderer {
     // and re-narrates a loss the board has already communicated (§9.4).
 
     // Equation band backdrop drawn last would cover the row, so draw beneath.
+    // Same white veil as the lane: one derived value, not three tuned ones.
     this.root.addChildAt(
       new Graphics()
-        .roundRect(EQUATION.x, EQUATION.y, EQUATION.width, EQUATION.height, 8)
-        .fill({ color: PALETTE.slot, alpha: 0.6 }),
+        .roundRect(equation.x, equation.y, equation.width, equation.height, 8)
+        .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
       1,
     );
     this.root.addChildAt(
       new Graphics()
-        .roundRect(POOL.x, POOL.y - 6, POOL.width, POOL.height, 8)
-        .fill({ color: 0x191d25, alpha: 0.5 }),
+        .roundRect(pool.x, pool.y - 6, pool.width, pool.height + 12, 8)
+        .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
       2,
     );
   }

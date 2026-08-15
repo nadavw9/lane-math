@@ -18,13 +18,39 @@ import sharp from "sharp";
  * interest at the edges — distorting those is exactly what must not happen.
  */
 const RAW = "assets/bg-raw";
-const OUT = "assets/bg";
+/**
+ * Written straight into the served directory, and the gate reads the same one.
+ *
+ * These used to be two places — the tool wrote assets/bg, the game loaded
+ * public/assets/bg, and a copy step in between lived only in someone's memory.
+ * That is worse than an inconvenience: the gate judged the tool's output while
+ * the player saw the stale copy, so regenerated art could pass a green gate and
+ * never ship. One directory, no copy step, nothing to forget.
+ */
+const OUT = "public/assets/bg";
 const TARGET_W = 900;
 const TARGET_H = 2100;
 const QUALITY = 75;
 
 const args = process.argv.slice(2);
 const only = args.find((a) => /^[1-4]$/.test(a));
+/**
+ * Uniform cover-scale and centre-crop, instead of a vertical stretch.
+ *
+ * This is the right transform for a work SURFACE and the wrong one for a
+ * landscape, which is why it was not available before. The stretch exists only
+ * to avoid cropping a composition: reeds and rock columns live at the edges of
+ * the frame and cutting 36% of the width would cut the subject. Graph paper has
+ * no subject — every part of it is the same sheet — so the width can simply be
+ * cropped, and then nothing is stretched at all.
+ *
+ * It matters more here than it would have there. On a ruled surface the content
+ * IS the regularity: measured on the trapezoid output, world 1's grid period
+ * runs 52px through the ramp and 68px across the plateau, so the squares are
+ * visibly larger in the middle of the sheet and the paper reads as bulged. A
+ * uniform scale keeps every square identical and every line the same weight.
+ */
+const COVER = !args.includes("--stretch");
 const bandArg = args.indexOf("--band");
 /**
  * Fraction of the source height that carries the stretch.
@@ -147,6 +173,41 @@ for (const name of files) {
   const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
   const { width, height, channels } = info;
 
+  const target = join(OUT, name.replace(/\.[^.]+$/, ".webp"));
+
+  if (COVER) {
+    const scale = Math.max(TARGET_W / width, TARGET_H / height);
+    const scaledW = Math.round(width * scale);
+    const scaledH = Math.round(height * scale);
+    const scaled = await sharp(data, { raw: { width, height, channels } })
+      .resize(scaledW, scaledH, { fit: "fill" })
+      .raw()
+      .toBuffer();
+
+    await sharp(scaled, { raw: { width: scaledW, height: scaledH, channels } })
+      // Centre crop. Nothing is anisotropic, so there is no smear metric to
+      // report — the only cost is the uniform upscale, and the only content
+      // lost is more of the same surface.
+      .extract({
+        left: Math.round((scaledW - TARGET_W) / 2),
+        top: Math.round((scaledH - TARGET_H) / 2),
+        width: TARGET_W,
+        height: TARGET_H,
+      })
+      .webp({ quality: QUALITY })
+      .toFile(target);
+
+    const bytes = statSync(target).size;
+    process.stdout.write(
+      `${name} -> ${target}\n` +
+        `  ${width}x${height} -> ${scaledW}x${scaledH} (uniform ${scale.toFixed(3)}x) ` +
+        `-> crop ${TARGET_W}x${TARGET_H}\n` +
+        `  cropped ${scaledW - TARGET_W}px of width (${(((scaledW - TARGET_W) / scaledW) * 100).toFixed(0)}%), ` +
+        `no vertical distortion  ${(bytes / 1024).toFixed(0)} KB\n\n`,
+    );
+    continue;
+  }
+
   // Extend vertically to 21:9 at the SOURCE width, then resize once. Doing the
   // aspect change first keeps the single resample to the end.
   const extendedH = Math.round(width * (21 / 9));
@@ -179,7 +240,6 @@ for (const name of files) {
   const centreAfter = mean(after.slice(3, 7));
   const outerAfter = mean([...after.slice(0, 3), ...after.slice(7)]);
 
-  const target = join(OUT, name.replace(/\.[^.]+$/, ".webp"));
   await sharp(stretched, { raw: { width, height: extendedH, channels } })
     .resize(TARGET_W, TARGET_H, { fit: "fill" })
     .webp({ quality: QUALITY })

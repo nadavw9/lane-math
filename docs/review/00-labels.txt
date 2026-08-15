@@ -1,58 +1,106 @@
-Lane Math — Phase 5 review: shipped backgrounds, recoloured tokens
-Phone aspect. One gameplay screenshot per world, real art, mid-level.
+Lane Math — art direction change: classroom work surfaces, dark tokens
+Phone aspect 393x852, canvas only (dev level picker hidden).
 
-p5b-world1.png   1-03, misty forest. One move committed: 13 cleared and recessed,
-                 5 now front, pool down to four tiles. Affordance state "numbers".
-p5b-world2.png   2-04, green canopy. A 4 staged in slot 1 — operators BRIGHT and
-                 bevelled, pool DIMMED and de-bevelled. §3.5's bold-active paired
-                 with dim-inactive, now in the real art rather than placeholder rects.
-p5b-world3.png   3-04, dark rock. Number and operator both staged, so the pool is lit
-                 again and the operator row has gone dim. Six targets, thirteen tiles.
-p5b-world4.png   4-05, the darkest world. Transform mode: only the perfect square
-                 stays lit, every other tile dims, √ ringed as the active mode.
+01-world1-fresh.png           1-01 graph paper. The emptiest LAYOUT: 3 targets, 6 tiles.
+                              Bands sized to content, stack centred, ~200px of paper at
+                              each end. Empty equation row reads square-circle-square.
+02-world1-emptiest.png        Same level after one commit. 14 is GONE and the queue slid
+                              down — 5 is now front at the bottom. 4 tiles left.
+                              NOTE: your "4-tile pool, 3-target lane" cannot occur now.
+                              Reaching 4 tiles takes a commit, and a commit removes a
+                              target. This is the true emptiest state.
+03-world2-ruled.png           2-04 ruled page. 5 targets, 10 tiles.
+04-world3-wood.png            3-04 pale wood. 6 targets, 13 tiles — the tallest stack.
+05-world4-blueprint.png       4-05 blueprint, the only cool surface. √ lit as a unary.
+06-world2-rows-closeup.png    3x crop of the pool rows on world 2. The ruled-line check.
+07-ghosts-missing-closeup.png 3x crop showing the §9.3 ghosts are NOT rendering. Pre-existing,
+                              reported not fixed — see below.
 
-TOKEN RECOLOUR
-  target plate   0xa8b8dc  (as specified)
-  number tile    0xd9b98a  (as specified)
-  operator       0x86d09c  luminance 0.5258, above the 0.453 floor
-                 Chosen from ten candidates by MAXIMISING the smaller of its two
-                 perceptual distances, so it is not merely "not the plate" — it is
-                 equidistant from both families at 130, the best available balance.
-                 Green sits opposite both blue and sand on the hue circle, so it
-                 reads as a third family rather than a variant of either.
+GATE — all four pass, 4 zones x 3 aspects, worst point per zone, bare background
+                    plate   front   tile    operator     worst
+  world-1           5.97    5.39    6.87    6.03         5.39
+  world-2           6.70    6.05    7.20    6.36         6.05
+  world-3           5.10    4.61    5.63    5.12         4.61
+  world-4           6.11    5.52    6.50    5.78         5.52
+  (worst figure per zone across 21:9 / 16:9 / 4:3; floor is 3:1)
 
-  Digit ink had to change with them: the tokens are now light, and white-on-plate
-  was 1.99:1. Dark ink (0x14161c) against these fills runs 9-10:1.
-  Bevel, drop shadow and dim-loses-bevel are unchanged.
+  Direction inverted: the sampler now hunts the DARKEST point under each token.
+  No logic change was needed — it minimises contrast RATIO, so it follows the
+  token rather than assuming a direction. A test pins that both ways.
 
-STRETCH — DEVIATED FROM THE 40% BAND, DELIBERATELY
-  All four sources are 1024x1536 and need +853px to reach 21:9.
-  The specified central-40% band concentrates all of it into 614 rows: a 2.39x
-  local scale, with vertical detail in the band retained at only 30-35% of
-  original and a centre/outer detail ratio of 0.57-0.71 — the centre visibly
-  softer than its surroundings. Worlds 2 and 3 carry MORE detail in the centre
-  than at the edges (2.32 vs 2.07, and 2.01 vs 1.46), which is the reeds and
-  rock columns.
-  A raised-cosine taper over 70% was WORSE at the peak (2.59x) — it piles every
-  extra pixel at the exact centre.
-  Shipped: 80% band, trapezoid profile with 25% ramps. Peak 1.93x, retention
-  36-43%, centre/outer 0.77-1.02. World 3, the worst case, lands at 1.02 —
-  the stretched region now reads at the same detail density as the untouched
-  margins. Scale is continuous at the seams, so there is no crease.
-  Re-run any single world with:  node tools/process-backgrounds.mjs 3
+  Measured over an AREA (blur sigma 4), not a pixel. The tokens are opaque, so
+  nothing shows through a digit and the token is judged on its silhouette; one
+  dark speck hides nothing, a dark patch hides an edge.
 
-GATE — ALL FOUR PASS, worst single point, three aspects
-  world-1  4.51:1     world-2  4.08:1     world-3  3.33:1     world-4  6.08:1
-  Measured at the WORST SINGLE POINT under each token zone, not the median, and
-  against the bare background with no backdrop.
+  YOUR 0.3537 FIGURE is a darkest-AREA measure, not a darkest-pixel one. Per-pixel
+  minimum for world 3 is 0.1424. Blur sigma 8 gives 0.3564, and world 3 is the
+  darkest of the set by that measure — matching exactly. The gate uses sigma 4,
+  deliberately tighter than the statistic behind the approved number.
 
-PEAK LUMINANCE — the approved figures are p99.9, not the maximum
-  p99.9      0.0430  0.0330  0.0254  0.0165   monotonic, matches the approved set
-  per-pixel  0.0461  0.0563  0.0932  0.0227   NOT monotonic
-  World 3 has specular highlights reaching 0.0932 on a handful of pixels while
-  being the third-darkest world by every other measure. The gate asserts the
-  ordering on p99.9.
+  MONOTONIC ORDERING: assertion deleted, not skipped.
+
+STRETCH — REPLACED, not re-run. Uniform scale + centre crop.
+  You expected the trapezoid to behave better on flat textures. It measures worse,
+  for a reason the old metric could not see: on a ruled surface the content IS the
+  regularity, so a non-uniform stretch is a bulge.
+  Grid period per decile, world 1:  stretch 52-69px (CoV 9.0%) -> cover 54-56px (CoV 1.1%)
+  CoV, stretch vs cover:  w1 9.0%->1.1%   w2 20.7%->0.0%   w4 37.3%->0.9%
+  World 2's stretch smeared the ruling past detection entirely in deciles 2-7.
+  These are surfaces, not compositions — no subject to protect — so 36% of the
+  width can simply be cropped and nothing is distorted at all. That option did not
+  exist for the landscapes, where the reeds and rock columns lived at the edges.
+
+BACKDROP — re-derived from scratch, 20% WHITE (was 50-60% dark)
+  Colour first: white. The tokens are the dark things now, so a dark veil would
+  pull the ground toward them AND mute the paper the direction rests on. White
+  pushes the ground away, so separation and contrast stop competing.
+  Alpha from measurement: a band edge reads as an edge at ~3x the local grain.
+  Grain sd 4.02-4.78 across the set -> alpha 0.175-0.204. Shipped 0.20 for the
+  grainiest surface; 80% of the texture survives. The gate still measures the
+  BARE background, so this is free margin.
+
+WORLD 2 — ruled lines vs tile rows: NO interference.
+  Ruling period 31.7 design px (68px in the 900x2100 source, cover-fit at 0.4667).
+  Tile row pitch 54, target row pitch 52. Ratio 1.70 — incommensurate, so lines
+  never align systematically with row edges and there is no moiré. Lines pass
+  BEHIND opaque tiles and never touch a digit; the tiles' own drop shadows are far
+  darker than the ruling. See 06 for the close-up.
+
+WORLD 4 — navy plate on the only cool surface: still reads distinctly.
+  Your concern is real and measurable. Plate-vs-surface hue gap:
+    world 1 174째   world 2 174째   world 3 172째   world 4 126째
+  So world 4 loses ~48째 of hue separation. But dE only falls 70.3 -> 58.6, which is
+  ~25x the just-noticeable difference, because LIGHTNESS carries it: surface L=73
+  against plate L=17. Worst-point contrast there is 5.52:1, the second best of the
+  four worlds.
+  Side effect worth knowing: the walnut TILE is nearly the same hue as the paper on
+  worlds 1-3 (23-24째 gap, separated by darkness alone) and gains separation on
+  world 4 (84째). World 4 is the weakest world for plates and the strongest for tiles.
 
 SIZES
-  world-1 17.7 KB   world-2 41.5 KB   world-3 37.9 KB   world-4 12.1 KB
-  backgrounds 109.3 KB total; JS 903.6 KB (193 KB gzipped); BUILD 0.99 MB.
+  world-1 107.2 KB   world-2 67.7 KB   world-3 103.1 KB   world-4 108.3 KB
+  backgrounds 386.3 KB total; JS 904.3 KB (133 KB gzipped main chunk); BUILD 1.26 MB.
+  Up from 109.3 KB / 0.99 MB. The cause is the change of transform, not the subjects:
+  the stretch destroyed high-frequency detail, which is exactly what compresses
+  badly, so the smeared output was small because it was smeared. Paper grain is
+  broadband noise and WebP spends bits on it.
+  If 386 KB is too much, re-encoding lands near: q65 272 KB, q60 252 KB, q50 202 KB.
+  Not applied — grain is the art direction here, so that is your call not mine.
+
+FIXED ALONG THE WAY — the tool wrote art the game never loaded.
+  process-backgrounds.mjs wrote assets/bg; the game loads public/assets/bg; the copy
+  between them existed only in memory. The gate read the TOOL's output, so
+  regenerated art could pass a green gate and never reach the player — and did:
+  the first screenshot this session came back with the old forest. Both now use
+  public/assets/bg. assets/bg is deleted.
+
+REPORTED, NOT FIXED — §9.3 ghosts do not render (see 07).
+  The pool re-packs, so a ghost is drawn at a slot another tile now occupies, and a
+  0.22-alpha stroke under a dark tile is invisible. The holes the player sees are
+  the TRAILING cells, which get no ghost. Pre-existing, not caused by the resizing.
+  The fix is to ghost the trailing slots — a §9.3 behaviour change, so it is yours
+  to call.
+
+ALSO CHANGED, unasked, say if unwanted: operators now size to content HORIZONTALLY.
+  Dividing the full width by the count put world 1's two operators at the quarter
+  points with 130px of nothing between them. Capped and centred; six still fill the row.

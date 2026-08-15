@@ -158,14 +158,35 @@ export function operatorToken(size: number, glyph: string, style: TokenStyle): C
   return token;
 }
 
-/** An empty equation slot: a dashed rounded square, clearly a socket. */
-export function emptySlot(w: number, h: number): Container {
+/**
+ * An empty equation slot — a socket, SHAPE-CODED to what belongs in it.
+ *
+ * The row is number-operator-number, so slots 1 and 3 outline a rounded square
+ * and slot 2 outlines a circle. Filled slots already keep the shape of what is
+ * in them; leaving the empty ones as three identical rectangles meant the
+ * affordance only appeared after the player had guessed right once. Now the
+ * empty row states the sentence it wants before anything is placed, and states
+ * it in the same channel as the tokens (§9.2: shape-code, don't colour-code).
+ */
+export function emptySlot(w: number, h: number, shape: "square" | "circle"): Container {
   const token = new Container();
-  const g = new Graphics()
-    .roundRect(0, 0, w, h, Math.min(w, h) * 0.22)
-    .fill({ color: 0x000000, alpha: 0.28 })
-    .roundRect(0, 0, w, h, Math.min(w, h) * 0.22)
-    .stroke({ width: 2, color: PALETTE.textDim, alpha: 0.5 });
+  const g = new Graphics();
+
+  // A hole punched in the paper: darker than the ground, since the ground is
+  // now the light thing. Faint enough that a socket never competes with a token.
+  const inset = { color: 0x000000, alpha: 0.14 };
+  const edge = { width: 2, color: PALETTE.text, alpha: 0.4 };
+
+  if (shape === "circle") {
+    const radius = Math.min(w, h) / 2;
+    g.circle(w / 2, h / 2, radius).fill(inset);
+    g.circle(w / 2, h / 2, radius).stroke(edge);
+  } else {
+    const r = Math.min(w, h) * 0.22;
+    g.roundRect(0, 0, w, h, r).fill(inset);
+    g.roundRect(0, 0, w, h, r).stroke(edge);
+  }
+
   token.addChild(g);
   return token;
 }

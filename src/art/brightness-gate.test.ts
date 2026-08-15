@@ -4,15 +4,16 @@ import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { PALETTE } from "../renderer/layout.js";
+import { CONTENT_RANGE, DESIGN, PALETTE, type Rect, bands } from "../renderer/layout.js";
 import {
   ASPECTS,
+  GATE_AREA_SIGMA,
   MIN_CONTRAST,
   REQUIRED_SIZE,
   checkBackground,
   contrastRatio,
-  luminance,
   rgbFromHex,
+  worstPointColour,
   type ImageData,
   type ZoneSpec,
 } from "./brightness.js";
@@ -24,30 +25,82 @@ import {
  * colour, FAIL THE BUILD below threshold." A math puzzle dies if 6 reads as 8,
  * so this is a test rather than a lint warning.
  *
- * Measured at the WORST SINGLE POINT under each zone, not the median — the
- * tokens are light on dark art, so what breaks legibility is one bright spot
- * under a digit, which an average hides.
+ * INVERTED for the work-surface direction: the grounds are light and the tokens
+ * are dark, so the binding constraint is the DARKEST point under a token, not
+ * the brightest. Measured over an area rather than a pixel — see
+ * GATE_AREA_SIGMA for why an opaque token is judged by its silhouette.
  */
-const BG_DIR = "assets/bg";
+/**
+ * The SERVED directory, which is also the tool's output directory.
+ *
+ * Deliberately not a separate build-artefact folder: the gate has to judge the
+ * bytes the player receives, and when these were two paths with a manual copy
+ * between them, the gate could go green on art that never reached the game.
+ */
+const BG_DIR = "public/assets/bg";
 
 /**
- * Zones as fractions of the VISIBLE frame, so they follow the crop.
+ * Zones DERIVED from the layout, not hardcoded.
  *
- * §9.1: the shipped set clears 3:1 with NO backdrop, so these are measured
- * against the bare background. Band opacity is separation, not contrast.
+ * Bands size to content now, so there is no single rectangle a token lives in.
+ * Hardcoded fractions would keep passing while measuring somewhere the tokens
+ * had moved away from, which is the worst thing a gate can do — so take the
+ * union of the band across the content extremes the shipped ladder contains.
+ *
+ * §9.1: measured against the BARE background, with no backdrop. Band opacity is
+ * separation, not contrast, and the white veil only ever helps a dark token.
  */
+function union(rects: readonly Rect[]): Rect {
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  return {
+    x,
+    y,
+    width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+    height: Math.max(...rects.map((r) => r.y + r.height)) - y,
+  };
+}
+
+const EXTREMES = [
+  { targets: CONTENT_RANGE.targets.min, tiles: CONTENT_RANGE.tiles.min, hints: 0 },
+  { targets: CONTENT_RANGE.targets.max, tiles: CONTENT_RANGE.tiles.max, hints: 0 },
+  { targets: CONTENT_RANGE.targets.min, tiles: CONTENT_RANGE.tiles.max, hints: 3 },
+  { targets: CONTENT_RANGE.targets.max, tiles: CONTENT_RANGE.tiles.min, hints: 3 },
+].map((size) => bands(size));
+
+/** Design-space rect -> fractions of the frame the background is fitted to. */
+function asZone(name: string, rect: Rect, token: number): ZoneSpec {
+  return {
+    name,
+    x: rect.x / DESIGN.width,
+    y: rect.y / DESIGN.height,
+    w: rect.width / DESIGN.width,
+    h: rect.height / DESIGN.height,
+    token,
+  };
+}
+
+const LANE_ZONE = union(EXTREMES.map((b) => b.lane));
+const POOL_ZONE = union(EXTREMES.map((b) => b.pool));
+const OPERATOR_ZONE = union(EXTREMES.map((b) => b.operators));
+
 const ZONES: readonly ZoneSpec[] = [
-  { name: "lane / plate", x: 0.15, y: 0.02, w: 0.7, h: 0.44, token: PALETTE.targetPlate },
-  { name: "lane / front", x: 0.15, y: 0.02, w: 0.7, h: 0.44, token: PALETTE.targetFront },
-  { name: "pool / tile", x: 0.03, y: 0.64, w: 0.94, h: 0.24, token: PALETTE.tile },
-  { name: "operators", x: 0.03, y: 0.55, w: 0.94, h: 0.09, token: PALETTE.operator },
+  asZone("lane / plate", LANE_ZONE, PALETTE.targetPlate),
+  asZone("lane / front", LANE_ZONE, PALETTE.targetFront),
+  asZone("pool / tile", POOL_ZONE, PALETTE.tile),
+  asZone("operators", OPERATOR_ZONE, PALETTE.operator),
 ];
 
 async function load(file: string): Promise<ImageData> {
   // sharp decodes WebP, so the gate can judge what actually ships. Refusing a
   // format here would silently exempt the real artwork from the gate.
+  //
+  // Blurred first: the gate measures the darkest AREA a token sits against, not
+  // the darkest pixel, because an opaque token hides whatever is behind it and
+  // is judged only on its silhouette.
   const { data, info } = await sharp(join(BG_DIR, file))
     .removeAlpha()
+    .blur(GATE_AREA_SIGMA)
     .raw()
     .toBuffer({ resolveWithObject: true });
   return { width: info.width, height: info.height, pixels: new Uint8Array(data) };
@@ -98,41 +151,15 @@ describe("background brightness gate", () => {
     expect(result.passes).toBe(true);
   });
 
-  it("worlds darken monotonically (§9.1)", async () => {
-    /*
-     * "Peak luminance" is the 99.9th percentile, not the maximum.
-     *
-     * A per-pixel maximum is decided by a single specular highlight and does
-     * NOT decrease across this set — world 3 reaches 0.0932 on a handful of
-     * pixels while being the third-darkest world by every other measure. The
-     * percentile is what matches the approved figures (world 2 lands on 0.0330
-     * exactly) and is what "how bright is this world" actually means.
-     */
-    const peaks: { file: string; peak: number }[] = [];
-    for (const file of files) {
-      const image = await load(file);
-      const values: number[] = [];
-      for (let i = 0; i < image.pixels.length; i += 3) {
-        values.push(
-          luminance({ r: image.pixels[i]!, g: image.pixels[i + 1]!, b: image.pixels[i + 2]! }),
-        );
-      }
-      values.sort((a, b) => a - b);
-      peaks.push({ file, peak: values[Math.floor(values.length * 0.999)]! });
-    }
-
-    console.log(
-      `\npeak luminance per world (p99.9)\n` +
-        peaks.map((p) => `  ${p.file}  ${p.peak.toFixed(4)}`).join("\n"),
-    );
-
-    for (let i = 1; i < peaks.length; i++) {
-      expect(
-        peaks[i]!.peak,
-        `${peaks[i]!.file} is brighter than ${peaks[i - 1]!.file} — worlds must darken`,
-      ).toBeLessThan(peaks[i - 1]!.peak);
-    }
-  });
+  /*
+   * The monotonic-darkening assertion is GONE (§9.1: superseded, void).
+   *
+   * It is not commented out or skipped, because it was never a legibility
+   * constraint — it described an ordering that emerged from the old subjects
+   * and was then promoted to a rule. The surfaces are classroom work surfaces
+   * now and have no reason to darken with difficulty. What survives is the only
+   * thing that ever mattered: 3:1 between token and ground.
+   */
 
   it("reports the measured margins", async () => {
     const rows: string[] = [];
@@ -162,21 +189,42 @@ describe("contrast maths", () => {
     expect(contrastRatio(rgbFromHex(0x808080), rgbFromHex(0x808080))).toBeCloseTo(1, 5);
   });
 
-  it("catches a bright spot a median would hide", () => {
-    // Mostly black with one small blown-out patch: exactly the case that
-    // breaks a digit, and exactly what a median reports as comfortable.
+  it("catches a dark patch a median would hide", () => {
+    // Mostly paper with one dark blotch: the failure mode for a DARK token, and
+    // exactly what a median reports as comfortable. The inverse of the case
+    // this test guarded under the previous art direction.
     const width = 100;
     const height = 100;
-    const pixels = new Uint8Array(width * height * 3).fill(0);
+    const pixels = new Uint8Array(width * height * 3).fill(230);
     for (let y = 40; y < 60; y++) {
       for (let x = 40; x < 60; x++) {
         const i = (y * width + x) * 3;
-        pixels[i] = pixels[i + 1] = pixels[i + 2] = 255;
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 20;
       }
     }
     const result = checkBackground("synthetic", { width, height, pixels }, [
-      { name: "all", x: 0, y: 0, w: 1, h: 1, token: PALETTE.text },
+      { name: "all", x: 0, y: 0, w: 1, h: 1, token: PALETTE.tile },
     ]);
     expect(result.passes).toBe(false);
+  });
+
+  it("picks the worst point from the TOKEN, not from a fixed direction", () => {
+    // Guards the claim in worstPointColour: it minimises contrast ratio, so it
+    // hunts the dark blotch under a dark token and the bright paper under a
+    // light one, with no notion of which art direction is in force.
+    const width = 100;
+    const height = 100;
+    const pixels = new Uint8Array(width * height * 3).fill(230);
+    for (let y = 40; y < 60; y++) {
+      for (let x = 40; x < 60; x++) {
+        const i = (y * width + x) * 3;
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 20;
+      }
+    }
+    const image = { width, height, pixels };
+    const zone = { x: 0, y: 0, w: width, h: height };
+
+    expect(worstPointColour(image, zone, rgbFromHex(PALETTE.tile)).r).toBe(20);
+    expect(worstPointColour(image, zone, rgbFromHex(PALETTE.tokenInk)).r).toBe(230);
   });
 });

@@ -92,12 +92,14 @@ export function medianColour(
 }
 
 /**
- * The BRIGHTEST pixel in a zone — the worst single point for a dark background.
+ * The worst single point in a zone — now the DARKEST, because the direction
+ * inverted (§9.1: light ground, dark tokens).
  *
- * A median tells you what the zone is typically like; it says nothing about the
- * one bright highlight a digit happens to land on. Since the tokens are light
- * on dark art, the failure mode is a bright spot, so the gate is measured
- * against the extreme rather than the average.
+ * No logic change was needed for that, and it is worth saying why: this
+ * minimises the CONTRAST RATIO rather than maximising luminance, so it finds
+ * the darkest point under a dark token and the brightest under a light one
+ * without being told which case it is in. Only the failure it is hunting has
+ * changed — a dark digit dies in a shadow, not in a highlight.
  *
  * Sampled on a grid rather than every pixel: a full scan of 900x2100 per zone
  * per aspect is slow enough to discourage running the gate, and a gate that is
@@ -137,6 +139,27 @@ export const ASPECTS = [
 
 /** The shipped background size. Anything else must fail loudly. */
 export const REQUIRED_SIZE = { width: 900, height: 2100 } as const;
+
+/**
+ * Spatial scale of the gate, as a blur sigma applied before measuring.
+ *
+ * The tokens are OPAQUE, so no background is ever visible under a digit — what
+ * the eye judges is the token's silhouette against the area around it. That
+ * makes a single-pixel extreme the wrong unit: one dark speck beside a dark
+ * plate hides nothing, while a dark PATCH the size of the plate hides its edge.
+ * So the gate measures the darkest AREA, not the darkest pixel.
+ *
+ * This is the same class of correction as the earlier peak-luminance case,
+ * where a per-pixel maximum was decided by a handful of specular pixels and
+ * disagreed with every other measure of the same thing.
+ *
+ * Sigma 4 at 900x2100 is roughly a 2-3px feature at design scale — well below a
+ * token, so a real blotch still registers at full strength. It is deliberately
+ * tighter than the sigma 8 that reproduces the approved 0.3537 figure: the
+ * approved number is the honest description of the surface, and the gate should
+ * sit inside it rather than exactly on it.
+ */
+export const GATE_AREA_SIGMA = 4;
 
 export interface ZoneSpec {
   readonly name: string;
