@@ -111,20 +111,54 @@ export function worstPointColour(
   token: Rgb,
   step = 3,
 ): Rgb {
+  return worstPoint(image, zone, (bg) => contrastRatio(bg, token), step).rgb;
+}
+
+/**
+ * Alpha-composite `over` onto `under`, in sRGB — the way the renderer does it.
+ *
+ * Needed because two things now sit between a token and the paper: the pool
+ * TRAY (§9.6 furniture) and a dim token's own transparency (§9.6 dim is less
+ * presence). Both change what the eye actually compares, so both have to be in
+ * the measurement or the gate is judging a token the player never sees.
+ */
+export function composite(under: Rgb, over: Rgb, alpha: number): Rgb {
+  const mix = (a: number, b: number): number => Math.round(a + (b - a) * alpha);
+  return { r: mix(under.r, over.r), g: mix(under.g, over.g), b: mix(under.b, over.b) };
+}
+
+/**
+ * The point in a zone that scores worst under an arbitrary evaluator.
+ *
+ * Generalised from "worst against this token colour" because the token colour
+ * is no longer a constant: a dim token's effective colour depends on the
+ * background it is standing on, so the evaluation has to happen per pixel
+ * rather than once per zone.
+ *
+ * Sampled on a grid rather than every pixel: a full scan of 900x2100 per zone
+ * per aspect is slow enough to discourage running the gate, and a gate that is
+ * not run is not a gate.
+ */
+export function worstPoint(
+  image: ImageData,
+  zone: { x: number; y: number; w: number; h: number },
+  evaluate: (background: Rgb) => number,
+  step = 3,
+): { rgb: Rgb; ratio: number } {
   let worst = pixelAt(image, zone.x, zone.y);
   let worstRatio = Infinity;
 
   for (let y = zone.y; y < zone.y + zone.h; y += step) {
     for (let x = zone.x; x < zone.x + zone.w; x += step) {
       const rgb = pixelAt(image, x, y);
-      const ratio = contrastRatio(rgb, token);
+      const ratio = evaluate(rgb);
       if (ratio < worstRatio) {
         worstRatio = ratio;
         worst = rgb;
       }
     }
   }
-  return worst;
+  return { rgb: worst, ratio: worstRatio };
 }
 
 /**
@@ -170,6 +204,17 @@ export interface ZoneSpec {
   readonly h: number;
   /** Token colour drawn over this zone. */
   readonly token: number;
+  /**
+   * Furniture between the background and the token (§9.6) — the pool tray.
+   * Composited onto the background before the token is judged against it.
+   */
+  readonly furniture?: { readonly colour: number; readonly alpha: number } | undefined;
+  /**
+   * Token opacity, for dim states (§9.6). Below 1 the token is composited onto
+   * whatever is behind it, which on a light ground COSTS contrast — dimming a
+   * dark token pulls it toward the paper. This is what sets the dim floor.
+   */
+  readonly tokenAlpha?: number | undefined;
 }
 
 export interface ZoneResult {
@@ -226,10 +271,26 @@ export function checkBackground(
         w: frame.w * zone.w,
         h: frame.h * zone.h,
       };
-      // Worst single point, not the median: the tokens are light on dark art,
-      // so the thing that breaks legibility is one bright spot under a digit.
-      const background = worstPointColour(image, box, rgbFromHex(zone.token));
-      const ratio = contrastRatio(background, rgbFromHex(zone.token));
+      /*
+       * What the eye actually compares at this point:
+       *
+       *   ground   = background, plus any furniture sitting on it
+       *   token    = the token colour, composited onto that ground if it is dim
+       *
+       * and the contrast is between those two. Measuring the raw token against
+       * the raw background would flatter both the tray and every dim state.
+       */
+      const token = rgbFromHex(zone.token);
+      const evaluate = (pixel: Rgb): number => {
+        const ground = zone.furniture
+          ? composite(pixel, rgbFromHex(zone.furniture.colour), zone.furniture.alpha)
+          : pixel;
+        const drawn =
+          zone.tokenAlpha === undefined ? token : composite(ground, token, zone.tokenAlpha);
+        return contrastRatio(ground, drawn);
+      };
+
+      const { rgb: background, ratio } = worstPoint(image, box, evaluate);
       results.push({
         aspect: aspect.name,
         zone: zone.name,

@@ -4,7 +4,15 @@ import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { CONTENT_RANGE, DESIGN, PALETTE, type Rect, bands } from "../renderer/layout.js";
+import {
+  CONTENT_RANGE,
+  DESIGN,
+  DIM,
+  PALETTE,
+  TRAY_ALPHA,
+  type Rect,
+  bands,
+} from "../renderer/layout.js";
 import {
   ASPECTS,
   GATE_AREA_SIGMA,
@@ -83,12 +91,33 @@ function asZone(name: string, rect: Rect, token: number): ZoneSpec {
 const LANE_ZONE = union(EXTREMES.map((b) => b.lane));
 const POOL_ZONE = union(EXTREMES.map((b) => b.pool));
 const OPERATOR_ZONE = union(EXTREMES.map((b) => b.operators));
+const EQUATION_ZONE = union(EXTREMES.map((b) => b.equation));
 
+/** The pool tray sits between the paper and every tile (§9.6). */
+const TRAY = { colour: PALETTE.tray, alpha: TRAY_ALPHA } as const;
+
+/*
+ * DIM STATES ARE STILL TOKENS and must still clear 3:1 (§9.6).
+ *
+ * They are the reason this gate grew compositing. A dim token is the same
+ * colour at reduced opacity, so on a LIGHT ground it is pulled toward the
+ * paper — dimming costs contrast directly, and the amount it can be dimmed is
+ * therefore a measured limit rather than a taste decision. Checking only the
+ * lit states would have left the floor unguarded.
+ */
 const ZONES: readonly ZoneSpec[] = [
   asZone("lane / plate", LANE_ZONE, PALETTE.targetPlate),
   asZone("lane / front", LANE_ZONE, PALETTE.targetFront),
-  asZone("pool / tile", POOL_ZONE, PALETTE.tile),
+  { ...asZone("pool / tile", POOL_ZONE, PALETTE.tile), furniture: TRAY },
+  { ...asZone("pool / tile DIM", POOL_ZONE, PALETTE.tile), furniture: TRAY, tokenAlpha: DIM.alpha },
+  {
+    ...asZone("pool / transformed", POOL_ZONE, PALETTE.tileTransformed),
+    furniture: TRAY,
+  },
   asZone("operators", OPERATOR_ZONE, PALETTE.operator),
+  { ...asZone("operators DIM", OPERATOR_ZONE, PALETTE.operator), tokenAlpha: DIM.alpha },
+  asZone("equation / armed", EQUATION_ZONE, PALETTE.armed),
+  { ...asZone("equation / armed DIM", EQUATION_ZONE, PALETTE.armed), tokenAlpha: DIM.alpha },
 ];
 
 async function load(file: string): Promise<ImageData> {

@@ -5,7 +5,9 @@ import type { Command, InputEvent, ViewState } from "../game/types.js";
 import {
   BACKDROP,
   DESIGN,
+  DIM,
   PALETTE,
+  TRAY_ALPHA,
   type Bands,
   bands,
   equationSlot,
@@ -14,8 +16,18 @@ import {
   targetSlot,
 } from "./layout.js";
 import { RejectPulse, Shatter } from "./effects.js";
+import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
-import { emptySlot, ghostSlot, numberTile, operatorToken, targetPlate } from "./tokens.js";
+import {
+  emptySlot,
+  ghostSlot,
+  numberTile,
+  operatorToken,
+  setGrainTexture,
+  squaredPaper,
+  targetPlate,
+  woodenTray,
+} from "./tokens.js";
 
 /**
  * A token in transit between the pool and the equation row (§9.5).
@@ -144,6 +156,24 @@ export class Renderer {
       antialias: false,
     });
     host.appendChild(this.app.canvas);
+
+    /*
+     * The one shared grain (§9.6), loaded before the first draw.
+     *
+     * Set to repeat: it is a 64px tile stretched over nothing — every surface
+     * that uses it wraps it, so one small texture dresses tokens of every size
+     * and the tray as well.
+     */
+    try {
+      const texture = await Assets.load<Texture>("/assets/grain.png");
+      texture.source.addressMode = "repeat";
+      setGrainTexture(texture);
+    } catch {
+      // Material is a finish, not a requirement: without it the tokens are flat
+      // colour and the game is completely playable.
+      setGrainTexture(null);
+    }
+
     this.app.stage.addChild(this.background);
     this.app.stage.addChild(this.root);
     this.app.stage.addChild(this.fx);
@@ -218,7 +248,7 @@ export class Renderer {
 
         // A cleared target is the one moment worth holding (§9.5). Park the new
         // state; tick() swaps it in once the beat has passed.
-        if (this.state !== null && command.state.targetIndex > this.state.targetIndex) {
+        if (this.state !== null && advancesTarget(this.state, command.state)) {
           this.hold = { next: command.state, remainingMs: TIMING.hitStop };
           continue;
         }
@@ -274,11 +304,7 @@ export class Renderer {
      * shuddering and the retry would look like it was recovering from the
      * failure rather than starting clean.
      */
-    const rewound =
-      next.targetIndex < previous.targetIndex ||
-      (previous.phase !== "playing" && next.phase === "playing");
-
-    if (rewound) {
+    if (isRewind(previous, next)) {
       this.shatters.length = 0;
       this.fx.removeChildren();
       this.clearFeel();
@@ -609,11 +635,9 @@ export class Renderer {
     // Translucent so the world background reads through. The brightness gate
     // measures tokens against that background, so covering it with an opaque
     // panel would make the gate judge something the player never sees.
-    this.root.addChild(
-      new Graphics()
-        .roundRect(lane.x, lane.y, lane.width, lane.height, 8)
-        .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
-    );
+    // §9.6: the lane is a strip of squared paper, not a neutral panel. The veil
+    // still does the separation job; the ruling sits on top of it.
+    this.place(squaredPaper(lane.width, lane.height, BACKDROP), lane.x, lane.y);
 
     /*
      * Cleared targets are REMOVED and the queue slides down (§2).
@@ -716,23 +740,28 @@ export class Renderer {
       );
     });
 
+    /*
+     * §9.6: the armed `=` is GOLD ON DARK. It was green, and green was the one
+     * colour in the design that meant nothing anywhere else.
+     *
+     * Disarmed it is the same dark button under the dim treatment — same
+     * substance, less presence — rather than a second, lighter button.
+     */
     const canCommit = s.affordance === "commit";
     const commitRect = equationSlot(3, equation);
-    this.root.addChild(
-      this.box(
-        commitRect.x + resistDx,
-        commitRect.y,
-        commitRect.width,
-        commitRect.height,
-        canCommit ? PALETTE.commit : PALETTE.commitDim,
-        "=",
-        // An active commit is a dark button, so its label is cream; a dim one
-        // is light, so its label is ink. Both grounds exist in this UI now.
-        canCommit ? PALETTE.tokenInk : PALETTE.textDim,
-        canCommit ? () => this.emit({ type: "tapCommit" }) : undefined,
-        canCommit ? PALETTE.highlight : undefined,
-      ),
+    const commit = this.box(
+      commitRect.x + resistDx,
+      commitRect.y,
+      commitRect.width,
+      commitRect.height,
+      PALETTE.armed,
+      "=",
+      canCommit ? PALETTE.highlight : PALETTE.tokenInk,
+      canCommit ? () => this.emit({ type: "tapCommit" }) : undefined,
+      canCommit ? PALETTE.highlight : undefined,
     );
+    if (!canCommit) commit.alpha = DIM.alpha;
+    this.root.addChild(commit);
 
     // --- operators. Affordance rule (§3.5): bold-active paired with dim-inactive.
     const available = [
@@ -752,13 +781,20 @@ export class Renderer {
       // §3.5: bold-active is ALWAYS paired with dim-inactive. Weight change
       // alone is easy to miss and poor for low-vision players.
       const size = Math.min(r.width, r.height);
+      const lit = enabled && active;
+      const disc = operatorToken(size, LABEL[op] ?? op, {
+        // §9.6: teal-slate whether it is available or not. Only its presence
+        // changes — the disc goes flat and loses its shadow.
+        fill: PALETTE.operator,
+        text: PALETTE.tokenInk,
+        bevel: lit ? 1 : DIM.bevel,
+        elevation: lit ? 1 : DIM.elevation,
+        outline: s.transformOp === op ? PALETTE.highlight : undefined,
+      });
+      if (!lit) disc.alpha = DIM.alpha;
+
       this.place(
-        operatorToken(size, LABEL[op] ?? op, {
-          fill: enabled && active ? PALETTE.operator : PALETTE.operatorDim,
-          text: enabled && active ? PALETTE.tokenInk : PALETTE.tokenInkDim,
-          bevel: enabled && active ? 1 : 0.2,
-          outline: s.transformOp === op ? PALETTE.highlight : undefined,
-        }),
+        disc,
         r.x + (r.width - size) / 2,
         r.y,
         spent
@@ -821,23 +857,28 @@ export class Renderer {
       const lift = this.lifts.get(tile.id);
       const rise = lift ? Math.sin(Math.PI * lift.value) : 0;
 
+      /*
+       * §9.6: dim is LESS PRESENCE, not a different substance.
+       *
+       * Same fill, same ink. What a dimmed tile gives up is opacity, its
+       * shadow and its rim light — so it lies flat on the tray instead of
+       * sitting on it, which reads as "not pickable" without introducing a
+       * grey that is nowhere else in the palette.
+       */
       const token = numberTile(r.width, r.height, String(shown), {
-        fill: dimmed
-          ? PALETTE.tileDim
-          : (rewrite ? halfway : tile.transformed)
-            ? PALETTE.tileTransformed
-            : PALETTE.tile,
-        text: dimmed ? PALETTE.tokenInkDim : PALETTE.tokenInk,
-        // Dimmed tiles lose their bevel too, so "inactive" is carried by
-        // form as well as colour.
-        bevel: dimmed ? 0.15 : 1,
+        fill: (rewrite ? halfway : tile.transformed)
+          ? PALETTE.tileTransformed
+          : PALETTE.tile,
+        text: PALETTE.tokenInk,
+        bevel: dimmed ? DIM.bevel : 1,
         // A lifted tile sits above the surface, so its shadow grows with it.
-        elevation: 1 + rise * 1.6,
+        elevation: dimmed ? DIM.elevation : 1 + rise * 1.6,
         outline:
           transformable || pulsed.has(tile.id) || hinted.has(tile.id)
             ? PALETTE.highlight
             : undefined,
       });
+      if (dimmed) token.alpha = DIM.alpha;
 
       // Scale about the tile's own centre so it grows in place rather than
       // drifting toward its bottom-right corner.
@@ -900,7 +941,7 @@ export class Renderer {
       }
 
       if (eco.firstFailureExempt) {
-        const exempt = this.text("free first failure — no life lost", 12, PALETTE.won);
+        const exempt = this.text("free first failure — no life lost", 12, PALETTE.highlightInk);
         exempt.anchor.set(1, 0);
         exempt.position.set(lane.x + lane.width - 8, lane.y + 26);
         this.root.addChild(exempt);
@@ -919,7 +960,8 @@ export class Renderer {
     // §9.4: no "no solution exists" text. During play this line carries
     // rejections and confirmations; on failure the board has already said it.
     const banner = s.phase === "failed" ? "" : (this.rejection ?? s.message ?? "");
-    const colour = s.phase === "won" ? PALETTE.won : PALETTE.textDim;
+    // Gold is the only accent, so "earned" is gold ink even in the status line.
+    const colour = s.phase === "won" ? PALETTE.highlightInk : PALETTE.textDim;
 
     const statusText = this.text(banner, 15, colour);
     statusText.position.set(status.x, status.y);
@@ -963,9 +1005,10 @@ export class Renderer {
           status.y + 8,
           92,
           32,
-          s.shopOpen ? PALETTE.commit : PALETTE.slotFilled,
+          PALETTE.slotFilled,
           `hints ${eco.starsAvailable}★`,
-          PALETTE.tokenInk,
+          // Open is an "armed" state, so it is gold — the only accent (§9.6).
+          s.shopOpen ? PALETTE.highlight : PALETTE.tokenInk,
           () => this.emit({ type: "toggleShop" }),
         ),
       );
@@ -992,18 +1035,20 @@ export class Renderer {
         s.shop.forEach((entry, i) => {
           const y = panelY + 26 + i * 40;
           const enabled = entry.owned || entry.affordable;
-          this.root.addChild(
-            this.box(
-              status.x + 8,
-              y,
-              status.width - 16,
-              34,
-              entry.owned ? PALETTE.operator : enabled ? PALETTE.slotFilled : PALETTE.operatorDim,
-              `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}★`}`,
-              enabled ? PALETTE.tokenInk : PALETTE.tokenInkDim,
-              () => this.emit({ type: "buyHint", hint: entry.type }),
-            ),
+          // Owned is "earned", so it is gold on the dark chip. Unaffordable is
+          // the same chip under the dim treatment, not a greyer chip.
+          const row = this.box(
+            status.x + 8,
+            y,
+            status.width - 16,
+            34,
+            PALETTE.slotFilled,
+            `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}★`}`,
+            entry.owned ? PALETTE.highlight : PALETTE.tokenInk,
+            () => this.emit({ type: "buyHint", hint: entry.type }),
           );
+          if (!enabled) row.alpha = DIM.alpha;
+          this.root.addChild(row);
         });
       }
     }
@@ -1021,10 +1066,10 @@ export class Renderer {
             status.y + 44,
             w,
             26,
-            active ? PALETTE.commit : PALETTE.slot,
+            active ? PALETTE.slotFilled : PALETTE.slot,
             mode,
-            // Active is a dark chip, inactive a light one — opposite inks.
-            active ? PALETTE.tokenInk : PALETTE.textDim,
+            // The selected mode is an "armed" state: gold on the dark chip.
+            active ? PALETTE.highlight : PALETTE.textDim,
             () => this.emit({ type: "selectMode", mode }),
           ),
         );
@@ -1059,7 +1104,11 @@ export class Renderer {
       this.root.addChild(refused);
 
       if (w.scripted) {
-        const free = this.text("rewound free — no star, no life, no failure", 12, PALETTE.won);
+        const free = this.text(
+          "rewound free — no star, no life, no failure",
+          12,
+          PALETTE.highlightInk,
+        );
         free.anchor.set(0.5);
         free.position.set(DESIGN.width / 2, panelY + 84);
         this.root.addChild(free);
@@ -1091,15 +1140,48 @@ export class Renderer {
       // tally.
       const bannerH = 92;
       const bannerY = lane.y + lane.height / 2 - bannerH / 2;
-      this.root.addChild(
-        new Graphics()
-          .roundRect(lane.x + 20, bannerY, lane.width - 40, bannerH, 10)
-          .fill({ color: PALETTE.won, alpha: 0.92 }),
-      );
-      const headline = this.text("CLEARED", 24, PALETTE.tokenInk);
+      const bannerX = lane.x + 20;
+      const bannerW = lane.width - 40;
+
+      /*
+       * §9.6: navy and gold, and made of the same material as everything else.
+       *
+       * It was a flat green rectangle — a placeholder wearing the one colour in
+       * the game that meant nothing. As a navy plate with the token lighting
+       * and the shared grain, the reward panel reads as the same kind of object
+       * as the plates the player just spent their tiles on, and gold does the
+       * work it does everywhere else.
+       */
+      const panel = new Graphics()
+        .roundRect(bannerX, bannerY, bannerW, bannerH, 10)
+        .fill({ color: PALETTE.targetPlate, alpha: 0.96 });
+      // Same lighting as the tokens: shadow along the top, rim light beneath.
+      panel
+        .moveTo(bannerX + 10, bannerY + 2)
+        .lineTo(bannerX + bannerW - 10, bannerY + 2)
+        .stroke({ width: 3, color: 0x000000, alpha: 0.3 });
+      panel
+        .moveTo(bannerX + 10, bannerY + bannerH - 2)
+        .lineTo(bannerX + bannerW - 10, bannerY + bannerH - 2)
+        .stroke({ width: 2, color: 0xffffff, alpha: 0.14 });
+      panel
+        .roundRect(bannerX, bannerY, bannerW, bannerH, 10)
+        .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.55 });
+      this.root.addChild(panel);
+
+      const headline = this.text("CLEARED", 24, PALETTE.highlight);
       headline.anchor.set(0.5);
       headline.position.set(DESIGN.width / 2, bannerY + 28);
       this.root.addChild(headline);
+
+      // A hairline under the headline, so the stars sit in a tray of their own
+      // rather than floating in the middle of the panel.
+      this.root.addChild(
+        new Graphics()
+          .moveTo(bannerX + 40, bannerY + 46)
+          .lineTo(bannerX + bannerW - 40, bannerY + 46)
+          .stroke({ width: 1, color: PALETTE.highlight, alpha: 0.3 }),
+      );
 
       /*
        * §9.5: stars arrive ONE AT A TIME, weighted.
@@ -1148,11 +1230,11 @@ export class Renderer {
         .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
       1,
     );
-    this.root.addChildAt(
-      new Graphics()
-        .roundRect(pool.x, pool.y - 6, pool.width, pool.height + 12, 8)
-        .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
-      2,
-    );
+    // §9.6: the pool is a shallow wooden tray the tiles sit in. Translucent, so
+    // the paper still reads through it and the gate can measure what is really
+    // behind a tile.
+    const tray = woodenTray(pool.width, pool.height + 12, PALETTE.tray, TRAY_ALPHA);
+    tray.position.set(pool.x, pool.y - 6);
+    this.root.addChildAt(tray, 2);
   }
 }

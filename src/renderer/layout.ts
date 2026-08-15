@@ -27,20 +27,17 @@ export const PALETTE = {
   /** The front plate is the live one: same family, deeper and bluer. */
   targetFront: 0x16324f,
   tile: 0x33241a,
-  tileTransformed: 0x3b2a4d,
-  operator: 0x22333b,
-
-  /*
-   * Dimming now moves a token TOWARD the paper rather than away from it.
-   * On a dark ground an inactive token got darker; on a light ground it has to
-   * get lighter, or "inactive" reads as "more emphatic".
+  /**
+   * A transformed tile is the SAME WOOD, freshly cut (§9.6).
+   *
+   * It was purple, which is not in the palette. Same hue, lighter value: the
+   * tile has been changed, not replaced by a different kind of object.
    */
-  tileDim: 0x6a625a,
-  operatorDim: 0x69706f,
+  tileTransformed: 0x4a3524,
+  operator: 0x22333b,
 
   /** Digits on the tokens: cream, drawn from the paper (§9.2). */
   tokenInk: 0xf4ead8,
-  tokenInkDim: 0xd8d2c6,
 
   /*
    * INK ON PAPER — text drawn on the background or on a light panel. Distinct
@@ -55,17 +52,61 @@ export const PALETTE = {
 
   /** Sockets and buttons. Filled controls are dark, so they carry tokenInk. */
   slot: 0xd8d0c0,
-  slotFilled: 0x3a4152,
-  commit: 0x2f6b3a,
-  commitDim: 0xc3bcae,
+  slotFilled: 0x2b3a4c,
 
-  /** Outline on a dark token — gold reads against every token fill. */
+  /**
+   * The armed `=` button: GOLD ON DARK (§9.6).
+   *
+   * It was green, and green belonged to nothing else in the design — the one
+   * place a colour appeared without a reason, which is what made it read as a
+   * default rather than a decision. Gold already means ready, on the front
+   * plate and on the stars, so the button that is ready wears it too.
+   */
+  armed: 0x1e2a3a,
+
+  /** The single accent. Every "ready", "armed" or "earned" state (§9.6). */
   highlight: 0xe0c060,
   /** The same intent as `highlight`, for text on paper, where gold vanishes. */
   highlightInk: 0x8a5a12,
 
-  won: 0x2f6b3a,
+  /** The pool tray: light wood, warm, translucent over the paper (§9.6). */
+  tray: 0xc9a678,
+  /** Ruling on the lane's squared paper. */
+  rule: 0x6f6558,
+
+  /**
+   * KEPT, and outside the §9.6 palette. Flagged rather than removed: §9.4's
+   * failure signal is the lane refusing the number, and the refused plate going
+   * red is part of how that reads. Removing it is a change to a SIGNAL, not to
+   * a material, so it is not this pass's call to make.
+   */
   failed: 0x7a2020,
+} as const;
+
+/**
+ * Dim is LESS PRESENCE, not a different substance (§9.6).
+ *
+ * A dimmed token keeps its own colour and gives up opacity, elevation and
+ * shadow. The previous greys were a second palette hiding inside the first, and
+ * they read as disabled web controls rather than as objects pushed into the
+ * background.
+ *
+ * The opacity floor is set by the brightness gate, not by taste. Fading a DARK
+ * token on a LIGHT ground pulls it toward the paper, which costs contrast
+ * directly. Measured across all four worlds (tools/dim-floor.mts), 3:1 breaks
+ * at alpha 0.68 and the lowest passing value is 0.70; 0.78 sits above that with
+ * margin, at a measured 3.55:1 worst case.
+ *
+ * Most of the dimming therefore has to come from elevation and shadow, which
+ * cost no contrast at all: a token lying flat on the surface casting nothing is
+ * plainly not pickable, however close its colour still is. That is the whole
+ * reason §9.6's formulation works on a light ground — presence is not only
+ * opacity.
+ */
+export const DIM = {
+  alpha: 0.78,
+  elevation: 0,
+  bevel: 0.12,
 } as const;
 
 /**
@@ -87,6 +128,21 @@ export const PALETTE = {
  * than something the tokens depend on.
  */
 export const BACKDROP = { colour: 0xffffff, alpha: 0.2 } as const;
+
+/**
+ * How solid the pool tray is (§9.6).
+ *
+ * Translucent on purpose. An opaque tray would be the surface the tiles
+ * actually sit on, which means the brightness gate would be measuring a
+ * background the player never sees behind a token — the same class of mistake
+ * as gating art the game does not load. At this alpha the paper still reads
+ * through, and the gate composites the tray over the measured worst point so
+ * what is judged is what ships.
+ *
+ * It is also contrast-POSITIVE where it matters: the wood is lighter than the
+ * darkest paper, so the tray lifts the worst points rather than deepening them.
+ */
+export const TRAY_ALPHA = 0.55;
 
 export interface Rect {
   readonly x: number;

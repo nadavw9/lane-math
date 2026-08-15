@@ -1,80 +1,104 @@
-Lane Math — Phase 5D: game feel. No new art.
-Phone aspect 393x852. Every shot is a FROZEN frame: the effect was run at a
-slowed clock, paused with setEffectSpeed(0) at a chosen moment, and the running
-state read back from feel() so the picture can be trusted rather than believed.
+Lane Math — Phase 5E: material and palette. No layout, size or feel changes.
+Phone aspect 393x852, canvas only.
 
-01-tap-lift.png                 Tap a pool tile. Lift frozen at its peak (raw 0.210).
-                                The 9 is up and toward the viewer with a longer, fainter
-                                shadow; its pool seat sits dimmed underneath.
-02-settle-into-slot.png         The same tile arriving, frozen at raw 0.785 — mid
-                                OVERSHOOT. The socket outline is still visible behind it
-                                as the tile rocks down onto its seat.
-03-hitstop-before-shatter.png   The held frame. feel() at capture: holding true, 45ms of
-                                the 80ms hold left, shatters 0. The Director has already
-                                advanced to target 2; the BOARD is still showing 9 - 5 =
-                                with the commit lit. Nothing has broken yet.
-04-incorrect-commit-resist.png  9 + 5 committed against target 4. resist raw 0.065, near
-                                the peak of the shudder — the whole row is displaced ~6px
-                                right of its backdrop. flights 0: nothing moved.
-05-unary-rewrite.png            sqrt applied to a 4. Frozen at raw 0.338: the tile is
-                                turned edge-on, still carrying the old value, and has not
-                                left its slot.
-06-stars-one-at-a-time.png      Level cleared. stars [1, 0.403, 0] — first landed, second
-                                mid-arrival and still oversize, third has not started.
+01-world1-fresh.png        1-01. No green anywhere. Lane is squared paper, pool is a
+                           shallow wooden tray, = is dark and disarmed.
+02-staged-pool-dimmed.png  A 9 staged. The pool tiles keep their walnut and lose their
+                           shadows — flat IN the tray rather than sitting on it. The
+                           operators have come up: same teal-slate, now with elevation.
+03-equals-armed-gold.png   3x crop. Armed = is gold on navy with a gold rim. Below it the
+                           dimmed operators, same hue, no shadow.
+04-cleared-navy-gold.png   The CLEARED panel: navy plate, gold rule, gold headline, three
+                           gold stars seated under it, and the emptied tray of ghosts
+                           behind. Same lighting and grain as the tokens.
+05-token-material-4x.png   4x crop. Inner shadow along the top edge, rim light along the
+                           bottom, and the shared grain visible on both the tiles and the
+                           tray — one substance, two objects.
 
-RETRY PATH — THE NUMBER
-  1 FRAME. Five measured runs on 1-06 played to a genuine failure:
-    frames 1, 1, 1, 1, 1     ms 29.5 / 37.5 / 38.3 / 34.9 / 41.7
-  The board is playable in the SAME SYNCHRONOUS TICK as the restart input —
-  measureRetry() checks phase and targetIndex immediately after send() returns,
-  before any frame boundary, and it is already playing at target 0 with all 6
-  tiles restored. The 1 frame is simply the next paint.
-  Screens between failure and playable: 0. Modals: 0. Transitions: 0.
-  The ms figure is the animation-frame interval under the automation harness,
-  not a 60fps steady state — the frame count is the honest number.
+1. GREEN IS GONE
+   = armed        gold glyph and gold rim on ink navy
+   = disarmed     the same navy button under the dim treatment, not a lighter one
+   CLEARED        navy plate with gold headline, rule and stars
+   won status     gold ink
+   shop / modes   selected and owned states are gold on the dark chip
+   Transformed tiles were PURPLE, also outside the palette. Now the same walnut,
+   lighter value — the tile was changed, not replaced with a different material.
 
-THE REGISTER — what was deliberately NOT built
-  No screen shake, anywhere. The closest thing in the game is the equation row
-  resisting an illegal commit, and it is confined to the row: the pool and the
-  lane do not move, so nothing reads as an impact on the whole board.
-  No confetti, no sparkle, no cartoon squash. The settle curve overshoots about
-  3% where the stock back-out constant overshoots 10% — that difference is the
-  difference between a Scrabble tile and a beach ball, and it is asserted in a
-  test so it cannot drift.
+2. DIM IS LESS PRESENCE — and the opacity floor is MEASURED, not chosen.
+   Same fill, same ink. What goes is opacity, elevation and shadow.
+   On a light ground, fading a DARK token pulls it toward the paper and costs
+   contrast directly, so there is a hard floor. Searched across all four worlds
+   (tools/dim-floor.mts):
+     alpha 1.00  5.14:1     0.90  4.35:1     0.80  3.68:1
+     alpha 0.78  3.55:1  <- shipped
+     alpha 0.70  3.08:1  <- lowest that still clears 3:1
+     alpha 0.68  2.97:1  <- below
+   Most of the dimming therefore has to come from elevation and shadow, which
+   cost no contrast at all. A tile lying flat casting nothing is plainly not
+   pickable however close its colour still is — which is why 9.6's formulation
+   works here at all.
 
-BUILT
-  src/renderer/tween.ts — one clock, one set of curves, one timing table. Every
-  effect reads from it. lift 150 / place 260 / return 210 / hitStop 80 /
-  laneAdvance 340 / resist 380 / rewrite 340 / starGap 190.
-  Effects hold PROGRESS, never display objects, because the board is rebuilt
-  every frame — draw() asks them where things are. That is why they compose.
+3. MATERIAL
+   Inner shadow along the top edge, rim light along the bottom, shared grain.
+   Deliberately the INVERSE of the usual raised-button bevel: that lighting says
+   "a control protruding from a page", this says "a solid thing sitting in the
+   light of the room". With the drop shadow underneath it, a tile reads as an
+   object resting ON the paper rather than drawn on it.
+   Grain: ONE 64x64 tile, generated (tools/make-grain.mjs), used by every token
+   type and by the tray. Per-pixel noise tiles seamlessly by construction — no
+   seam work — which is why grain rather than a fibre or weave.
 
-TWO THINGS THAT ARE NOT PURE FEEL — flagging both
-  1. DIRECTOR CHANGED. A refused commit no longer empties the equation row.
-     9.5's table says "tiles stay put", and there was nothing to leave standing:
-     the Director cleared all three slots on a wrong answer. It also charged
-     three taps to re-enter a guess, for something 2 step 4 explicitly says is
-     not a failure state. Now the equation stands and the player can fix just
-     the operator. One test asserted the old behaviour and was updated; a new
-     test covers the correction path.
-  2. TOKEN PARAMETER ADDED. TokenStyle gained `elevation`, which scales the
-     EXISTING drop shadow and touches no colour or shape. 9.5 asks for "shadow
-     deepens" on lift, and the shadow is most of what makes a lift read as
-     height rather than as the tile just getting bigger.
+4. FURNITURE
+   Lane: squared paper. The white veil still does the separation job (9.1); the
+   ruling is drawn over it at a fixed 22px pitch, so the squares stay square
+   whatever height the lane takes for a given board.
+   Pool: a shallow wooden tray, translucent at 0.55. Translucency is not a
+   styling choice — an opaque tray would become the real surface behind every
+   tile, and the gate would be measuring paper the player never sees. It is also
+   contrast-POSITIVE: the wood is lighter than the darkest paper, so it lifts
+   the worst points rather than deepening them.
 
-DEFECT FOUND BY THE INSTRUMENTATION
-  After a successful commit the two spent tiles were flying home to the pool AND
-  shattering toward the lane at the same time — a successful commit clears the
-  slots, which looks identical to a return. Only visible because feel() reported
-  two toPool flights that should not exist. Fixed: a consumed tile has nowhere
-  to return to. Re-verified at 0 spurious returns.
+VERIFY
 
-ALSO
-  setEffectSpeed(0) now PAUSES rather than clamping to 0.05. It is the only way
-  to photograph a frame honestly — a screenshot round-trip is slower than any
-  effect here, so at any non-zero speed the shutter races the animation. It was
-  needed within ten minutes of starting the verification.
-  The CLEARED banner grew 60 -> 92px so the stars seat inside it.
+  1. GATE — all four worlds, INCLUDING dim states, tray composited.
+     The gate now composites what is actually between a token and the paper: the
+     tray, and a dim token's own transparency. Measuring raw colours would have
+     flattered both.
+                          w1     w2     w3     w4
+       lane / plate      6.00   6.70   5.10   6.11
+       lane / front      5.41   6.05   4.61   5.52
+       pool / tile       6.81   7.22   5.43   6.51
+       pool / tile DIM   4.31   4.37   4.02   4.17
+       pool / transformed 5.13  5.27   4.64   4.90
+       operators         5.41   6.21   4.98   5.62
+       operators DIM     3.68   4.05   3.46   3.72
+       equation / armed  5.97   6.93   5.58   6.21
+       equation / armed DIM 4.02 4.47  3.83   4.07
+       WORST             3.68   4.05   3.46   3.72     floor 3:1, all PASS
+     (worst per zone across 21:9 / 16:9 / 4:3)
 
-NO SOUND. Not started, as scoped.
-Tests 229 passing (21 new in tween.test.ts). Build 1.27 MB, JS 910.5 KB.
+  3. BUNDLE DELTA
+       grain.png            2,261 bytes
+       JS                   +1.7 KB (910.5 -> 912.2 KB)
+       build total          1.2718 MB, up ~3.9 KB
+     The texture is the entire asset cost of the material pass.
+
+ALSO IN THIS SESSION
+  RETRY REGRESSION TEST, as asked. src/game/retry.test.ts pins all three parts of
+  the guarantee: the Director rewinds synchronously, tapRestart emits exactly
+  ["render"] and nothing else — so a modal or transition added to that path fails
+  the test — and the transition cannot trigger the hit-stop, the only thing in
+  the game that delays a frame. The renderer's two transition predicates moved to
+  transitions.ts so they are testable without standing up PixiJS.
+
+  BUG FIXED: a stray diagonal line was being drawn across the operator row. Pixi
+  appends an arc to the CURRENT path, so the new rim-light arcs were connecting
+  from wherever the pen happened to be. Visible in the first armed-row capture.
+
+FLAGGED, NOT CHANGED — failure red is outside the 9.6 palette.
+  0x7a2020 is still used for the refused front plate and the out-of-lives line.
+  9.6 says "nothing else", but removing it changes a SIGNAL — 9.4's failure moment
+  is the lane refusing the number, and the plate going red is part of how that
+  reads — not a material. That is a call for you, not for a material pass.
+
+Tests 235 passing. Nothing moved: no layout, size, position or timing changed.

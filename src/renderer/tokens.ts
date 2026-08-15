@@ -1,6 +1,37 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Matrix, Text, TextStyle, type Texture } from "pixi.js";
 
 import { PALETTE } from "./layout.js";
+
+/**
+ * The shared grain (GDD §9.6).
+ *
+ * ONE 64x64 tileable texture for every token type and for the pool tray, set
+ * once at startup. Held in a module variable rather than threaded through every
+ * call because it is a property of the material, not of any particular token —
+ * and because tokens are built synchronously inside draw(), which cannot await
+ * an asset.
+ *
+ * Absent until it loads, and absent forever if it fails: every draw below
+ * checks, so a missing texture costs the game its grain and nothing else.
+ */
+let grain: Texture | null = null;
+
+export function setGrainTexture(texture: Texture | null): void {
+  grain = texture;
+}
+
+/**
+ * Lay the grain over a shape that has already been filled.
+ *
+ * Drawn at a fixed world scale so the grain does not stretch with the token:
+ * tokens range from 46 to 92px (§9.2) and a texture scaled to fit would give
+ * the small dense boards a visibly finer material than the large sparse ones,
+ * which is the opposite of one shared substance.
+ */
+function grainOver(g: Graphics, draw: (g: Graphics) => Graphics, alpha: number): void {
+  if (!grain) return;
+  draw(g).fill({ texture: grain, alpha, matrix: new Matrix(0.5, 0, 0, 0.5, 0, 0) });
+}
 
 /**
  * Tokens, drawn procedurally (GDD §9.2).
@@ -82,12 +113,15 @@ export function targetPlate(w: number, h: number, value: string, style: TokenSty
   const g = new Graphics();
 
   hexPath(g, w, h).fill(style.fill);
-  // Recess: dark along the top edge, light along the bottom — the inverse of
-  // the pool tiles, so the two read as opposite kinds of object.
+  // The same substance as the tiles (§9.6) — one grain across every token type.
+  grainOver(g, (gr) => hexPath(gr, w, h), 0.13);
+
+  // Recess: dark along the top edge, light along the bottom. The plates are
+  // spent ON rather than picked up, so they sit deeper in the page than a tile.
   hexPath(g, w, h).stroke({ width: 2, color: 0x000000, alpha: 0.35, alignment: 1 });
   g.moveTo(w * 0.16, h - 1)
     .lineTo(w * 0.84, h - 1)
-    .stroke({ width: 2, color: 0xffffff, alpha: 0.08 });
+    .stroke({ width: 2, color: 0xffffff, alpha: 0.1 });
 
   if (style.outline !== undefined) {
     hexPath(g, w, h).stroke({ width: 3, color: style.outline });
@@ -112,25 +146,37 @@ export function numberTile(w: number, h: number, value: string, style: TokenStyl
   const g = new Graphics();
 
   // Drop shadow first, offset down. It travels with the token's height: a tile
-  // held above the table casts further and fainter than one resting on it.
+  // held above the table casts further and fainter than one resting on it, and
+  // a tile lying flat casts none at all.
   const lift = style.elevation ?? 1;
-  g.roundRect(1.5 * lift, 3 * lift, w, h, r).fill({
-    color: 0x000000,
-    alpha: 0.45 / Math.max(1, lift * 0.85),
-  });
+  if (lift > 0) {
+    g.roundRect(1.5 * lift, 3 * lift, w, h, r).fill({
+      color: 0x000000,
+      alpha: 0.45 / Math.max(1, lift * 0.85),
+    });
+  }
   g.roundRect(0, 0, w, h, r).fill(style.fill);
 
+  // §9.6: material, not a button. The grain is the same substance on every
+  // token type, which is what makes them read as one set of objects.
+  grainOver(g, (gr) => gr.roundRect(0, 0, w, h, r), 0.16);
+
   if (style.bevel > 0) {
-    // Raised bevel: light top-left, dark bottom-right.
-    g.roundRect(2, 2, w - 4, h - 4, r * 0.8).stroke({
-      width: 2,
-      color: 0xffffff,
-      alpha: 0.22 * style.bevel,
-      alignment: 0,
-    });
-    g.moveTo(r, h - 2)
-      .lineTo(w - r, h - 2)
-      .stroke({ width: 3, color: 0x000000, alpha: 0.3 * style.bevel });
+    /*
+     * §9.6: inner shadow along the TOP edge, rim light along the BOTTOM.
+     *
+     * The inverse of the usual raised-button bevel, and deliberately so — that
+     * lighting says "a control protruding from a page", while this says "a
+     * solid thing sitting IN the light of the room, catching it along its
+     * lower edge". Combined with the drop shadow below it, the tile reads as an
+     * object resting on the paper rather than a rectangle drawn on it.
+     */
+    g.moveTo(r * 0.6, 1.5)
+      .lineTo(w - r * 0.6, 1.5)
+      .stroke({ width: 3, color: 0x000000, alpha: 0.34 * style.bevel });
+    g.moveTo(r * 0.6, h - 1.5)
+      .lineTo(w - r * 0.6, h - 1.5)
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.16 * style.bevel });
   }
   if (style.outline !== undefined) {
     g.roundRect(0, 0, w, h, r).stroke({ width: 3, color: style.outline });
@@ -152,14 +198,36 @@ export function operatorToken(size: number, glyph: string, style: TokenStyle): C
   const radius = size / 2;
   const g = new Graphics();
 
-  g.circle(radius + 1, radius + 2.5, radius).fill({ color: 0x000000, alpha: 0.45 });
-  g.circle(radius, radius, radius).fill(style.fill);
-  if (style.bevel > 0) {
-    g.circle(radius, radius, radius - 2).stroke({
-      width: 2,
-      color: 0xffffff,
-      alpha: 0.2 * style.bevel,
+  const lift = style.elevation ?? 1;
+  if (lift > 0) {
+    g.circle(radius + 1 * lift, radius + 2.5 * lift, radius).fill({
+      color: 0x000000,
+      alpha: 0.45 / Math.max(1, lift * 0.85),
     });
+  }
+  g.circle(radius, radius, radius).fill(style.fill);
+  grainOver(g, (gr) => gr.circle(radius, radius, radius), 0.14);
+
+  if (style.bevel > 0) {
+    /*
+     * §9.6: shadow along the top of the disc, rim light along the bottom.
+     *
+     * moveTo before each arc is REQUIRED, not tidiness: an arc appended to a
+     * non-empty path draws a connecting line from wherever the pen was, which
+     * put a stray diagonal across the operator row.
+     */
+    const at = (angle: number): [number, number] => [
+      radius + (radius - 1.5) * Math.cos(angle),
+      radius + (radius - 1.5) * Math.sin(angle),
+    ];
+
+    g.moveTo(...at(Math.PI * 1.15))
+      .arc(radius, radius, radius - 1.5, Math.PI * 1.15, Math.PI * 1.85)
+      .stroke({ width: 3, color: 0x000000, alpha: 0.3 * style.bevel });
+
+    g.moveTo(...at(Math.PI * 0.2))
+      .arc(radius, radius, radius - 1.5, Math.PI * 0.2, Math.PI * 0.8)
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.18 * style.bevel });
   }
   if (style.outline !== undefined) {
     g.circle(radius, radius, radius).stroke({ width: 3, color: style.outline });
@@ -170,6 +238,76 @@ export function operatorToken(size: number, glyph: string, style: TokenStyle): C
   text.position.set(radius, radius);
   token.addChild(text);
   return token;
+}
+
+/**
+ * The lane: a strip of SQUARED PAPER (§9.6).
+ *
+ * Furniture carries the theme rather than being a neutral panel. The white
+ * veil is still doing the separation job (§9.1) — the ruling is drawn on top of
+ * it, so the band reads as a piece of graph paper laid on the desk rather than
+ * as a rectangle of lighter background.
+ *
+ * Procedural, so it costs nothing and scales with the band: the pitch is fixed
+ * in design units, which means the squares stay square whatever the lane's
+ * height turns out to be for a given board.
+ */
+export function squaredPaper(
+  w: number,
+  h: number,
+  veil: { colour: number; alpha: number },
+): Container {
+  const panel = new Container();
+  const g = new Graphics();
+  const pitch = 22;
+
+  g.roundRect(0, 0, w, h, 8).fill({ color: veil.colour, alpha: veil.alpha });
+
+  // Ruling, drawn INSIDE the rounded corners so it never pokes out of the strip.
+  const ruled = new Graphics();
+  for (let x = pitch; x < w; x += pitch) ruled.moveTo(x, 0).lineTo(x, h);
+  for (let y = pitch; y < h; y += pitch) ruled.moveTo(0, y).lineTo(w, y);
+  ruled.stroke({ width: 1, color: PALETTE.rule, alpha: 0.16 });
+
+  const clip = new Graphics().roundRect(0, 0, w, h, 8).fill(0xffffff);
+  ruled.mask = clip;
+
+  panel.addChild(g, clip, ruled);
+  return panel;
+}
+
+/**
+ * The pool: a shallow WOODEN TRAY the tiles sit in (§9.6).
+ *
+ * Translucent rather than opaque, which matters for more than looks — the
+ * brightness gate measures tokens against what is actually behind them, and an
+ * opaque tray would replace the measured paper with an unmeasured surface. At
+ * this alpha the tray tints the ground warm and the gate composites it, so what
+ * is judged is what ships.
+ *
+ * Shallow: an inner shadow along the top wall and a rim light along the bottom,
+ * the same lighting the tokens use, so tray and tiles agree about where the
+ * light is.
+ */
+export function woodenTray(w: number, h: number, colour: number, alpha: number): Container {
+  const tray = new Container();
+  const g = new Graphics();
+  const r = 10;
+
+  g.roundRect(0, 0, w, h, r).fill({ color: colour, alpha });
+  grainOver(g, (gr) => gr.roundRect(0, 0, w, h, r), 0.2);
+
+  // The near wall catches light; the far wall is in shadow.
+  g.moveTo(r, 2)
+    .lineTo(w - r, 2)
+    .stroke({ width: 4, color: 0x000000, alpha: 0.16 });
+  g.moveTo(r, h - 2)
+    .lineTo(w - r, h - 2)
+    .stroke({ width: 3, color: 0xffffff, alpha: 0.22 });
+  g.roundRect(0, 0, w, h, r).stroke({ width: 1, color: 0x000000, alpha: 0.14 });
+
+  tray.addChild(g);
+  return tray;
 }
 
 /**
