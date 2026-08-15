@@ -682,6 +682,29 @@ Do **not** announce failure with a banner, modal or status text reading "no solu
 
 An interim banner is acceptable during Phases 3–4 for debuggability and must be replaced in the Phase 5 art pass.
 
+### 9.5 Feel
+
+**Feel is built before art, on placeholder geometry.** It is the largest single driver of retention and cannot be bolted on at the end.
+
+**The register is weight, not energy.** This is a game of deliberate planning, so effects read as physical mass — settling, resistance, momentum — never as celebration or impact. No screen shake. No confetti. No cartoon bounce.
+
+**Feel targets, per action:**
+
+| Action | Response |
+|---|---|
+| Tap a pool tile | Lifts toward the viewer, slight scale, shadow deepens, soft click |
+| Place into slot | Settles with weight and a small overshoot, not a snap |
+| Tap to return | Slides back to its own slot, never re-packs |
+| Commit correct | Brief hold, then shatter into the target (§9.3); the lane advances with mass |
+| Commit incorrect | Equation row resists — a short lateral shudder, tiles stay put |
+| Unary transform | The tile visibly rewrites itself in place; the change is the event |
+| Failure | §9.4's pulse only; no modal, no banner |
+| Level complete | Stars arrive one at a time, weighted, not sprayed |
+
+**Retry must be instantaneous.** Failure rewinds to the start of the level, which is the harshest retry in casual puzzle. Top-grossing titles strip every screen out of the retry path so players spend zero time outside the level. No modal, no failure screen, no transition beyond a beat.
+
+**Hit-stop before the payoff.** A brief pause (~60-100ms) before the shatter fires makes the commit land. This is the cheapest single improvement available and it suits a deliberate game.
+
 ---
 
 ## 10. Level format
