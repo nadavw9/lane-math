@@ -705,6 +705,18 @@ An interim banner is acceptable during Phases 3–4 for debuggability and must b
 
 **Hit-stop before the payoff.** A brief pause (~60-100ms) before the shatter fires makes the commit land. This is the cheapest single improvement available and it suits a deliberate game.
 
+### 9.6 Palette and material
+
+**One accent colour: gold.** It already marks the front target and the stars. Every "ready", "armed" or "earned" state uses it. There is no second accent — green currently appears on the `=` button and the CLEARED banner and belongs to nothing else in the design, which reads as a default rather than a decision.
+
+The full palette is: cream paper ground, ink navy plates, dark walnut tiles, teal-slate operators, gold accent. Nothing else.
+
+**Dim is less presence, not a different substance.** A dimmed token keeps its own colour and loses opacity, elevation and shadow depth. Shifting hue to neutral grey introduces a colour outside the palette and reads as a disabled web control.
+
+**Tokens are objects, not buttons.** Procedural geometry (§9.2) plus material treatment: inner shadow along the top edge, a faint rim light along the bottom, and a subtle grain overlay drawn from one small tileable texture shared across all token types. The goal is that a tile reads as a thing you could pick up.
+
+**Furniture carries the theme.** Band backdrops are not neutral panels. The lane is a strip of squared paper; the pool is a shallow wooden tray. Top-grossing puzzle titles integrate theme into every visual element — the pieces themselves are objects from the game's world — and this is the cheapest place to do the same.
+
 ---
 
 ## 10. Level format
