@@ -654,6 +654,8 @@ Tokens move, but they are geometry rather than imagery — see below.
 
 Different shapes for numbers and operators mean the player can never wonder what goes where.
 
+**Token size scales inversely with board size.** A 6-tile World 1 pool renders large and chunky; a 16-tile World 4 pool renders dense. The screen stays full at every board size, sparse levels read as generous rather than unfinished, and shrinking tiles become a free signal that the boards are growing harder. Bound the scale so the largest board stays tappable and the smallest does not look childish.
+
 **Tokens are dark ink on a light ground.** Digits on the tokens are therefore LIGHT — cream, drawn from the paper. This is the inverse of the previous direction and both the token fill and the digit ink move together; changing one without the other produced a 1.99:1 failure last time.
 
 **Typography:** heavy geometric sans, tabular figures, unambiguous `6`/`9`/`0`/`8`. Digits are the entire UI — this is not a place to be stylish at legibility's expense.
@@ -664,7 +666,11 @@ The emotional core. When `=` fires correctly, the two number tiles and the opera
 
 This single animation teaches "gone forever" better than any tutorial text. Traffic Bomb's 23-gate animation quality standard applies directly.
 
-**Optional:** leave a ghost outline in the pool where a consumed tile was. Free information display reinforcing scarcity — prototype it, cut it if it reads as clutter.
+**The pool does not re-pack.** Consumed tiles leave their slot empty and every surviving tile keeps its position for the whole level.
+
+This is a planning requirement, not a visual one. The player builds a spatial map of the board — *the 7 I need for the 15 is second row, third along* — and re-packing scrambles that map on every move, in a game whose entire skill is holding a multi-move plan in mind.
+
+Ghost outlines therefore render in the vacated slot, stroke-only, and cannot collide with a live tile. They are the visible record of what has been spent.
 
 **Do not visually mark keystones by default** — that is a free hint. Reserve the highlight for purchased hints.
 
