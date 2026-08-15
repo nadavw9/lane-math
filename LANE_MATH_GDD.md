@@ -620,7 +620,13 @@ Generation requirements:
 - Generate at **9:21** (tall) with a defined safe zone; crop from the edges for shorter devices.
 - Fix the prompt skeleton across all four worlds, vary only the subject. Style drift across a set is the main failure mode of generated art.
 
-**Worlds darken monotonically.** Measured peak luminance across the shipped set: world 1 0.0446, world 2 0.0330, world 3 0.0221, world 4 0.0173. The player descends into darkness as difficulty rises. This emerged from the subjects rather than being designed, but it is now a constraint: any regenerated background must preserve the ordering.
+**Backgrounds are classroom work surfaces, not landscapes.** Graph paper, ruled exercise page, pale wooden desktop, blueprint sheet. The theme lives in the SURFACE, not in depicted objects: the UI covers roughly 85% of the screen, so a drawn protractor or eraser would be hidden, while paper grain and grid ruling read as "maths" through a 20-pixel sliver.
+
+**No legible content, ever.** No numbers, letters, equations or symbols anywhere in a background. Digits behind digits is the one thing this game cannot have — the player must never be unsure which numbers are the puzzle.
+
+**Light ground, dark tokens.** Measured across the shipped set the darkest background point is 0.3537, so tokens must stay BELOW 0.0846 luminance. Because the surfaces are uniformly lit, the DARKEST background point is the binding constraint, not the brightest — the inverse of the dark-background case.
+
+**Superseded:** the dark atmospheric landscape direction and the monotonic-darkening rule. Both are void. The prior guidance also over-constrained darkness by roughly 3x — the real constraint was never "dark", only "3:1 from the tokens".
 
 **Backdrops are for separation, not contrast.** The shipped set clears 3:1 with no backdrop at all. Band backdrop opacity is therefore a visual-separation choice, and the brightness gate must still be measured through whatever opacity is set, so a future brighter background cannot hide behind it.
 
@@ -642,11 +648,13 @@ Tokens move, but they are geometry rather than imagery — see below.
 
 | Element | Shape | Treatment |
 |---|---|---|
-| **Targets** (in lane) | Hexagonal plate | Cool palette, flat, recessed |
-| **Pool numbers** | Rounded square tile | Warm, bevelled, tactile |
-| **Operators** | Circle | Distinct from numbers → slot affordance is unambiguous |
+| **Targets** (in lane) | Hexagonal plate | Ink navy `0x1e2a3a` |
+| **Pool numbers** | Rounded square tile | Dark walnut `0x33241a` |
+| **Operators** | Circle | Teal-slate `0x22333b` |
 
 Different shapes for numbers and operators mean the player can never wonder what goes where.
+
+**Tokens are dark ink on a light ground.** Digits on the tokens are therefore LIGHT — cream, drawn from the paper. This is the inverse of the previous direction and both the token fill and the digit ink move together; changing one without the other produced a 1.99:1 failure last time.
 
 **Typography:** heavy geometric sans, tabular figures, unambiguous `6`/`9`/`0`/`8`. Digits are the entire UI — this is not a place to be stylish at legibility's expense.
 
