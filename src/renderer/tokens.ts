@@ -159,6 +159,29 @@ export function operatorToken(size: number, glyph: string, style: TokenStyle): C
 }
 
 /**
+ * A spent tile's slot — stroke only, in the shape the tile had (§9.3).
+ *
+ * The pool does not re-pack, so this outline sits exactly where the tile was
+ * and can never collide with a live one. It is the visible record of what has
+ * been spent: on a 16-tile board the holes are what tells the player the pool
+ * is running out, and a gap with no outline reads as a layout that shuffled
+ * rather than as a number that is gone forever.
+ *
+ * Deliberately unfilled. A fill would make a spent slot compete with the live
+ * tiles for attention, and the thing being communicated is absence.
+ */
+export function ghostSlot(w: number, h: number): Container {
+  const token = new Container();
+  const r = Math.min(w, h) * 0.22;
+  token.addChild(
+    new Graphics()
+      .roundRect(1, 1, w - 2, h - 2, r)
+      .stroke({ width: 2, color: PALETTE.tile, alpha: 0.38 }),
+  );
+  return token;
+}
+
+/**
  * An empty equation slot — a socket, SHAPE-CODED to what belongs in it.
  *
  * The row is number-operator-number, so slots 1 and 3 outline a rounded square

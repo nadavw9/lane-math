@@ -114,11 +114,20 @@ export interface BoardSize {
 const PAD = 12;
 const GAP = 8;
 
-/** Token metrics. Band heights are multiples of these, never round numbers. */
-export const TARGET_H = 46;
+/**
+ * Token size bounds (§9.2: token size scales inversely with board size).
+ *
+ * MIN is the tap floor — 46px at design scale is ~43 CSS px on a 393px phone,
+ * at the platform minimum, and the densest 16-tile board must still be playable
+ * with a thumb. MAX is the "not childish" ceiling: past roughly a fifth of the
+ * screen width a number tile stops reading as a game piece you spend and starts
+ * reading as a menu button.
+ */
+export const TOKEN_SIZE = { min: 46, max: 92 } as const;
+
 const TARGET_GAP = 6;
-export const TILE_H = 46;
-export const POOL_PER_ROW = 6;
+/** Grids wider than this stop being scannable regardless of what fits. */
+const POOL_MAX_PER_ROW = 6;
 const OPERATOR_H = 58;
 const EQUATION_ROW_H = 60;
 const EQUATION_PAD = 10;
@@ -127,12 +136,11 @@ const STATUS_H = 60;
 /** Room for the lives/stars HUD along the top of the lane. */
 const LANE_HEADER = 44;
 
-export function poolRows(tiles: number): number {
-  return Math.max(1, Math.ceil(tiles / POOL_PER_ROW));
-}
-
-function laneHeight(targets: number): number {
-  return LANE_HEADER + Math.max(1, targets) * (TARGET_H + TARGET_GAP) - TARGET_GAP;
+/** How the pool's tiles are arranged, and how big every board token is. */
+export interface Grid {
+  readonly size: number;
+  readonly perRow: number;
+  readonly rows: number;
 }
 
 export interface Bands {
@@ -142,46 +150,153 @@ export interface Bands {
   readonly pool: Rect;
   readonly hints: Rect;
   readonly status: Rect;
+  readonly grid: Grid;
+}
+
+const bandWidth = DESIGN.width - PAD * 2;
+
+/**
+ * Arrange `tiles` at a given token size.
+ *
+ * Rows are BALANCED after the fact: fitting as many as possible per row leaves
+ * 13 tiles as 6/6/1, and a row of one reads as a mistake. Spreading the same
+ * row count evenly gives 5/5/3.
+ */
+function gridFor(tiles: number, size: number): Grid {
+  const fits = Math.floor((bandWidth + GAP) / (size + GAP));
+  const cap = Math.max(1, Math.min(POOL_MAX_PER_ROW, fits));
+  const rows = Math.max(1, Math.ceil(Math.max(1, tiles) / cap));
+  return { size, perRow: Math.ceil(Math.max(1, tiles) / rows), rows };
 }
 
 /**
- * Stack the bands and centre the result.
+ * Does the last row hold more than a single tile?
  *
- * Centred rather than top- or bottom-anchored: the freed space is real estate
- * the background gets back, and splitting it between the two ends reads as a
- * margin around the work. Pushed to one end it reads as a UI that has come
- * loose from its edge.
+ * Balancing the row count is not enough on its own: 13 tiles four across is
+ * 4/4/4/1, and a lone tile on the final row reads as a mistake rather than as a
+ * board. The size search treats this as a reason to go a size smaller, which
+ * raises the number that fit per row and lands on 5/5/3.
  */
-export function bands(size: BoardSize): Bands {
-  const width = DESIGN.width - PAD * 2;
-  const heights = [
-    laneHeight(size.targets),
+function isBalanced(tiles: number, grid: Grid): boolean {
+  return grid.rows === 1 || tiles - (grid.rows - 1) * grid.perRow > 1;
+}
+
+function laneHeight(targets: number, size: number): number {
+  return LANE_HEADER + Math.max(1, targets) * (size + TARGET_GAP) - TARGET_GAP;
+}
+
+function heightsAt(board: BoardSize, size: number): number[] {
+  const grid = gridFor(board.tiles, size);
+  return [
+    laneHeight(board.targets, size),
     EQUATION_PAD * 2 + EQUATION_ROW_H,
     OPERATOR_H,
-    poolRows(size.tiles) * (TILE_H + GAP) - GAP,
-    size.hints > 0 ? size.hints * HINT_LINE_H : 0,
+    grid.rows * (size + GAP) - GAP,
+    board.hints > 0 ? board.hints * HINT_LINE_H : 0,
     STATUS_H,
   ];
+}
+
+function stackHeight(heights: readonly number[]): number {
   // A band with no content contributes no gap either, or an empty hint strip
   // would leave a seam behind.
   const present = heights.filter((h) => h > 0).length;
-  const total = heights.reduce((a, b) => a + b, 0) + GAP * (present - 1);
+  return heights.reduce((a, b) => a + b, 0) + GAP * (present - 1);
+}
 
-  let y = Math.max(PAD, (DESIGN.height - total) / 2);
+/**
+ * The largest token size this board can wear without overflowing the screen.
+ *
+ * Solved rather than tabulated. A formula mapping tile count to a size would
+ * have to be re-tuned every time a band changed height, and would silently
+ * overflow when it was wrong; searching downward from MAX cannot overflow,
+ * because fitting is the search condition. It also produces the inverse
+ * relationship §9.2 asks for as a CONSEQUENCE — a board with more tiles needs
+ * more rows, so it runs out of vertical room sooner and settles smaller — which
+ * means the two rules cannot drift apart.
+ */
+function searchSize(board: BoardSize): number {
+  const budget = DESIGN.height - PAD * 2;
+  const fits = (size: number): boolean => stackHeight(heightsAt(board, size)) <= budget;
+
+  // Prefer a size that both fits AND grids evenly. Fitting is the hard
+  // constraint, so it gets the fallback pass on its own — a board that can only
+  // be laid out raggedly is still better than one that runs off the screen.
+  for (let size = TOKEN_SIZE.max; size > TOKEN_SIZE.min; size--) {
+    if (fits(size) && isBalanced(board.tiles, gridFor(board.tiles, size))) return size;
+  }
+  for (let size = TOKEN_SIZE.max; size > TOKEN_SIZE.min; size--) {
+    if (fits(size)) return size;
+  }
+  return TOKEN_SIZE.min;
+}
+
+const sizeCache = new Map<string, number>();
+
+/**
+ * The fitted size, forced to be NON-INCREASING in tile count.
+ *
+ * The raw search is not monotonic on its own, because the balance rule can
+ * force one board down a size while its larger neighbour grids evenly at the
+ * bigger one — measured, 13 tiles landed at 72 and 14 at 80. A player crossing
+ * that boundary would watch the tiles GROW as the board got harder, which
+ * inverts the signal §9.2 is buying. Taking the running minimum over every
+ * smaller board costs one 14-tile board two pixels and makes the rule true.
+ */
+function fittedSize(board: BoardSize): number {
+  const key = `${board.targets}:${board.tiles}:${board.hints}`;
+  const cached = sizeCache.get(key);
+  if (cached !== undefined) return cached;
+
+  let size: number = TOKEN_SIZE.max;
+  const from = Math.min(CONTENT_RANGE.tiles.min, board.tiles);
+  for (let tiles = from; tiles <= board.tiles; tiles++) {
+    size = Math.min(size, searchSize({ ...board, tiles }));
+  }
+
+  sizeCache.set(key, size);
+  return size;
+}
+
+/**
+ * Stack the bands and ANCHOR LOW.
+ *
+ * The bottom of a phone is thumb territory and the top is not, so leftover
+ * space is spent above the lane where it costs nothing to reach. It reads as a
+ * margin at the head of a worksheet rather than as a gap under the controls.
+ */
+export function bands(board: BoardSize): Bands {
+  const size = fittedSize(board);
+  const grid = gridFor(board.tiles, size);
+  const heights = heightsAt(board, size);
+  const total = stackHeight(heights);
+
+  let y = Math.max(PAD, DESIGN.height - PAD - total);
   const next = (height: number): Rect => {
-    const rect = { x: PAD, y, width, height };
+    const rect = { x: PAD, y, width: bandWidth, height };
     if (height > 0) y += height + GAP;
     return rect;
   };
 
-  return {
-    lane: next(heights[0]!),
-    equation: next(heights[1]!),
-    operators: next(heights[2]!),
-    pool: next(heights[3]!),
-    hints: next(heights[4]!),
-    status: next(heights[5]!),
+  const lane = next(heights[0]!);
+  const equation = next(heights[1]!);
+  const operators = next(heights[2]!);
+  const poolBand = next(heights[3]!);
+  const hints = next(heights[4]!);
+  const status = next(heights[5]!);
+
+  // The pool band hugs its grid rather than spanning the full width: at large
+  // token sizes the grid is narrower than the screen, and a full-width backdrop
+  // around three big tiles reads as a tray someone forgot to fill.
+  const poolWidth = grid.perRow * size + (grid.perRow - 1) * GAP;
+  const pool: Rect = {
+    x: (DESIGN.width - poolWidth) / 2,
+    y: poolBand.y,
+    width: poolWidth,
+    height: poolBand.height,
   };
+
+  return { lane, equation, operators, pool, hints, status, grid };
 }
 
 /**
@@ -193,26 +308,33 @@ export function bands(size: BoardSize): Bands {
  * failure signal legible: the lane refusing to advance only reads as a refusal
  * if advancing is what normally happens.
  */
-export function targetSlot(offset: number, lane: Rect): Rect {
+export function targetSlot(offset: number, lane: Rect, grid: Grid): Rect {
   const width = lane.width * 0.5;
   return {
     x: lane.x + (lane.width - width) / 2,
-    y: lane.y + lane.height - (offset + 1) * (TARGET_H + TARGET_GAP) + TARGET_GAP,
+    y: lane.y + lane.height - (offset + 1) * (grid.size + TARGET_GAP) + TARGET_GAP,
     width,
-    height: TARGET_H,
+    height: grid.size,
   };
 }
 
-/** Pool tiles wrap in a grid; index is the tile's position, not its id. */
-export function poolSlot(index: number, pool: Rect): Rect {
-  const width = (pool.width - GAP * (POOL_PER_ROW - 1)) / POOL_PER_ROW;
-  const col = index % POOL_PER_ROW;
-  const row = Math.floor(index / POOL_PER_ROW);
+/**
+ * A tile's slot, keyed on its FIXED index in the level's pool (§9.3).
+ *
+ * Not on its position among the survivors. The pool does not re-pack: a tile
+ * occupies the same slot for the whole level, so the player's spatial map of
+ * the board — the 7 is second row, third along — survives every move. It also
+ * makes ghosts possible at all, since a vacated slot stays vacant and no live
+ * tile can ever be sitting on one.
+ */
+export function poolSlot(index: number, pool: Rect, grid: Grid): Rect {
+  const col = index % grid.perRow;
+  const row = Math.floor(index / grid.perRow);
   return {
-    x: pool.x + col * (width + GAP),
-    y: pool.y + row * (TILE_H + GAP),
-    width,
-    height: TILE_H,
+    x: pool.x + col * (grid.size + GAP),
+    y: pool.y + row * (grid.size + GAP),
+    width: grid.size,
+    height: grid.size,
   };
 }
 

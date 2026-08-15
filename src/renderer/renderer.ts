@@ -14,7 +14,7 @@ import {
   targetSlot,
 } from "./layout.js";
 import { RejectPulse, Shatter } from "./effects.js";
-import { emptySlot, numberTile, operatorToken, targetPlate } from "./tokens.js";
+import { emptySlot, ghostSlot, numberTile, operatorToken, targetPlate } from "./tokens.js";
 
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/"];
 const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
@@ -39,8 +39,6 @@ export class Renderer {
 
   /** Where each live tile is drawn, so a shatter can start from the right place. */
   private readonly tileBounds = new Map<number, { x: number; y: number; w: number; h: number }>();
-  /** Outlines where consumed tiles used to sit (§9.3). */
-  private ghosts: { x: number; y: number; w: number; h: number }[] = [];
   private readonly shatters: Shatter[] = [];
   private reject: RejectPulse | null = null;
   private rejectOffset = { dx: 0, dy: 0, glow: 0 };
@@ -148,7 +146,6 @@ export class Renderer {
    */
   private reactTo(previous: ViewState | null, next: ViewState): void {
     if (!previous || previous.levelId !== next.levelId) {
-      this.ghosts = [];
       this.shatters.length = 0;
       this.fx.removeChildren();
       this.reject = null;
@@ -165,14 +162,13 @@ export class Renderer {
       // offset 0 — the tiles shatter into where it still is, before the queue
       // slides down over it.
       const board = this.bandsFor(next);
-      const slot = targetSlot(0, board.lane);
+      const slot = targetSlot(0, board.lane, board.grid);
       const targetX = slot.x + slot.width / 2;
       const targetY = slot.y + slot.height / 2;
 
       for (const tile of consumed) {
         const bounds = this.tileBounds.get(tile.id);
         if (!bounds) continue;
-        this.ghosts.push(bounds);
         this.spawnShatter(bounds, PALETTE.tile, targetX, targetY);
       }
       // The operator is destroyed with them — it was spent too.
@@ -314,7 +310,7 @@ export class Renderer {
      */
     for (let i = s.targets.length - 1; i >= s.targetIndex; i--) {
       const offset = i - s.targetIndex;
-      const slot = targetSlot(offset, lane);
+      const slot = targetSlot(offset, lane, board.grid);
       const front = offset === 0;
 
       // §9.4: the front target shudders and refuses to advance when the lane
@@ -443,10 +439,23 @@ export class Renderer {
     // keystone warning pulses the tiles that make the starved target.
     const hinted = new Set(s.hints.flatMap((h) => h.tileIds));
     const pulsed = new Set(s.warning?.keystoneTileIds ?? []);
-    let drawn = 0;
-    for (const tile of s.tiles) {
-      if (tile.consumed) continue;
-      const r = poolSlot(drawn++, pool);
+
+    /*
+     * Indexed by the tile's FIXED position in the level's pool (§9.3).
+     *
+     * This loop used to walk only the live tiles with its own counter, which
+     * re-packed the grid on every commit — the board rearranged itself under
+     * the player between moves, in a game whose skill is holding a multi-move
+     * plan. Now every tile owns its slot for the level and a spent one leaves
+     * a hole.
+     */
+    for (const [index, tile] of s.tiles.entries()) {
+      const r = poolSlot(index, pool, board.grid);
+
+      if (tile.consumed) {
+        this.place(ghostSlot(r.width, r.height), r.x, r.y);
+        continue;
+      }
       const transformable = s.transformableTileIds.includes(tile.id);
       const dimmed =
         s.affordance === "transform"
@@ -476,25 +485,11 @@ export class Renderer {
       this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
     }
 
-    // §9.3, prototyped: a ghost outline where a consumed tile used to be.
-    //
-    // MEASURED NOT WORKING, and left alone deliberately rather than quietly
-    // changed. The pool re-packs — `drawn` only counts live tiles — so unless
-    // the spent tiles were the trailing ones, a ghost is drawn at a slot some
-    // OTHER tile now occupies, and a dark stroke at alpha 0.22 over a dark
-    // walnut tile is invisible. The holes the player actually sees are the
-    // trailing empty cells, which carry no ghost at all. Pre-existing, not
-    // introduced by the band resizing; the fix is to ghost the trailing slots
-    // instead, which is a §9.3 behaviour change and needs its own decision.
-    if (this.ghosts.length > 0) {
-      for (const ghost of this.ghosts) {
-        this.root.addChild(
-          new Graphics()
-            .roundRect(ghost.x, ghost.y, ghost.w, ghost.h, Math.min(ghost.w, ghost.h) * 0.22)
-            .stroke({ width: 2, color: PALETTE.tile, alpha: 0.22 }),
-        );
-      }
-    }
+    // Ghosts are drawn in the pool loop above, straight from `tile.consumed`.
+    // They used to be a list of bounds recorded when a shatter fired, which was
+    // both redundant — the state already says which tiles are spent — and
+    // unable to survive a reload, since a level resumed mid-play had no shatter
+    // history to replay.
 
     // --- economy HUD. GDD §7.6: gated systems are ABSENT before their
     // unlock, never greyed out — a greyed shop still teaches "not for me".
@@ -608,17 +603,19 @@ export class Renderer {
         // A card laid on the desk, anchored above the status band rather than
         // inside the pool: the pool is only one row tall on a small board and
         // the panel would have hung off the top of it.
+        // Full band width, not the pool's — the pool now hugs its grid and can
+        // be as narrow as three tiles, which is no width for a shop.
         const panelH = 30 + s.shop.length * 40;
         const panelY = status.y - panelH - 8;
         this.root.addChild(
           new Graphics()
-            .roundRect(pool.x, panelY, pool.width, panelH, 8)
+            .roundRect(status.x, panelY, status.width, panelH, 8)
             .fill({ color: PALETTE.card, alpha: 0.98 })
-            .roundRect(pool.x, panelY, pool.width, panelH, 8)
+            .roundRect(status.x, panelY, status.width, panelH, 8)
             .stroke({ width: 2, color: PALETTE.highlightInk }),
         );
         const title = this.text("hints — none reveals a keystone", 12, PALETTE.textDim);
-        title.position.set(pool.x + 8, panelY + 7);
+        title.position.set(status.x + 8, panelY + 7);
         this.root.addChild(title);
 
         s.shop.forEach((entry, i) => {
@@ -626,9 +623,9 @@ export class Renderer {
           const enabled = entry.owned || entry.affordable;
           this.root.addChild(
             this.box(
-              pool.x + 8,
+              status.x + 8,
               y,
-              pool.width - 16,
+              status.width - 16,
               34,
               entry.owned ? PALETTE.operator : enabled ? PALETTE.slotFilled : PALETTE.operatorDim,
               `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}★`}`,
