@@ -60,6 +60,15 @@ export interface TokenStyle {
   /** Bevel highlight/shadow strength. 0 flattens the token (recessed plates). */
   readonly bevel: number;
   readonly outline?: number | undefined;
+  /**
+   * How far off the surface the token is sitting, 1 = resting (§9.5).
+   *
+   * Scales the existing drop shadow rather than changing any colour or shape,
+   * so it is feel and not art: a lifted tile throws a longer, softer shadow
+   * exactly as it would on a table, and that shadow is most of what makes the
+   * lift read as height rather than as the tile simply getting bigger.
+   */
+  readonly elevation?: number | undefined;
 }
 
 /**
@@ -102,8 +111,13 @@ export function numberTile(w: number, h: number, value: string, style: TokenStyl
   const r = Math.min(w, h) * 0.22;
   const g = new Graphics();
 
-  // Drop shadow first, offset down.
-  g.roundRect(1.5, 3, w, h, r).fill({ color: 0x000000, alpha: 0.45 });
+  // Drop shadow first, offset down. It travels with the token's height: a tile
+  // held above the table casts further and fainter than one resting on it.
+  const lift = style.elevation ?? 1;
+  g.roundRect(1.5 * lift, 3 * lift, w, h, r).fill({
+    color: 0x000000,
+    alpha: 0.45 / Math.max(1, lift * 0.85),
+  });
   g.roundRect(0, 0, w, h, r).fill(style.fill);
 
   if (style.bevel > 0) {

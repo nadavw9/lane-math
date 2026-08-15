@@ -108,7 +108,33 @@ describe("tap state machine (GDD §3.5)", () => {
     const out = d.handle({ type: "tapCommit" });
     expect(rejection(out)).toContain("not 8");
     expect(stateOf(out).phase).toBe("playing");
-    expect(stateOf(out).slots.leftTileId).toBeNull();
+  });
+
+  it("leaves the refused equation standing so it can be corrected (GDD §9.5)", () => {
+    /*
+     * This asserted the opposite until §9.5 was written: the slots were emptied
+     * on a refusal, so a wrong guess cost three taps to re-enter. Wrong
+     * arithmetic is explicitly not a failure state (§2 step 4) and should not
+     * carry a failure's price — and §9.5's "tiles stay put" has nothing to
+     * describe if the Director has already cleared them.
+     */
+    const d = new Director(CANONICAL, "normal");
+    let s = stateOf(d.handle({ type: "loadLevel", id: "x" }));
+    const left = idOfValue(s, 1);
+    s = stateOf(d.handle({ type: "tapTile", id: left }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    const right = idOfValue(s, 2);
+    s = stateOf(d.handle({ type: "tapTile", id: right }));
+
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.slots.leftTileId).toBe(left);
+    expect(s.slots.op).toBe("+");
+    expect(s.slots.rightTileId).toBe(right);
+
+    // And the player can fix just the wrong part rather than start over.
+    s = stateOf(d.handle({ type: "tapSlot", index: 1 }));
+    expect(s.slots.leftTileId).toBe(left);
+    expect(s.slots.op).toBeNull();
   });
 });
 

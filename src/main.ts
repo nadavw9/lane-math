@@ -137,8 +137,36 @@ function playIntoFailure(): string {
   return lastState?.phase ?? "unknown";
 }
 
+/**
+ * Measure the retry path (GDD §9.5: retry must be instantaneous).
+ *
+ * Counts animation frames between the restart input and a playable board. The
+ * number matters directly for retention — failure rewinds a whole level, which
+ * is the harshest retry in casual puzzle, so any screen in the way is paid for
+ * repeatedly. Measured rather than asserted, because "there is no modal in the
+ * code" and "the player is playing again" are different claims.
+ */
+function measureRetry(): Promise<{ frames: number; ms: number; playable: boolean }> {
+  return new Promise((resolve) => {
+    const startedAt = performance.now();
+    let frames = 0;
+
+    send({ type: "tapRestart" });
+    // Playable the instant the Director has rewound and the board has been
+    // drawn from it: no modal to dismiss, no transition to sit through.
+    const playable = lastState?.phase === "playing" && lastState.targetIndex === 0;
+
+    const step = (): void => {
+      frames++;
+      resolve({ frames, ms: performance.now() - startedAt, playable });
+    };
+    requestAnimationFrame(step);
+  });
+}
+
 Object.assign(window, {
   laneMath: {
+    measureRetry,
     load: (id: string) => {
       const level = levels.get(id);
       if (!level) throw new Error(`no level ${id}`);
@@ -149,6 +177,8 @@ Object.assign(window, {
     economy: () => economy.state,
     state: () => lastState,
     setEffectSpeed,
+    /** What the feel layer is running right now — see Renderer.feelState. */
+    feel: () => renderer.feelState(),
     telemetry: () => localSink.read(),
     clearTelemetry: () => localSink.clear(),
     offThread: () => winnability.offThread,

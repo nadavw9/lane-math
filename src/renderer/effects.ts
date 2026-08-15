@@ -1,5 +1,14 @@
 import { Container, Graphics } from "pixi.js";
 
+import { effectSpeed } from "./tween.js";
+
+/**
+ * Re-exported so `setEffectSpeed` keeps its existing import path while the
+ * clock itself lives with the rest of the feel layer (§9.5). One multiplier now
+ * drives every effect in the game, not just the shatter.
+ */
+export { setEffectSpeed } from "./tween.js";
+
 /**
  * GDD §9.3 — the commit animation is the emotional core.
  *
@@ -33,18 +42,6 @@ export interface ShatterOptions {
 
 const SHARDS = 9;
 const DURATION_MS = 420;
-
-/**
- * Slow-motion multiplier for effects.
- *
- * Exists so the review harness can photograph a 420ms animation mid-flight —
- * a screenshot round-trip is slower than the effect itself, and "trust me, it
- * shatters" is not a review. 1 in normal play.
- */
-let speed = 1;
-export function setEffectSpeed(multiplier: number): void {
-  speed = Math.max(0.05, multiplier);
-}
 
 /**
  * One shattering token. Owns its own Graphics and removes itself when spent, so
@@ -94,7 +91,7 @@ export class Shatter {
 
   /** @returns true while still alive. */
   update(deltaMs: number): boolean {
-    this.elapsed += deltaMs * speed;
+    this.elapsed += deltaMs * effectSpeed();
     const t = Math.min(1, this.elapsed / DURATION_MS);
     // Fast out, hard stop: an ease that decelerates reads as floating.
     const burst = 1 - Math.pow(1 - t, 3);
@@ -137,7 +134,7 @@ export class RejectPulse {
 
   /** @returns offset and glow strength to apply to the front target. */
   sample(deltaMs: number): { dx: number; dy: number; glow: number; alive: boolean } {
-    this.elapsed += deltaMs * speed;
+    this.elapsed += deltaMs * effectSpeed();
     const t = Math.min(1, this.elapsed / RejectPulse.DURATION);
     const decay = 1 - t;
 

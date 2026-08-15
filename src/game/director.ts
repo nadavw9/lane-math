@@ -553,10 +553,22 @@ export class Director {
     const target = this.frontTarget;
     if (!left || !right || target === undefined) return this.reject("nothing to commit");
 
+    /*
+     * A refused commit LEAVES THE EQUATION STANDING (GDD §9.5).
+     *
+     * It used to empty all three slots, which meant a wrong guess cost three
+     * taps to re-enter and punished the exploration this game is supposed to
+     * reward — wrong arithmetic is explicitly not a failure state (§2 step 4),
+     * so it should not carry a failure's price. Leaving it up also lets the
+     * player fix only the part that was wrong, usually the operator.
+     *
+     * The feel follows from it: §9.5 asks the row to RESIST — a shudder with
+     * the tiles staying put — and there is nothing to leave standing if the
+     * Director has already swept it away.
+     */
     const result = applyBinary(op, left.value, right.value, this.level.rules);
     if (result === null) {
       // Wrong arithmetic is not a failure state (GDD §2 step 4).
-      this.slots = { leftTileId: null, op: null, rightTileId: null };
       return this.reject(`${left.value} ${op} ${right.value} is not allowed here`);
     }
     if (result !== target) {
@@ -567,7 +579,6 @@ export class Director {
         correct: false,
         target_index: this.targetIndex,
       });
-      this.slots = { leftTileId: null, op: null, rightTileId: null };
       return this.reject(`${left.value} ${op} ${right.value} = ${result}, not ${target}`);
     }
 

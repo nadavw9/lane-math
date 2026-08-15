@@ -14,7 +14,26 @@ import {
   targetSlot,
 } from "./layout.js";
 import { RejectPulse, Shatter } from "./effects.js";
+import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import { emptySlot, ghostSlot, numberTile, operatorToken, targetPlate } from "./tokens.js";
+
+/**
+ * A token in transit between the pool and the equation row (§9.5).
+ *
+ * Placement and return are the two moves the player makes most, so they are the
+ * two that most need weight. Both are drawn as one token travelling — the seat
+ * it left and the seat it is heading for both stay empty until it lands.
+ */
+interface Flight {
+  readonly kind: "toSlot" | "toPool";
+  readonly slotIndex: 0 | 1 | 2;
+  /** null for the operator, which has no pool slot to return to. */
+  readonly tileId: number | null;
+  readonly label: string;
+  readonly from: { x: number; y: number; w: number; h: number };
+  readonly to: { x: number; y: number; w: number; h: number };
+  readonly tween: Tween;
+}
 
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/"];
 const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
@@ -43,6 +62,33 @@ export class Renderer {
   private reject: RejectPulse | null = null;
   private rejectOffset = { dx: 0, dy: 0, glow: 0 };
   private lastPhase: string = "playing";
+
+  /*
+   * THE FEEL LAYER (§9.5). All time-sampled, all read during draw().
+   *
+   * The board is rebuilt from scratch every frame, so none of these can hold
+   * display objects — they hold PROGRESS, and draw() asks them where things
+   * are. That is what lets the animation survive a redraw triggered by
+   * anything else, and it is why the effects compose instead of fighting.
+   */
+  /** Press feedback per tile: a tile coming up under the finger. */
+  private readonly lifts = new Map<number, Tween>();
+  private flights: Flight[] = [];
+  /** The queue shifting down after a target is cleared. */
+  private laneAdvance: Tween | null = null;
+  /** The equation row refusing an illegal commit. */
+  private resist: Tween | null = null;
+  /** Tiles rewriting themselves under a unary operator: id -> value before. */
+  private readonly rewrites = new Map<number, { from: number; tween: Tween }>();
+  /** Stars arriving one at a time on a clear. */
+  private starArrivals: Tween[] = [];
+  /**
+   * Hit-stop (§9.5): the board holds the PRE-commit frame for a beat so the
+   * payoff lands. The new state is parked here rather than drawn, which is the
+   * only way the hold reads as a hold — swapping the state and delaying only
+   * the shatter would show the tiles already gone.
+   */
+  private hold: { next: ViewState; remainingMs: number } | null = null;
 
   private get rejecting(): boolean {
     return this.reject !== null;
@@ -125,17 +171,79 @@ export class Renderer {
     this.emit = handler;
   }
 
+  /**
+   * What the feel layer is doing right now (§9.5).
+   *
+   * Exposed for the review harness: the effects are the deliverable this
+   * session, and a screenshot cannot prove one was mid-flight rather than
+   * finished before the shutter opened. This reports what was actually running
+   * at the moment the frame was captured, so the picture can be trusted.
+   */
+  feelState(): Record<string, unknown> {
+    return {
+      speed: effectSpeed(),
+      holding: this.hold !== null,
+      holdRemainingMs: this.hold?.remainingMs ?? 0,
+      lifts: [...this.lifts.entries()].map(([id, t]) => ({ id, at: Number(t.raw.toFixed(3)) })),
+      flights: this.flights.map((f) => ({
+        kind: f.kind,
+        slot: f.slotIndex,
+        label: f.label,
+        at: Number(f.tween.raw.toFixed(3)),
+      })),
+      rewrites: [...this.rewrites.entries()].map(([id, r]) => ({
+        id,
+        from: r.from,
+        at: Number(r.tween.raw.toFixed(3)),
+      })),
+      laneAdvance: this.laneAdvance ? Number(this.laneAdvance.raw.toFixed(3)) : null,
+      resist: this.resist ? Number(this.resist.raw.toFixed(3)) : null,
+      stars: this.starArrivals.map((s) => Number(s.raw.toFixed(3))),
+      shatters: this.shatters.length,
+    };
+  }
+
   apply(commands: readonly Command[]): void {
+    const rejected = commands.some((c) => c.type === "reject");
+
     for (const command of commands) {
-      if (command.type === "reject") this.rejection = command.reason;
+      if (command.type === "reject") {
+        this.rejection = command.reason;
+        // §9.5: the row RESISTS. Not an impact — a short lateral shudder that
+        // dies away, with every tile staying exactly where it was.
+        this.resist = new Tween(TIMING.resist, (t) => t);
+      }
       if (command.type === "render") {
-        const previous = this.state;
-        this.state = command.state;
-        if (commands.some((c) => c.type === "reject") === false) this.rejection = null;
-        this.reactTo(previous, command.state);
+        if (!rejected) this.rejection = null;
+
+        // A cleared target is the one moment worth holding (§9.5). Park the new
+        // state; tick() swaps it in once the beat has passed.
+        if (this.state !== null && command.state.targetIndex > this.state.targetIndex) {
+          this.hold = { next: command.state, remainingMs: TIMING.hitStop };
+          continue;
+        }
+        this.commitState(command.state);
       }
     }
     this.draw();
+  }
+
+  /** Adopt a new view state and start whatever it implies. */
+  private commitState(next: ViewState): void {
+    const previous = this.state;
+    this.state = next;
+    this.reactTo(previous, next);
+  }
+
+  /**
+   * Input is refused during the hit-stop.
+   *
+   * The Director has already moved on, so a tap landing in the held frame would
+   * be aimed at a board that no longer exists. It is 80ms — below the point
+   * anyone can act on what they are seeing — so nothing playable is lost.
+   */
+  private get inputLocked(): boolean {
+    return this.hold !== null;
   }
 
   /**
@@ -149,9 +257,38 @@ export class Renderer {
       this.shatters.length = 0;
       this.fx.removeChildren();
       this.reject = null;
+      // §9.5: retry is instantaneous. A fresh level inherits NO animation —
+      // leaving a shudder or a half-finished flight running would make the new
+      // board look like it was still recovering from the old one.
+      this.clearFeel();
       this.lastPhase = next.phase;
       return;
     }
+
+    /*
+     * A restart of the SAME level (§9.5: retry is instantaneous).
+     *
+     * The levelId is unchanged, so the fresh-level branch above does not catch
+     * it — the tell is the queue going backwards, which nothing else does. It
+     * has to be caught, or a board rewound mid-shudder would open still
+     * shuddering and the retry would look like it was recovering from the
+     * failure rather than starting clean.
+     */
+    const rewound =
+      next.targetIndex < previous.targetIndex ||
+      (previous.phase !== "playing" && next.phase === "playing");
+
+    if (rewound) {
+      this.shatters.length = 0;
+      this.fx.removeChildren();
+      this.clearFeel();
+      this.reject = null;
+      this.lastPhase = next.phase;
+      return;
+    }
+
+    this.reactToSlots(previous, next);
+    this.reactToTransforms(previous, next);
 
     // A target was cleared: the tiles that paid for it shatter into it (§9.3).
     if (next.targetIndex > previous.targetIndex) {
@@ -179,6 +316,11 @@ export class Renderer {
         targetX,
         targetY,
       );
+
+      // §9.5: the lane advances WITH MASS. The queue starts one slot high and
+      // falls into place on a gravity curve, so clearing a target reads as the
+      // whole column shifting rather than as numbers being reassigned.
+      this.laneAdvance = new Tween(TIMING.laneAdvance, EASE.fall);
     }
 
     // The lane refuses the front target (§9.4). No banner — the board says it.
@@ -186,7 +328,139 @@ export class Renderer {
       this.reject = new RejectPulse();
     }
     if (next.phase !== "failed") this.reject = null;
+
+    // §9.5: stars arrive ONE AT A TIME, weighted. Staggered delays rather than
+    // a burst — three stars landing together is a spray, which is the register
+    // this game does not use.
+    if (next.phase === "won" && this.lastPhase !== "won") {
+      const earned = next.economy?.starsIfCleared ?? 0;
+      this.starArrivals = Array.from(
+        { length: earned },
+        (_, i) => new Tween(TIMING.starArrive, EASE.settle, i * TIMING.starGap),
+      );
+    }
+
     this.lastPhase = next.phase;
+  }
+
+  /**
+   * Tiles moving into and out of the equation row (§9.5).
+   *
+   * Read from the slots rather than from the tap, so a refused tap animates
+   * nothing — the Director decides what happened and the feel follows it.
+   */
+  private reactToSlots(previous: ViewState, next: ViewState): void {
+    const board = this.bandsFor(next);
+    const poolIndex = (id: number): number => next.tiles.findIndex((t) => t.id === id);
+
+    const pairs: [0 | 1 | 2, number | null, number | null][] = [
+      [0, previous.slots.leftTileId, next.slots.leftTileId],
+      [2, previous.slots.rightTileId, next.slots.rightTileId],
+    ];
+
+    for (const [slotIndex, before, after] of pairs) {
+      if (before === after) continue;
+      const slot = equationSlot(slotIndex, board.equation);
+      const seat = { x: slot.x, y: slot.y, w: slot.width, h: slot.height };
+
+      if (after !== null) {
+        // Placed. It lifts off the pool first, then settles into the row.
+        const home = poolSlot(poolIndex(after), board.pool, board.grid);
+        const tile = next.tiles.find((t) => t.id === after);
+        this.lifts.set(after, new Tween(TIMING.lift, EASE.lift));
+        this.flights.push({
+          kind: "toSlot",
+          slotIndex,
+          tileId: after,
+          label: String(tile?.value ?? ""),
+          from: { x: home.x, y: home.y, w: home.width, h: home.height },
+          to: seat,
+          tween: new Tween(TIMING.place, EASE.settle),
+        });
+      } else if (before !== null) {
+        const tile = next.tiles.find((t) => t.id === before);
+
+        /*
+         * A SPENT tile has nowhere to return to.
+         *
+         * A successful commit also empties the slots, which looks identical to
+         * a return from here — so without this the two tiles that just paid for
+         * a target would shatter toward the lane and simultaneously fly home to
+         * a pool seat that is now a ghost. Consumption is the tell.
+         */
+        if (!tile || tile.consumed) continue;
+
+        // Returned. Back to ITS OWN slot — the pool never re-packs (§9.3), so
+        // there is always exactly one seat it belongs in.
+        const home = poolSlot(poolIndex(before), board.pool, board.grid);
+        this.flights.push({
+          kind: "toPool",
+          slotIndex,
+          tileId: before,
+          label: String(tile?.value ?? ""),
+          from: seat,
+          to: { x: home.x, y: home.y, w: home.width, h: home.height },
+          tween: new Tween(TIMING.returnHome, EASE.slide),
+        });
+      }
+    }
+  }
+
+  /**
+   * §9.5: a transformed tile visibly REWRITES ITSELF in place.
+   *
+   * The change is the event, so the tile turns edge-on and comes back carrying
+   * a different number — it never moves, never leaves, and is never replaced by
+   * a new token sliding in. Detected by value change on a surviving id, which
+   * is exactly what a transform is.
+   */
+  private reactToTransforms(previous: ViewState, next: ViewState): void {
+    for (const tile of next.tiles) {
+      if (tile.consumed) continue;
+      const was = previous.tiles.find((t) => t.id === tile.id);
+      if (!was || was.consumed || was.value === tile.value) continue;
+      this.rewrites.set(tile.id, { from: was.value, tween: new Tween(TIMING.rewrite, (t) => t) });
+    }
+  }
+
+  /** Drop every running effect. Used when a level opens or restarts (§9.5). */
+  private clearFeel(): void {
+    this.lifts.clear();
+    this.flights = [];
+    this.rewrites.clear();
+    this.laneAdvance = null;
+    this.resist = null;
+    this.starArrivals = [];
+    this.hold = null;
+  }
+
+  /**
+   * Tokens in transit (§9.5), drawn above the board.
+   *
+   * The travelling token carries a shadow that grows at the midpoint and closes
+   * as it lands, which is what sells it as a piece being LIFTED and set down
+   * rather than an icon sliding across a surface.
+   */
+  private drawFlights(): void {
+    for (const flight of this.flights) {
+      const t = flight.tween.value;
+      const x = lerp(flight.from.x, flight.to.x, t);
+      const y = lerp(flight.from.y, flight.to.y, t);
+      const w = lerp(flight.from.w, flight.to.w, t);
+      const h = lerp(flight.from.h, flight.to.h, t);
+
+      // Highest in the middle of the journey, flat at both ends.
+      const carried = Math.sin(Math.PI * Math.min(1, flight.tween.raw));
+
+      const token = numberTile(w, h, flight.label, {
+        fill: PALETTE.tile,
+        text: PALETTE.tokenInk,
+        bevel: 1,
+        elevation: 1 + carried * 2.2,
+      });
+      token.position.set(x, y - carried * 6);
+      this.root.addChild(token);
+    }
   }
 
   private spawnShatter(
@@ -217,7 +491,51 @@ export class Renderer {
       }
     }
 
+    // The hit-stop runs on the same scaled clock as everything else, so the
+    // review harness can slow it down and photograph the held frame (§9.5).
+    if (this.hold) {
+      this.hold.remainingMs -= deltaMs * effectSpeed();
+      if (this.hold.remainingMs <= 0) {
+        const { next } = this.hold;
+        this.hold = null;
+        this.commitState(next);
+      }
+      dirty = true;
+    }
+
+    if (this.advanceAll(deltaMs)) dirty = true;
+
     if (dirty) this.draw();
+  }
+
+  /** Step every feel tween. @returns true if anything is still running. */
+  private advanceAll(deltaMs: number): boolean {
+    let running = false;
+
+    for (const [id, tween] of this.lifts) {
+      if (tween.advance(deltaMs)) running = true;
+      else this.lifts.delete(id);
+    }
+    for (const [id, rewrite] of this.rewrites) {
+      if (rewrite.tween.advance(deltaMs)) running = true;
+      else this.rewrites.delete(id);
+    }
+    this.flights = this.flights.filter((flight) => flight.tween.advance(deltaMs));
+    if (this.flights.length > 0) running = true;
+
+    if (this.laneAdvance) {
+      if (this.laneAdvance.advance(deltaMs)) running = true;
+      else this.laneAdvance = null;
+    }
+    if (this.resist) {
+      if (this.resist.advance(deltaMs)) running = true;
+      else this.resist = null;
+    }
+    for (const star of this.starArrivals) {
+      if (star.advance(deltaMs)) running = true;
+    }
+
+    return running;
   }
 
   private text(value: string, size: number, colour: number): Text {
@@ -254,7 +572,7 @@ export class Renderer {
     container.addChild(t);
 
     container.position.set(x, y);
-    if (onTap) {
+    if (onTap && !this.inputLocked) {
       container.eventMode = "static";
       container.cursor = "pointer";
       container.on("pointertap", onTap);
@@ -270,7 +588,7 @@ export class Renderer {
     onTap?: () => void,
   ): Container {
     token.position.set(x, y);
-    if (onTap) {
+    if (onTap && !this.inputLocked) {
       token.eventMode = "static";
       token.cursor = "pointer";
       token.on("pointertap", onTap);
@@ -308,9 +626,13 @@ export class Renderer {
      * Drawn back-to-front so the front plate, the one that shudders, ends up on
      * top of its neighbour.
      */
+    // §9.5: the queue advances with mass. Mid-advance every plate is drawn one
+    // slot higher and falls in, so the column moves as a body.
+    const advancing = this.laneAdvance ? 1 - this.laneAdvance.value : 0;
+
     for (let i = s.targets.length - 1; i >= s.targetIndex; i--) {
       const offset = i - s.targetIndex;
-      const slot = targetSlot(offset, lane, board.grid);
+      const slot = targetSlot(offset + advancing, lane, board.grid);
       const front = offset === 0;
 
       // §9.4: the front target shudders and refuses to advance when the lane
@@ -348,14 +670,28 @@ export class Renderer {
       [s.slots.op ? (LABEL[s.slots.op] ?? s.slots.op) : "_", s.slots.op !== null, 1],
       [right ? String(right.value) : "_", right !== null, 2],
     ];
+
+    /*
+     * §9.5: an illegal commit makes the row RESIST.
+     *
+     * A lateral shudder that decays, applied to the equation row only — the
+     * pool and the lane do not move, so nothing reads as an impact on the whole
+     * board. This is the closest this game gets to screen shake, and it is
+     * deliberately confined to the thing that refused.
+     */
+    const resistDx = this.resist ? shudder(this.resist.raw, 7, 7) : 0;
+
     slotSpecs.forEach(([text, filled, index]) => {
       const r = equationSlot(index, equation);
       const tap = () => this.emit({ type: "tapSlot", index });
       // The empty row is shape-coded too: square, circle, square. Slot 2 takes
       // an operator and says so before anything is dropped into it.
       const shape = index === 1 ? "circle" : "square";
-      if (!filled) {
-        this.place(emptySlot(r.width, r.height, shape), r.x, r.y, tap);
+      // A token still in flight has not arrived: its seat stays empty until it
+      // lands, or the same token would be drawn twice.
+      const arriving = this.flights.some((f) => f.kind === "toSlot" && f.slotIndex === index);
+      if (!filled || arriving) {
+        this.place(emptySlot(r.width, r.height, shape), r.x + resistDx, r.y, tap);
         return;
       }
       // A filled slot keeps the SHAPE of what is in it: circle for the
@@ -374,7 +710,7 @@ export class Renderer {
             });
       this.place(
         token,
-        r.x + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0),
+        r.x + resistDx + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0),
         r.y,
         tap,
       );
@@ -384,7 +720,7 @@ export class Renderer {
     const commitRect = equationSlot(3, equation);
     this.root.addChild(
       this.box(
-        commitRect.x,
+        commitRect.x + resistDx,
         commitRect.y,
         commitRect.width,
         commitRect.height,
@@ -456,34 +792,69 @@ export class Renderer {
         this.place(ghostSlot(r.width, r.height), r.x, r.y);
         continue;
       }
+      // On its way home from the row: drawn as the flight, not here.
+      if (this.flights.some((f) => f.kind === "toPool" && f.tileId === tile.id)) {
+        this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
+        continue;
+      }
+
       const transformable = s.transformableTileIds.includes(tile.id);
       const dimmed =
         s.affordance === "transform"
           ? !transformable
           : s.affordance === "operators" || inSlot.has(tile.id);
 
+      /*
+       * §9.5: the tile REWRITES ITSELF under a unary operator.
+       *
+       * It turns edge-on and comes back a different number, showing the old
+       * value on the way out and the new one on the way back. The tile never
+       * moves and is never swapped for another token, so the change itself is
+       * the event rather than something arriving to replace it.
+       */
+      const rewrite = this.rewrites.get(tile.id);
+      const turned = rewrite ? Math.abs(Math.cos(Math.PI * rewrite.tween.raw)) : 1;
+      const halfway = rewrite ? rewrite.tween.raw >= 0.5 : true;
+      const shown = rewrite && !halfway ? rewrite.from : tile.value;
+
+      // Press feedback: it comes up toward the viewer and settles back.
+      const lift = this.lifts.get(tile.id);
+      const rise = lift ? Math.sin(Math.PI * lift.value) : 0;
+
+      const token = numberTile(r.width, r.height, String(shown), {
+        fill: dimmed
+          ? PALETTE.tileDim
+          : (rewrite ? halfway : tile.transformed)
+            ? PALETTE.tileTransformed
+            : PALETTE.tile,
+        text: dimmed ? PALETTE.tokenInkDim : PALETTE.tokenInk,
+        // Dimmed tiles lose their bevel too, so "inactive" is carried by
+        // form as well as colour.
+        bevel: dimmed ? 0.15 : 1,
+        // A lifted tile sits above the surface, so its shadow grows with it.
+        elevation: 1 + rise * 1.6,
+        outline:
+          transformable || pulsed.has(tile.id) || hinted.has(tile.id)
+            ? PALETTE.highlight
+            : undefined,
+      });
+
+      // Scale about the tile's own centre so it grows in place rather than
+      // drifting toward its bottom-right corner.
+      const grow = 1 + rise * 0.07;
+      token.pivot.set(r.width / 2, r.height / 2);
+      token.scale.set(grow * turned, grow);
+
       this.place(
-        numberTile(r.width, r.height, String(tile.value), {
-          fill: dimmed
-            ? PALETTE.tileDim
-            : tile.transformed
-              ? PALETTE.tileTransformed
-              : PALETTE.tile,
-          text: dimmed ? PALETTE.tokenInkDim : PALETTE.tokenInk,
-          // Dimmed tiles lose their bevel too, so "inactive" is carried by
-          // form as well as colour.
-          bevel: dimmed ? 0.15 : 1,
-          outline:
-            transformable || pulsed.has(tile.id) || hinted.has(tile.id)
-              ? PALETTE.highlight
-              : undefined,
-        }),
-        r.x,
-        r.y,
+        token,
+        r.x + r.width / 2,
+        r.y + r.height / 2 - rise * 5,
         () => this.emit({ type: "tapTile", id: tile.id }),
       );
       this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
     }
+
+    this.drawFlights();
 
     // Ghosts are drawn in the pool loop above, straight from `tile.consumed`.
     // They used to be a list of bounds recorded when a shatter fired, which was
@@ -715,21 +1086,46 @@ export class Renderer {
     //
     // A win still needs an exit, so the cleared state offers one quietly.
     if (s.phase === "won") {
-      const bannerY = lane.y + lane.height / 2 - 30;
+      // Tall enough to seat the headline AND the stars: at 60 the stars
+      // straddled the bottom edge, which read as an overflow rather than as a
+      // tally.
+      const bannerH = 92;
+      const bannerY = lane.y + lane.height / 2 - bannerH / 2;
       this.root.addChild(
         new Graphics()
-          .roundRect(lane.x + 20, bannerY, lane.width - 40, 60, 10)
+          .roundRect(lane.x + 20, bannerY, lane.width - 40, bannerH, 10)
           .fill({ color: PALETTE.won, alpha: 0.92 }),
       );
       const headline = this.text("CLEARED", 24, PALETTE.tokenInk);
       headline.anchor.set(0.5);
-      headline.position.set(DESIGN.width / 2, bannerY + 30);
+      headline.position.set(DESIGN.width / 2, bannerY + 28);
       this.root.addChild(headline);
+
+      /*
+       * §9.5: stars arrive ONE AT A TIME, weighted.
+       *
+       * Each is staggered behind the last and settles in from slightly oversize
+       * rather than popping or spraying. Three landing at once would be a
+       * celebration; three landing in sequence is a tally being counted out,
+       * which is the register this game earns its reward in.
+       */
+      this.starArrivals.forEach((star, i) => {
+        if (!star.started) return;
+        const glyph = this.text("★", 26, PALETTE.highlight);
+        glyph.anchor.set(0.5);
+        const spread = 34;
+        const x = DESIGN.width / 2 + (i - (this.starArrivals.length - 1) / 2) * spread;
+        // Comes in oversize and settles down onto the banner.
+        glyph.scale.set(lerp(1.9, 1, star.value));
+        glyph.alpha = Math.min(1, star.raw * 3);
+        glyph.position.set(x, bannerY + 66);
+        this.root.addChild(glyph);
+      });
 
       this.root.addChild(
         this.box(
           DESIGN.width / 2 - 60,
-          bannerY + 72,
+          bannerY + bannerH + 12,
           120,
           34,
           PALETTE.slotFilled,
