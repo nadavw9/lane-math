@@ -27,8 +27,18 @@ export function advancesTarget(previous: ViewState, next: ViewState): boolean {
  * failure rather than starting clean.
  */
 export function isRewind(previous: ViewState, next: ViewState): boolean {
+  /*
+   * `run` is the authoritative tell, and the others are belt and braces.
+   *
+   * Restarting mid-level — before anything is consumed and while still at
+   * target 0 — changes nothing about the board except the equation row
+   * emptying, which is byte-for-byte what returning a tile looks like. Diffing
+   * alone genuinely cannot separate them, so the Director counts its own
+   * rewinds and this reads the counter.
+   */
   return (
     next.levelId !== previous.levelId ||
+    next.run !== previous.run ||
     next.targetIndex < previous.targetIndex ||
     (previous.phase !== "playing" && next.phase === "playing")
   );

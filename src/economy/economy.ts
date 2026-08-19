@@ -251,6 +251,15 @@ export class Economy {
     this.commit({ ...this.save, selectedMode: mode });
   }
 
+  /** Audio off. Persisted, so the choice survives a relaunch. Default ON. */
+  get muted(): boolean {
+    return this.save.muted;
+  }
+
+  setMuted(muted: boolean): void {
+    this.commit({ ...this.save, muted });
+  }
+
   hintsPurchased(levelId: string): readonly string[] {
     return this.progressFor(levelId).hintsPurchased;
   }

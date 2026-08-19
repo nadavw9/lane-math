@@ -1,3 +1,4 @@
+import { Sound } from "./audio/sound.js";
 import { Economy } from "./economy/economy.js";
 import { LocalStorageStore } from "./economy/save.js";
 import { Director } from "./game/director.js";
@@ -78,6 +79,27 @@ function open(level: LadderLevel): void {
   void renderer.setWorld(level.world);
   apply(director.firstRender());
 }
+
+/*
+ * AUDIO — created on the first user gesture, and NEVER on the input path.
+ *
+ * Browsers refuse to start an AudioContext outside a gesture, but constructing
+ * one and filling a noise buffer is synchronous work measured in milliseconds,
+ * and the game's tap response is not allowed to pay for it. So the first
+ * pointerdown SCHEDULES the warm-up and returns immediately: the gesture that
+ * unlocks audio is silent, every gesture after it is not, and no tap ever waits
+ * for the audio system.
+ */
+const sound = new Sound();
+sound.setMuted(economy.muted);
+renderer.attachSound(sound);
+
+const warmAudio = (): void => {
+  window.removeEventListener("pointerdown", warmAudio);
+  // Deferred off the gesture so the handler returns before any audio work.
+  setTimeout(() => sound.warm(), 0);
+};
+window.addEventListener("pointerdown", warmAudio);
 
 renderer.onInput(send);
 open(currentLevel);
@@ -164,9 +186,42 @@ function measureRetry(): Promise<{ frames: number; ms: number; playable: boolean
   });
 }
 
+/**
+ * Tap-to-response latency, measured end to end (Phase 5F verification).
+ *
+ * Times the whole synchronous path a tap takes — Director rules, solver
+ * queries, the renderer rebuilding the board, and now the audio layer
+ * scheduling a cue. Audio is the thing on trial: sound must never be paid for
+ * on the input path, so this is run twice, once unmuted and once muted, and the
+ * two numbers have to agree.
+ *
+ * Alternates staging and returning the same tile so every iteration does
+ * identical work and the board ends where it started.
+ */
+function measureTapLatency(iterations = 200): { median: number; mean: number; max: number } {
+  const samples: number[] = [];
+  const tile = lastState?.tiles.find((t) => !t.consumed);
+  if (!tile) return { median: 0, mean: 0, max: 0 };
+
+  for (let i = 0; i < iterations; i++) {
+    const started = performance.now();
+    send({ type: "tapTile", id: tile.id });
+    samples.push(performance.now() - started);
+    send({ type: "tapSlot", index: 0 });
+  }
+
+  samples.sort((a, b) => a - b);
+  return {
+    median: samples[Math.floor(samples.length / 2)]!,
+    mean: samples.reduce((a, b) => a + b, 0) / samples.length,
+    max: samples[samples.length - 1]!,
+  };
+}
+
 Object.assign(window, {
   laneMath: {
     measureRetry,
+    measureTapLatency,
     load: (id: string) => {
       const level = levels.get(id);
       if (!level) throw new Error(`no level ${id}`);
@@ -177,6 +232,21 @@ Object.assign(window, {
     economy: () => economy.state,
     state: () => lastState,
     setEffectSpeed,
+    /** Audio, for the harness: state, the played-cue log, and the mute toggle. */
+    audio: () => ({
+      ready: sound.ready,
+      muted: sound.isMuted,
+      contextTimeMs: sound.contextTimeMs,
+      log: [...sound.log],
+    }),
+    warmAudio: () => sound.warm(),
+    clearAudioLog: () => {
+      sound.log.length = 0;
+    },
+    setMuted: (muted: boolean) => {
+      economy.setMuted(muted);
+      sound.setMuted(muted);
+    },
     /** What the feel layer is running right now — see Renderer.feelState. */
     feel: () => renderer.feelState(),
     telemetry: () => localSink.read(),

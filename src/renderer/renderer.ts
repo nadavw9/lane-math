@@ -16,6 +16,8 @@ import {
   targetSlot,
 } from "./layout.js";
 import { RejectPulse, Shatter } from "./effects.js";
+import { cuesFor } from "../audio/cues.js";
+import type { Sound } from "../audio/sound.js";
 import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import {
@@ -101,6 +103,17 @@ export class Renderer {
    * the shatter would show the tiles already gone.
    */
   private hold: { next: ViewState; remainingMs: number } | null = null;
+
+  /**
+   * The sound layer (§9.5 register, applied to audio).
+   *
+   * Owned by the Renderer because sound is FEEL, and feel is decided by
+   * watching state change — exactly what this class already does. The Director
+   * stays free of it, so nothing about the rules knows the game makes a noise.
+   */
+  private sound: Sound | null = null;
+  /** Which star tweens have already sounded, so each one speaks once. */
+  private starsSounded = 0;
 
   private get rejecting(): boolean {
     return this.reject !== null;
@@ -201,6 +214,10 @@ export class Renderer {
     this.emit = handler;
   }
 
+  attachSound(sound: Sound): void {
+    this.sound = sound;
+  }
+
   /**
    * What the feel layer is doing right now (§9.5).
    *
@@ -252,17 +269,26 @@ export class Renderer {
           this.hold = { next: command.state, remainingMs: TIMING.hitStop };
           continue;
         }
-        this.commitState(command.state);
+        this.commitState(command.state, rejected);
       }
     }
     this.draw();
   }
 
   /** Adopt a new view state and start whatever it implies. */
-  private commitState(next: ViewState): void {
+  private commitState(next: ViewState, rejected = false): void {
     const previous = this.state;
     this.state = next;
     this.reactTo(previous, next);
+
+    /*
+     * Sound is driven from the ADOPTED state, never from the input.
+     *
+     * That is what keeps the hit-stop silent without a special case: the hold
+     * defers this call, so the commit thunk cannot physically be produced until
+     * the beat has passed and the shatter is landing.
+     */
+    this.sound?.playAll(cuesFor(previous, next, rejected));
   }
 
   /**
@@ -451,6 +477,7 @@ export class Renderer {
 
   /** Drop every running effect. Used when a level opens or restarts (§9.5). */
   private clearFeel(): void {
+    this.starsSounded = 0;
     this.lifts.clear();
     this.flights = [];
     this.rewrites.clear();
@@ -546,7 +573,22 @@ export class Renderer {
       if (rewrite.tween.advance(deltaMs)) running = true;
       else this.rewrites.delete(id);
     }
-    this.flights = this.flights.filter((flight) => flight.tween.advance(deltaMs));
+    /*
+     * A landing knock, fired when the token actually arrives (§9.5).
+     *
+     * Not at the tap: the click is the finger, the knock is the piece meeting
+     * the table, and they are ~260ms apart. Firing both at once would collapse
+     * the placement into a single blip and lose the weight the flight exists to
+     * create.
+     */
+    const landed = this.flights.filter((flight) => !flight.tween.advance(deltaMs));
+    for (const flight of landed) {
+      // Only a PLACEMENT gets a landing sound. A return already spoke when the
+      // player tapped it — sounding it again here double-knocked every undo,
+      // which the cue log caught immediately.
+      if (flight.kind === "toSlot") this.sound?.play({ name: "knock" });
+    }
+    this.flights = this.flights.filter((flight) => !flight.tween.done);
     if (this.flights.length > 0) running = true;
 
     if (this.laneAdvance) {
@@ -560,6 +602,15 @@ export class Renderer {
     for (const star of this.starArrivals) {
       if (star.advance(deltaMs)) running = true;
     }
+
+    // One note per star as it SEATS, never three together (§9.5). Counted
+    // rather than flagged per tween, so the notes stay in the order the stars
+    // arrive in.
+    const seated = this.starArrivals.filter((star) => star.started).length;
+    for (let i = this.starsSounded; i < seated; i++) {
+      this.sound?.play({ name: "star", tone: i / Math.max(1, this.starArrivals.length - 1) });
+    }
+    this.starsSounded = Math.max(this.starsSounded, seated);
 
     return running;
   }

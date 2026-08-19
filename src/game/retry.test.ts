@@ -136,7 +136,7 @@ describe("retry is instantaneous (GDD §9.5)", () => {
 
 describe("transition predicates", () => {
   const base = (over: Partial<ViewState>): ViewState =>
-    ({ levelId: "1-01", targetIndex: 0, phase: "playing", ...over }) as ViewState;
+    ({ levelId: "1-01", run: 1, targetIndex: 0, phase: "playing", ...over }) as ViewState;
 
   it("only a rising target index holds a frame", () => {
     expect(advancesTarget(base({ targetIndex: 0 }), base({ targetIndex: 1 }))).toBe(true);
@@ -144,11 +144,38 @@ describe("transition predicates", () => {
     expect(advancesTarget(base({ targetIndex: 2 }), base({ targetIndex: 0 }))).toBe(false);
   });
 
+  it("recognises a mid-level restart, which the board state alone cannot show", () => {
+    /*
+     * The case that was WRONG until audio went in.
+     *
+     * Restart before anything is consumed, still at target 0 and still playing:
+     * every field the renderer diffs is identical except the equation row
+     * emptying, which is exactly what returning a tile looks like. It was being
+     * animated as a return — tiles flying home — and sounded a knock the player
+     * never earned. The Director now counts its own rewinds.
+     */
+    const level = load("1-01");
+    const director = new Director(level, "normal");
+    let state = stateOf(director.handle({ type: "loadLevel", id: level.id }));
+    const live = state.tiles.filter((t) => !t.consumed);
+    state = stateOf(director.handle({ type: "tapTile", id: live[0]!.id }));
+
+    const after = stateOf(director.handle({ type: "tapRestart" }));
+
+    expect(after.targetIndex).toBe(state.targetIndex);
+    expect(after.phase).toBe(state.phase);
+    expect(after.levelId).toBe(state.levelId);
+    // Indistinguishable on every other field — and still correctly a rewind.
+    expect(after.run).toBeGreaterThan(state.run);
+    expect(isRewind(state, after)).toBe(true);
+  });
+
   it("recognises every way a board can go backwards", () => {
     expect(isRewind(base({ targetIndex: 3 }), base({ targetIndex: 0 }))).toBe(true);
     expect(isRewind(base({ phase: "failed" }), base({ phase: "playing" }))).toBe(true);
     expect(isRewind(base({ phase: "won" }), base({ phase: "playing" }))).toBe(true);
     expect(isRewind(base({ levelId: "1-01" }), base({ levelId: "1-02" }))).toBe(true);
+    expect(isRewind(base({ run: 2 }), base({ run: 3 }))).toBe(true);
     expect(isRewind(base({ targetIndex: 1 }), base({ targetIndex: 2 }))).toBe(false);
   });
 });

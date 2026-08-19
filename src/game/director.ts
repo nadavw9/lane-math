@@ -63,6 +63,8 @@ export class Director {
   private tiles: Tile[] = [];
   private consumed = new Set<number>();
   private targetIndex = 0;
+  /** Increments on every rewind, so a restart is distinguishable from a move. */
+  private run = 0;
   private budget: OperatorBudget = {};
   private slots: SlotsView = { leftTileId: null, op: null, rightTileId: null };
   private phase: Phase = "playing";
@@ -141,6 +143,17 @@ export class Director {
 
   /** Restart to level start (GDD §4.3). Rewind is to the start, never to the fatal move. */
   private reset(): void {
+    /*
+     * A restart is not always visible in the board state.
+     *
+     * Restarting mid-level, before anything has been consumed, produces a state
+     * that differs from the previous one only by the equation row emptying —
+     * which is exactly what returning a tile looks like. The Renderer diffs
+     * states to decide what to animate and what to sound, so it would treat a
+     * rewind as a return: tiles flying home, and a knock the player never
+     * earned. This counter is the one unambiguous tell.
+     */
+    this.run++;
     this.tiles = this.level.pool.map((value, id) => ({ id, value, transformed: false }));
     this.consumed = new Set();
     this.targetIndex = 0;
@@ -343,6 +356,7 @@ export class Director {
   private state(): ViewState {
     return {
       levelId: this.level.id,
+      run: this.run,
       mode: this.mode,
       targets: this.level.targets,
       targetIndex: this.targetIndex,

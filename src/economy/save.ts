@@ -40,6 +40,15 @@ export interface SaveData {
   readonly starsSpent: number;
   /** GDD §6. Persisted so the choice survives a relaunch. */
   readonly selectedMode: "casual" | "normal" | "expert";
+  /**
+   * Audio off. Default false — sound is ON, per the Phase 5F brief.
+   *
+   * Additive with a safe default, so it needs no schema bump: `migrate` already
+   * coalesces every field, and a save written before audio existed simply reads
+   * as unmuted. That is the whole reason the versioning went in before it was
+   * needed.
+   */
+  readonly muted: boolean;
 }
 
 export const EMPTY_PROGRESS: LevelProgress = {
@@ -62,6 +71,7 @@ export function emptySave(now: number, maxLives: number): SaveData {
     // GDD §6 and the Phase 3 brief: Normal is the default. Casual is a choice
     // the player makes once the selector unlocks at 3-10 (§7.6).
     selectedMode: "normal",
+    muted: false,
   };
 }
 
@@ -139,6 +149,7 @@ export function migrate(raw: unknown): SaveData | null {
     totalStars: migrated.totalStars ?? 0,
     starsSpent: migrated.starsSpent ?? 0,
     selectedMode: migrated.selectedMode ?? "normal",
+    muted: migrated.muted ?? false,
   };
 }
 

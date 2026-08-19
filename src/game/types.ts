@@ -39,6 +39,11 @@ export type Affordance = "numbers" | "operators" | "commit" | "transform";
 
 export interface ViewState {
   readonly levelId: string;
+  /**
+   * How many times this level has been rewound. Bumped by every reset, so the
+   * Renderer can tell a restart from a move that happens to look like one.
+   */
+  readonly run: number;
   readonly mode: Mode;
   readonly targets: readonly number[];
   readonly targetIndex: number;
