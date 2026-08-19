@@ -707,9 +707,18 @@ An interim banner is acceptable during Phases 3–4 for debuggability and must b
 
 ### 9.6 Palette and material
 
-**One accent colour: gold.** It already marks the front target and the stars. Every "ready", "armed" or "earned" state uses it. There is no second accent — green currently appears on the `=` button and the CLEARED banner and belongs to nothing else in the design, which reads as a default rather than a decision.
+**Materials and signals are separate sets.**
 
-The full palette is: cream paper ground, ink navy plates, dark walnut tiles, teal-slate operators, gold accent. Nothing else.
+*Materials* — cream paper ground, ink navy plates, dark walnut tiles, teal-slate operators. Nothing else. A material colour never carries meaning.
+
+*Signals* — exactly two, and no more may be added without an amendment:
+
+| Signal | Colour | Means |
+|---|---|---|
+| Gold | accent | ready, armed, earned |
+| Failure red | `0x7a2020` | refused, blocked |
+
+Green was removed because gold already meant "ready", so green meant nothing. Failure red stays because it means something gold does not, and because §9.4's pulse is transient — once the board settles, the refused state still has to read.
 
 **Dim is less presence, not a different substance.** A dimmed token keeps its own colour and loses opacity, elevation and shadow depth. Shifting hue to neutral grey introduces a colour outside the palette and reads as a disabled web control.
 
