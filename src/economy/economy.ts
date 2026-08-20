@@ -183,6 +183,24 @@ export class Economy {
     return true;
   }
 
+  /**
+   * Grant a life bought with a rewarded ad view (GDD §5.2, §12).
+   *
+   * Capped at the normal ceiling, so watching ads cannot stockpile lives beyond
+   * what waiting would give — the ad buys TIME, not an advantage, which is what
+   * keeps it outside the fairness contract in §8.1.
+   *
+   * Does not touch the regeneration anchor: an ad life is a top-up, and moving
+   * the anchor would silently cancel the refill the player was already waiting
+   * for, charging them an ad for something they had nearly earned.
+   */
+  grantAdLife(): boolean {
+    this.regenerate();
+    if (this.save.lives >= this.config.maxLives) return false;
+    this.commit({ ...this.save, lives: this.save.lives + 1 });
+    return true;
+  }
+
   /** Can the player start this level? Lives are off in World 1 (§7.2). */
   canPlay(levelId: string): boolean {
     if (!livesActiveFor(levelId, this.config)) return true;
@@ -239,6 +257,11 @@ export class Economy {
   }
 
   /** Stars available to spend: banked minus already spent (GDD §5.4). */
+  /** The life ceiling, so the map can draw empty pips as well as full ones. */
+  get maxLivesAllowed(): number {
+    return this.config.maxLives;
+  }
+
   get starsAvailable(): number {
     return this.save.totalStars - this.save.starsSpent;
   }

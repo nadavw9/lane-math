@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # Every gate in one job: they share an npm install and none of them is slow.
+  # Split them out only when one starts costing minutes on its own.
+  gates:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The named gates below are all inside `vitest run`, but they are called
+      # out separately so a failure names ITSELF in the CI log rather than
+      # arriving as "1 of 270 tests failed".
+      - name: Brightness gate (GDD 9.1 — tokens clear 3:1 on every world)
+        run: npx vitest run src/art/brightness-gate.test.ts
+
+      - name: Retry path (GDD 9.5 — restart emits exactly one render)
+        run: npx vitest run src/game/retry.test.ts
+
+      - name: Flight bound (frame-dependent correctness, CLAUDE.md 8)
+        run: npx vitest run src/renderer/flights.test.ts
+
+      - name: Full suite
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+      - name: Report web build size
+        run: |
+          echo "### Web build" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist >> "$GITHUB_STEP_SUMMARY"
+          du -b dist | tail -1 | awk '{printf "%d bytes\n", $1}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # MASTER ONLY. The gates run on every branch so a change can be judged by CI
+  # before it reaches master, but a branch must never publish to production.
+  deploy:
+    needs: gates
+    if: github.ref == 'refs/heads/master'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

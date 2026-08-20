@@ -1,129 +1,128 @@
-Lane Math — the tap-latency leak, found and fixed. Plus operator sound and one
-star reading.
+Lane Math — Phase 6: ship it. Map screen, Capacitor Android, ads, CI, signed APK.
 
-01-one-star-reading.png   The lane header. ONE star visual where there were three.
-
-===============================================================================
-STEP 1 — BISECT. Slope per commit, identical 600-tap measurement, median ms.
-
-  commit                                     100   200   300   400   500   600
-  eb19f2a phase3 playable renderer           0.2   0.2   0.3   0.2   0.2   0.3
-  1b4b7b9 layout: pool holds position        0.4   0.3   0.3   0.2   0.3   0.3
-  86dce2a the feel layer                     2.8   6.6  10.9  23.1  30.9  38.9
-  d226e06 audio (current, before fix)        2.8   6.0  10.4  14.4  19.4  23.4
-
-  The brief asked for three commits; I added 1b4b7b9, the commit IMMEDIATELY
-  before the feel layer, because several commits sit between Phase 3 and 5D and
-  "Phase 3 is clean, 5D leaks" would not have isolated which one. It is flat, so
-  the feel commit introduced it exactly. One commit, not a range.
+02-world-map.png   The world map. 4x10, cleared/open/locked, banked stars, mute.
 
 ===============================================================================
-STEP 2 — COUNT WHAT GROWS. Tight 600-tap loop, before the fix.
+THE MAP SCREEN — the spec hole is closed.
 
-  taps                100     200     400     600    verdict
-  median ms           3.0     7.5    16.2    35.6    grows
-  flights             200     400     800    1200    GROWS, 2 per tap
-  rootChildren        222     422     822    1222    grows as 22 + 2x flights
-  heap MB           183.8   507.9  1738.5  3751.5    grows
-  tickerListeners       2       2       2       2    FLAT
-  lifts (Map)           1       1       1       1    FLAT
-  rewrites (Map)        0       0       0       0    FLAT
-  starArrivals          0       0       0       0    FLAT
-  shatters              0       0       0       0    FLAT
-  tileBounds (Map)      6       6       6       6    FLAT
-  fx children           0       0       0       0    FLAT
-  background children   1       1       1       1    FLAT
-  stage children        3       3       3       3    FLAT
+  Built in the §9.6 material language, not as a menu: the same squared paper,
+  the same wooden tray, the same navy plates, the one gold accent. A level is a
+  hexagonal plate — the same object the lane queues — so the map reads as the
+  same desk seen from further back.
 
-  YOUR PRIOR IS DISPROVED, and cleanly: ticker listeners are flat at 2 for the
-  whole run. Nothing registers a callback per effect. Every tween collection is
-  also flat — lifts, rewrites and starArrivals all self-prune correctly. The one
-  thing that grows is `flights`, and rootChildren tracks it exactly, because
-  every live flight draws one extra token on every redraw.
+  Progression is strictly linear and NOT star-gated. §8.1's fairness contract
+  says the ladder is the difficulty curve; a star toll on top would be a second
+  curve the player cannot see, which is the same objection as hidden difficulty
+  adjustment. Cleared levels stay open forever so stars can be improved (§5.4).
 
-  CAUSE: flights was a plain array, appended to on every placement and pruned
-  ONLY inside the ticker callback. Tap cost is linear in flights because
-  drawFlights() walks it every redraw.
+  Unlocks per §7.6, absent rather than greyed: lives at 2-8, shop at 3-6, modes
+  cleared 3-10, and the map itself at cleared 1-10 — so the "map" button on the
+  board is also absent until then. 9 tests cover the disclosure schedule.
 
-  TRIGGER, and this matters for how to read the numbers: the benchmark drives
-  input in a tight synchronous loop, so no frame is ever delivered, so the
-  pruning never runs. Re-measured with a requestAnimationFrame yield between
-  taps, the SAME pre-fix build is flat at 1.0ms with flights plateauing at
-  12-15. So a player tapping at human speed never saw this. What the code had
-  was not "slow", it was "correct only while frames keep arriving" — which a
-  background tab, a long GC or a slow device all break.
-
-  STEP 3 not needed. Counting answered it.
+  ONE JUDGEMENT CALL, flagged: locked LEVELS are dimmed, not absent. §7.6's
+  absent-before-unlock rule is about systems the player has no use for yet, and
+  seeing that there are forty levels is the entire point of a map. Say if you
+  want them hidden instead.
 
 ===============================================================================
-THE FIX — bounded by construction, not by the ticker.
+1. CAPACITOR ANDROID
+   appId com.nadavw.lanemath, portrait locked in the manifest. Took Capacitor
+   core/android/cli and the AdMob community plugin only — not lane-defense's
+   haptics or anything else it happened to have.
 
-  flights is now keyed by SLOT (src/renderer/flights.ts). A slot holds one thing
-  at a time, so it can have at most one token travelling to or from it, and there
-  are three slots. The collection cannot exceed three however input arrives, and
-  a new flight for a seat supersedes the stale one instead of stacking a second
-  identical token on top of it — which was a second, quieter bug in the same
-  code: rapid taps on one slot drew overlapping tokens.
+2. ADMOB — rewarded video only, for the §5.2 life refill. No interstitials.
+   Test ids throughout: app id ca-app-pub-3940256099942544~3347511713 in the
+   manifest, rewarded unit ...~/5224354917 in src/ads/ads.ts. Production ids
+   replace those two constants and nothing else.
 
-  The fix removes the dependency on frame delivery rather than making pruning
-  more frequent. Nothing has to be trusted for it to hold.
+   The plugin is INJECTED, so the reward logic is testable without a device —
+   which matters, because the failure paths are what a device test skips. 6
+   tests: grants only on a real reward callback; a dismissal grants nothing and
+   COSTS nothing; no fill degrades to unavailable; absent entirely on web.
 
-  AFTER, same tight 600-tap loop that produced 35.6ms:
-  taps            100    200    400    600
-  median ms       0.5    0.5    0.5    0.5     flat
-  flights           1      1      1      1     flat
-  rootChildren     22     22     22     22     flat
-  heap MB        56.6   81.3  107.1  145.3     normal churn, was 3751
+   Two economy rules worth stating. An ad life is capped at the normal ceiling,
+   so ads buy TIME, not an advantage — that keeps them outside §8.1. And it does
+   not move the regeneration anchor, or an ad would silently cancel the free
+   refill the player was already waiting for.
 
-REGRESSION TEST — src/renderer/flights.test.ts, 7 tests.
-  Deliberately NOT a millisecond assertion: that would be machine-dependent and
-  flaky, and it would pin the symptom. It asserts the quantity that DRIVES the
-  latency — the number of flights, which is the per-redraw draw work — stays
-  bounded no matter how much input arrives, with the clock never advanced,
-  because that is the exact failing condition. 600 taps with no frame in
-  between: size stays 1. That is the machine-independent form of "600 taps costs
-  what 100 taps costs".
+3. TELEMETRY REMOTE SINK — NOT ADDED, seam intact, and here is why.
+   §12's zero-cost rule rules out the realistic options. Every managed analytics
+   endpoint that would fit this game (a few events per session, 40 levels)
+   either needs an account with a paid tier behind it, or is a third-party SDK
+   with its own bundle and privacy cost — which for an offline single-player
+   puzzle buys nothing a local funnel does not already give. A self-hosted
+   endpoint is not zero-cost either; it is a server to keep alive.
+   TelemetrySink is a one-method interface and LocalStorageSink already
+   implements it, so adding a remote one later is a file, not a refactor. I have
+   not added a dependency to hold that open. Tell me if you have an endpoint.
+
+4. CI/CD — .github/workflows/ci.yml. Typecheck, then the three named gates
+   (brightness, retry path, flight bound) run individually so a failure names
+   ITSELF in the log rather than arriving as "1 of 270 tests failed", then the
+   full suite, then build, then Pages deploy on master only. Branch pushes run
+   every gate and never publish.
+
+   NOT VERIFIED GREEN ON GITHUB — this repo has no remote configured, so nothing
+   has been pushed and no run exists. Every step was run locally and passes.
+   That is a real gap and I am not going to call it green.
+
+5. SIGNED RELEASE APK — 3.75 MB (3,933,178 bytes).
+   Signed with the existing keystore (CN=Lane Defense), R8 + shrinkResources on.
+   Keystore, keystore.properties and local.properties are all gitignored and
+   confirmed untracked.
+
+   What is actually in it:
+     classes.dex           4,906,156 uncompressed  <- Play Services Ads is most
+     web bundle (js)       ~  850,000
+     backgrounds (4 webp)  ~  395,000
+     resources.arsc           509,448
+   The Java side dominates, not the game. Dropping AdMob would save more than
+   any web-bundle work — noting that, not proposing it.
+
+6. BUNDLE — measured before changing anything, as asked.
+
+   PixiJS share, measured by building the whole game against a stub Pixi:
+     game code only    407,031 raw /  52,805 gz
+     with PixiJS       958,905 raw / 215,014 gz
+     PIXI              551,874 raw (57.6%) / 162,209 gz (75.4%)
+
+   So over the wire Pixi is three quarters of it, and your instinct was right.
+   But two things temper what tree-shaking can recover:
+     - It is ALREADY a production build with the renderers code-split. WebGPU
+       (38.9 KB raw / 10.9 KB gz) and WebGL (68.7 / 18.8) are separate lazy
+       chunks; only the one the device uses loads. The 688 KB index chunk is
+       Pixi CORE plus the game, and Pixi v8's core is not meaningfully
+       subsettable through the public entry points.
+     - Dev-only deprecation strings ARE still in the bundle, so a genuinely
+       production Pixi build is not being selected. That is a real finding and
+       the first thing to try — but I have not measured what it saves, and I am
+       not going to quote a number I have not run.
+
+   THE BIGGER LEVER IS NOT PIXI. The 40 level JSON files are 560 KB on disk and
+   ship whole. Only 10.8 KB of that is fields the game reads — pool, targets,
+   rules, budgets. The other 549 KB is generator and curation METRICS
+   (keystones, decisionPoints, survivalRate, temptation scores) that no runtime
+   code touches. Stripping them at build time:
+     raw      349,971 -> 10,853   saves 339,118  (a third of the whole bundle)
+     gzipped   19,511 ->  1,471   saves  18,040
+   Compressed it is worth less than Pixi; uncompressed — which is what the APK
+   and the parse cost care about — it is the single biggest item after Pixi
+   core, and it is dead weight rather than a tradeoff. Not done: you said report
+   before changing.
 
 ===============================================================================
-STRAIGHT-RUN A/B — independent confirmation, no interleaving.
+VERIFY
 
-  order 1:  audio on 0.7ms   then muted 0.4ms
-  order 2:  muted 0.5ms      then audio on 0.7ms
+  Web build      1.28 MB (dist), JS 918 KB raw / 215 KB gz
+  Signed APK     3.75 MB, signature verified with apksigner
+  CI             all gates pass locally; NOT run on GitHub (no remote)
+  Rewarded ad    end to end against an injected plugin, all four outcomes.
+                 NOT exercised against real AdMob servers — that needs a device.
+  Device shots   NOT DONE. No emulator system image is installed and no device
+                 is attached (adb reports none). This is the one verification in
+                 the brief I could not perform, and it is exactly the one that
+                 would catch a portrait-lock or safe-area bug. What is needed:
+                 an AVD with a system image, or a phone on USB with debugging
+                 on. The APK is built and signed and ready to install.
 
-  Audio on is now consistently ~0.25ms slower than muted, in BOTH orders. That
-  is causally sensible — scheduling oscillator nodes costs something — and it no
-  longer depends on which series ran first.
-
-  Before the fix the same straight run gave audio-on 1.4ms and muted 2.5ms:
-  muted measuring SLOWER than unmuted, which is impossible. You were right that
-  the drift I worked around WAS the bug. The interleaving last session was a
-  correct workaround for a real defect and a wrong thing to settle for.
-
-  Honest number: audio costs about 0.25ms per tap, on a 16.7ms frame budget.
-
-===============================================================================
-OPERATOR TAP SOUND — added. Omission corrected.
-
-  clack   18ms, bandpass noise at a FIXED 2400Hz (Q 5) with a trace of body at
-          430Hz. Against the tile click's 28ms, 1500-2900Hz and fuller body:
-          same wooden family, shorter and drier, and fixed because an operator
-          has no value to modulate against. Less resonance is what drier means
-          physically — a small hard thing tapped, where a tile is a heavier one.
-
-  Verified in sequence: click, knock, CLACK, click, knock, thunk.
-
-===============================================================================
-ONE STAR READING — was three.
-
-  The header carried the level best as glyphs, the banked total as "3 stars",
-  and a separate "this run" line: three ways to say three stars, in two sizes
-  and two colours, none saying anything the others did not.
-
-  What survives is the only one that is LIVE and actionable — what this attempt
-  is currently worth, which falls as failures and hints are spent. Rendered as
-  three filled or hollow glyphs in gold, since 9.6 gives gold to "earned" and
-  this is the earning in progress. Best-ever and banked total are
-  meta-progression and belong on a map screen, not on the board — flagging that
-  they now have nowhere to appear until one exists.
-
-Tests 255 passing. Build 1.2774 MB, JS 918.0 KB.
+Tests 270 passing. Typecheck clean.

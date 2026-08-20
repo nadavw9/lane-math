@@ -1,4 +1,7 @@
+import { Ads, loadAdMob } from "./ads/ads.js";
 import { Sound } from "./audio/sound.js";
+import { MapScreen } from "./map/map-screen.js";
+import { mapView } from "./map/model.js";
 import { Economy } from "./economy/economy.js";
 import { LocalStorageStore } from "./economy/save.js";
 import { Director } from "./game/director.js";
@@ -101,7 +104,69 @@ const warmAudio = (): void => {
 };
 window.addEventListener("pointerdown", warmAudio);
 
-renderer.onInput(send);
+/*
+ * THE WORLD MAP (§7.6, unlocked by clearing 1-10).
+ *
+ * A second screen on the same Application rather than a second canvas: it is
+ * built from the same tokens and the same material, so it shares the renderer.
+ * It is also where best-ever stars, the banked total, lives and the hint shop
+ * finally live — they had no home before it, which is why they were all trying
+ * to fit in the lane header at once.
+ */
+const map = new MapScreen();
+renderer.stage.addChild(map.root);
+
+function showMap(): void {
+  renderer.setBoardVisible(false);
+  map.show(mapView(economy, LEVEL_IDS));
+}
+
+function showBoard(): void {
+  map.hide();
+  renderer.setBoardVisible(true);
+}
+
+map.attach({
+  onPlay: (id) => {
+    const level = levels.get(id);
+    if (!level) return;
+    showBoard();
+    open(level);
+  },
+  onToggleMute: () => {
+    economy.setMuted(!economy.muted);
+    sound.setMuted(economy.muted);
+    map.show(mapView(economy, LEVEL_IDS));
+  },
+  onOpenShop: () => {
+    // The shop lives on the board, where the hints apply. The map is the door.
+    showBoard();
+    send({ type: "toggleShop" });
+  },
+  onSelectMode: (mode) => {
+    send({ type: "selectMode", mode: mode as "casual" | "normal" | "expert" });
+    map.show(mapView(economy, LEVEL_IDS));
+  },
+});
+
+/*
+ * Ads: rewarded video only, for the §5.2 life refill. No interstitials.
+ *
+ * Loaded lazily and off the boot path — on the web the plugin resolves to null
+ * and everything below is a no-op, so the browser build never carries the
+ * native bridge and never waits on it.
+ */
+const ads = new Ads({ plugin: await loadAdMob() });
+void ads.initialize();
+
+renderer.onInput((input) => {
+  // §7.6: the map is absent until 1-10 is cleared, so the way back is too.
+  if (input.type === "tapMap") {
+    showMap();
+    return;
+  }
+  send(input);
+});
 open(currentLevel);
 
 // Lives regenerate on a timer, so the HUD has to notice without an input event.
@@ -232,6 +297,17 @@ Object.assign(window, {
     economy: () => economy.state,
     state: () => lastState,
     setEffectSpeed,
+    showMap,
+    showBoard,
+    mapView: () => mapView(economy, LEVEL_IDS),
+    ads: () => ({ available: ads.available }),
+    /** The §5.2 refill offer, exposed so the ad path can be exercised. */
+    watchAdForLife: async () => {
+      const outcome = await ads.offerLifeForAd(economy);
+      if (map.visible) map.show(mapView(economy, LEVEL_IDS));
+      else send({ type: "tick" });
+      return outcome;
+    },
     /** Audio, for the harness: state, the played-cue log, and the mute toggle. */
     audio: () => ({
       ready: sound.ready,

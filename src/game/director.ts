@@ -453,6 +453,10 @@ export class Director {
         return this.commit();
       case "loadLevel":
         return this.render();
+      // Which screen is showing is not a rule about the game (§11): the shell
+      // owns it, and the Director has nothing to say.
+      case "tapMap":
+        return [];
     }
   }
 

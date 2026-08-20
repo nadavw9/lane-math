@@ -203,6 +203,23 @@ export class Renderer {
   }
 
   /**
+   * The stage, so a second screen can live on the same Application.
+   *
+   * The map is not a separate canvas: it is the same desk seen from further
+   * back, drawn with the same tokens and the same material, so it shares the
+   * renderer rather than standing up a second one.
+   */
+  get stage(): Container {
+    return this.app.stage;
+  }
+
+  /** Hide the board while another screen has the surface. */
+  setBoardVisible(visible: boolean): void {
+    this.root.visible = visible;
+    this.fx.visible = visible;
+  }
+
+  /**
    * Everything the renderer holds that could grow without bound.
    *
    * Exists to answer "what accumulates per tap" with counts rather than
@@ -1057,6 +1074,27 @@ export class Renderer {
         () => this.emit({ type: "tapRestart" }),
       ),
     );
+
+    // The way back to the map, ABSENT until 1-10 is cleared (§7.6). A door to a
+    // room that does not exist yet is exactly the "not for me" the schedule
+    // exists to prevent.
+    if (u.worldMap) {
+      // The mode selector claims the left of this row when it is unlocked
+      // (3 chips of 62 + 6). Sit after it rather than on top of it.
+      const modesWidth = u.modeSelector ? 3 * 68 : 0;
+      this.root.addChild(
+        this.box(
+          status.x + modesWidth,
+          status.y + 44,
+          72,
+          26,
+          PALETTE.slotFilled,
+          "map",
+          PALETTE.tokenInk,
+          () => this.emit({ type: "tapMap" }),
+        ),
+      );
+    }
 
     // --- hints already owned, re-shown free after a restart (GDD §13) ---
     // Their own band, sized to how many are owned, so they neither overlap the

@@ -130,6 +130,13 @@ export type InputEvent =
   | { readonly type: "tapSlot"; readonly index: 0 | 1 | 2 }
   | { readonly type: "tapCommit" }
   | { readonly type: "tapRestart" }
+  /**
+   * Leave the board for the world map (§7.6).
+   *
+   * Handled by the shell, not the Director: the map is a screen, and which
+   * screen is showing is not a rule about the game. The Director ignores it.
+   */
+  | { readonly type: "tapMap" }
   | { readonly type: "loadLevel"; readonly id: string }
   /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
   | { readonly type: "tick" }
