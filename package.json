@@ -14,7 +14,9 @@
     "generate:top": "vite-node src/generator/cli.ts --tiers late --attempts 4000",
     "curate:reorder": "vite-node src/curation/reorder-cli.ts levels",
     "curate:report": "vite-node src/curation/ladder-report-cli.ts levels",
-    "curate:verify": "vite-node src/curation/verify-ladder-cli.ts levels"
+    "curate:verify": "vite-node src/curation/verify-ladder-cli.ts levels",
+    "levels:build": "vite-node tools/build-levels.mts",
+    "prebuild": "npm run levels:build"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

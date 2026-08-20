@@ -46,6 +46,12 @@ jobs:
       - name: Flight bound (frame-dependent correctness, CLAUDE.md 8)
         run: npx vitest run src/renderer/flights.test.ts
 
+      # The shipped level payload must carry exactly what the loader reads
+      # (GDD 10). A field the build strips but the game wants is a runtime
+      # crash on a device; metrics creeping back is 549KB nobody asked for.
+      - name: Shipped levels (GDD 10 — metrics do not ship)
+        run: npx vitest run src/game/shipped-levels.test.ts
+
       - name: Full suite
         run: npx vitest run
 

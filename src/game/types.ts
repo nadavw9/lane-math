@@ -1,7 +1,16 @@
+import type { RuntimeLevelField } from "./level-fields.js";
 import type { BinaryOp, Mode, OperatorBudget, Rules, UnaryOp } from "../solver/index.js";
 import type { Unlocks } from "../economy/unlocks.js";
 
 /** A level as stored in levels/ (GDD §10). */
+/**
+ * A level as the GAME sees it — the shipped shape, not the authored one.
+ *
+ * The repo's level files carry generator and curation metrics too (§8.6); those
+ * are stripped by the build (§10) because no runtime code reads them. The
+ * compile-time check below fails if a field is added here without being added
+ * to RUNTIME_LEVEL_FIELDS, which is what keeps the shipped payload honest.
+ */
 export interface LadderLevel {
   readonly id: string;
   readonly world: number;
@@ -13,6 +22,16 @@ export interface LadderLevel {
   >;
   readonly surplus: number;
 }
+
+/*
+ * Every LadderLevel field must appear in RUNTIME_LEVEL_FIELDS, or the build
+ * would strip something the game reads. Resolves to `true` when they agree and
+ * to a type error naming the missing field when they do not.
+ */
+type MissingFromRuntime = Exclude<keyof LadderLevel, RuntimeLevelField>;
+type EveryLoaderFieldShips = MissingFromRuntime extends never ? true : MissingFromRuntime;
+const _fieldCheck: EveryLoaderFieldShips = true;
+void _fieldCheck;
 
 /** A pool tile as the renderer sees it. Ids are stable for the level's life. */
 export interface TileView {

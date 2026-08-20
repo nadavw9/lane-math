@@ -1,3 +1,4 @@
+import runtimeLevels from "./generated/levels.json";
 import { Ads, loadAdMob } from "./ads/ads.js";
 import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
@@ -26,16 +27,16 @@ for (let world = 1; world <= 4; world++) {
   }
 }
 
-const levelModules = import.meta.glob("../levels/*.json", { eager: true }) as Record<
-  string,
-  { default: LadderLevel }
->;
-
+/*
+ * The SHIPPED levels (GDD §10: metrics do not ship).
+ *
+ * Derived from levels/ by tools/build-levels.mts, carrying only the fields the
+ * loader reads. Globbing the authored files put 560KB of generator and curation
+ * metrics into the bundle — keystones, decisionPoints, survivalRate — none of
+ * which any runtime code touches. The derived file is 13KB.
+ */
 const levels = new Map<string, LadderLevel>();
-for (const [path, module] of Object.entries(levelModules)) {
-  const id = path.split("/").pop()!.replace(".json", "");
-  levels.set(id, module.default);
-}
+for (const level of runtimeLevels as LadderLevel[]) levels.set(level.id, level);
 
 const host = document.getElementById("app")!;
 const picker = document.getElementById("levels")!;
