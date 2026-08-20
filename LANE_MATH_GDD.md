@@ -604,6 +604,8 @@ Same board, three genuinely different puzzles.
 
 ## 9. Art direction
 
+> **Art direction is defined in ART_DIRECTION.md, which supersedes §9.1, §9.2 and §9.6's material colours. Read it before any visual work.**
+
 ### 9.0 The quality bar — non-negotiable
 
 **Target: indistinguishable from a top-100 grossing Play Store puzzle game.** The reference is Dream Games (Royal Match, Royal Kingdom), whose stated standard is Pixar-like animation applied to casual puzzle. This is a hard bar, not an aspiration, and it applies to every screen, state and transition.
