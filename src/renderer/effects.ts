@@ -1,5 +1,6 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Rectangle, Sprite, Texture } from "pixi.js";
 
+import { makeRng, shardMotion, subdivide } from "./shards.js";
 import { effectSpeed } from "./tween.js";
 
 /**
@@ -21,7 +22,7 @@ export { setEffectSpeed } from "./tween.js";
  */
 
 interface Shard {
-  readonly g: Graphics;
+  readonly g: Container;
   vx: number;
   vy: number;
   vr: number;
@@ -38,10 +39,21 @@ export interface ShatterOptions {
   /** Where the debris is pulled — the target this move just paid for. */
   readonly targetX: number;
   readonly targetY: number;
+  /**
+   * The token's own art, if it has any. Each shard becomes a sub-rectangle of
+   * this, so the pieces carry the real glass rather than a flat approximation.
+   * Without it the shards are coloured quads and everything else is identical.
+   */
+  readonly texture?: Texture | undefined;
+  /** Fixed seed for tests. Reseeded per break otherwise, so no two are alike. */
+  readonly seed?: number | undefined;
 }
 
-const SHARDS = 9;
 const DURATION_MS = 420;
+/** §7: a brief bright flash at the break, gone before the eye settles. */
+const FLASH_MS = 90;
+/** Debris FALLS rather than sprays (§7). Design pixels per second squared. */
+const GRAVITY = 900;
 
 /**
  * One shattering token. Owns its own Graphics and removes itself when spent, so
@@ -60,31 +72,75 @@ export class Shatter {
 
     const cx = options.x + options.w / 2;
     const cy = options.y + options.h / 2;
-
-    for (let i = 0; i < SHARDS; i++) {
-      const angle = (i / SHARDS) * Math.PI * 2 + Math.random() * 0.4;
-      const spread = 0.35 + Math.random() * 0.5;
-      const size = Math.min(options.w, options.h) * (0.16 + Math.random() * 0.16);
-
-      // Irregular triangular wedge: debris, not confetti.
-      const g = new Graphics()
-        .poly([0, -size, size * 0.9, size * 0.7, -size * 0.8, size * 0.6])
-        .fill(options.colour);
-      g.position.set(cx, cy);
-      g.rotation = Math.random() * Math.PI;
-
-      this.shards.push({
-        g,
-        vx: Math.cos(angle) * spread * options.w * 0.9,
-        vy: Math.sin(angle) * spread * options.h * 0.9,
-        vr: (Math.random() - 0.5) * 12,
-        toTarget: 0.55 + Math.random() * 0.45,
-      });
-      this.container.addChild(g);
-    }
     this.startX = cx;
     this.startY = cy;
+
+    // Reseeded per break, so no two shatters in a session are identical.
+    const rng = makeRng(options.seed ?? (Math.random() * 0xffffffff) >>> 0);
+    const pieces = subdivide(options.w, options.h, rng);
+
+    for (const piece of pieces) {
+      /*
+       * Each shard is the sub-rectangle of the token it came from, positioned
+       * where that part of the token was. It therefore starts as an exact copy
+       * of the token, in pieces — the break is invisible on frame one and then
+       * comes apart, which is what breaking looks like.
+       */
+      const local = {
+        x: piece.x - options.w / 2 + piece.w / 2,
+        y: piece.y - options.h / 2 + piece.h / 2,
+      };
+
+      let node: Container;
+      if (options.texture) {
+        // Carry the real art: this shard shows exactly its own part of it.
+        const frame = options.texture.frame;
+        const sprite = new Sprite(
+          new Texture({
+            source: options.texture.source,
+            frame: new Rectangle(
+              frame.x + (piece.x / options.w) * frame.width,
+              frame.y + (piece.y / options.h) * frame.height,
+              (piece.w / options.w) * frame.width,
+              (piece.h / options.h) * frame.height,
+            ),
+          }),
+        );
+        sprite.width = piece.w;
+        sprite.height = piece.h;
+        sprite.anchor.set(0.5);
+        node = sprite;
+      } else {
+        // Procedural fallback: a flat quad of the token's colour.
+        node = new Graphics()
+          .rect(-piece.w / 2, -piece.h / 2, piece.w, piece.h)
+          .fill(options.colour);
+      }
+
+      node.position.set(cx + local.x, cy + local.y);
+
+      const motion = shardMotion(piece, options.w, options.h, rng);
+      // Outward from the BREAK POINT, so a shard from the left edge goes left.
+      const angle = Math.atan2(local.y, local.x || 0.0001);
+      this.shards.push({
+        g: node,
+        vx: Math.cos(angle) * motion.speed * options.w * 0.9,
+        vy: Math.sin(angle) * motion.speed * options.h * 0.9,
+        vr: motion.spin,
+        toTarget: motion.toTarget,
+      });
+      this.container.addChild(node);
+    }
+
+    // §7: a brief bright flash at the break.
+    this.flash = new Graphics()
+      .circle(cx, cy, Math.max(options.w, options.h) * 0.55)
+      .fill({ color: 0xffffff, alpha: 0.85 });
+    this.flash.blendMode = "add";
+    this.container.addChild(this.flash);
   }
+
+  private readonly flash: Graphics;
 
   private readonly startX: number;
   private readonly startY: number;
@@ -100,7 +156,10 @@ export class Shatter {
       // Outward burst, then pulled INTO the target — the tiles are paying for it.
       const pull = Math.pow(t, 2) * shard.toTarget;
       const bx = this.startX + shard.vx * burst;
-      const by = this.startY + shard.vy * burst;
+      // Debris FALLS rather than spraying (§7): gravity on the outward arc,
+      // before the pull toward the target takes over.
+      const seconds = this.elapsed / 1000;
+      const by = this.startY + shard.vy * burst + 0.5 * GRAVITY * seconds * seconds;
       shard.g.position.set(
         bx + (this.targetX - bx) * pull,
         by + (this.targetY - by) * pull,
@@ -109,6 +168,12 @@ export class Shatter {
       shard.g.scale.set(1 - t * 0.75);
       shard.g.alpha = 1 - Math.pow(t, 1.6);
     }
+
+    // The flash is over almost before it registers — it marks the break rather
+    // than lighting the scene.
+    const flashT = Math.min(1, this.elapsed / FLASH_MS);
+    this.flash.alpha = 0.85 * (1 - flashT) ** 2;
+    this.flash.scale.set(1 + flashT * 0.6);
 
     if (t >= 1) {
       this.container.destroy({ children: true });

@@ -19,7 +19,15 @@ import { RejectPulse, Shatter } from "./effects.js";
 import { cuesFor } from "../audio/cues.js";
 import type { Sound } from "../audio/sound.js";
 import { FlightTable } from "./flights.js";
-import { loadAtlas, missingSprites, loadedSprites, setSpritesEnabled, spritesEnabled } from "./sprites.js";
+import {
+  loadAtlas,
+  loadedSprites,
+  missingSprites,
+  setSpritesEnabled,
+  spriteFor,
+  spriteNameFor,
+  spritesEnabled,
+} from "./sprites.js";
 import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import {
@@ -27,6 +35,7 @@ import {
   ghostSlot,
   numberTile,
   operatorToken,
+  UI_FONT,
   setGrainTexture,
   squaredPaper,
   targetPlate,
@@ -424,7 +433,7 @@ export class Renderer {
       for (const tile of consumed) {
         const bounds = this.tileBounds.get(tile.id);
         if (!bounds) continue;
-        this.spawnShatter(bounds, PALETTE.tile, targetX, targetY);
+        this.spawnShatter(bounds, PALETTE.tile, targetX, targetY, spriteNameFor("cube", "idle"));
       }
       // The operator is destroyed with them — it was spent too.
       const opSlot = equationSlot(1, board.equation);
@@ -587,8 +596,12 @@ export class Renderer {
     colour: number,
     targetX: number,
     targetY: number,
+    sprite?: string,
   ): void {
-    const shatter = new Shatter({ ...bounds, colour, targetX, targetY });
+    // Shards carry the token's own art where there is any, and fall back to
+    // flat quads of its colour where there is not (ART_DIRECTION §5).
+    const texture = sprite ? (spriteFor(sprite)?.texture ?? undefined) : undefined;
+    const shatter = new Shatter({ ...bounds, colour, targetX, targetY, texture });
     this.shatters.push(shatter);
     this.fx.addChild(shatter.container);
   }
@@ -683,7 +696,7 @@ export class Renderer {
     return new Text({
       text: value,
       style: new TextStyle({
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: UI_FONT,
         fontSize: size,
         fontWeight: "bold",
         fill: colour,

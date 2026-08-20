@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Lane Math — Phase 3</title>
     <style>
+      /*
+       * The game's one typeface (GDD §9.0: no system fonts).
+       *
+       * Bundled rather than fetched: the game must render identically offline
+       * and inside the APK, where there is no Google Fonts to reach. Digits are
+       * the entire UI (§9.2), so this is not decoration — it is the interface.
+       *
+       * `swap` so a slow load shows fallback digits rather than no digits. A
+       * blank board is the failure mode this project keeps having.
+       */
+      @font-face {
+        font-family: "Outfit";
+        src: url("./assets/fonts/outfit-800.woff2") format("woff2");
+        font-weight: 800;
+        font-display: swap;
+      }
+
       :root { color-scheme: dark; }
       /*
         Phone-shaped by default. GDD §9.1 targets 9:21 portrait, and validating

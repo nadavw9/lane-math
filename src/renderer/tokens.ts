@@ -47,9 +47,26 @@ function grainOver(g: Graphics, draw: (g: Graphics) => Graphics, alpha: number):
  * or an operator.
  */
 
-/** Heavy geometric sans, tabular figures. Digits are the entire UI. */
-export const DIGIT_FONT =
-  '"DIN Alternate", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif';
+/**
+ * The game's typeface — bundled, not inherited (GDD §9.0).
+ *
+ * Outfit at 800. CHOSEN BY MEASUREMENT: the four candidates were rendered at
+ * 55px and scored on how unlike the confusable digit pairs look. Outfit won on
+ * both the worst pair (0.33 against Nunito's 0.25) and the mean (0.43 against
+ * 0.36), which matters more here than anywhere — §9.2 says digits are the whole
+ * UI and a maths puzzle dies if a 6 reads as an 8.
+ *
+ * The previous stack named DIN Alternate, Roboto Condensed and Arial Narrow,
+ * NONE of which exist on Android, so every digit in the game rendered in
+ * whatever Roboto the device happened to have. The typography was not chosen.
+ *
+ * One typeface for one game. Swapping it is this constant plus the @font-face
+ * in index.html.
+ */
+export const DIGIT_FONT = 'Outfit, system-ui, sans-serif';
+
+/** UI text uses the same face. One typeface for one game (§9.0). */
+export const UI_FONT = DIGIT_FONT;
 
 export function digitStyle(size: number, fill: number): TextStyle {
   return new TextStyle({

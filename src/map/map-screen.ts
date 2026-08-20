@@ -1,7 +1,7 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 
 import { BACKDROP, DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
-import { squaredPaper, woodenTray } from "../renderer/tokens.js";
+import { UI_FONT, squaredPaper, woodenTray } from "../renderer/tokens.js";
 import { label } from "../renderer/tokens.js";
 import type { MapLevel, MapView } from "./model.js";
 
@@ -60,7 +60,7 @@ export class MapScreen {
     return new Text({
       text: value,
       style: new TextStyle({
-        fontFamily: "system-ui, sans-serif",
+        fontFamily: UI_FONT,
         fontSize: size,
         fontWeight: weight,
         fill: colour,
