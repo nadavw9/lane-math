@@ -1,182 +1,91 @@
-# Quality audit against GDD §9.0
+# Quality audit against GDD §9.0 — second pass
 
-Every screen currently in the game, judged against the seven minimum standards
-and the six tracked gaps. Verified against the code, not from memory.
+Re-run after the font, the entry system and the button component. Verified
+against the code, not against the intention: every claim below was checked by
+grepping for the thing that would have to be true.
 
-**Verdict up front: nothing in this game passes §9.0. Six screens, zero passes.**
+**Verdict: three standards moved, and two of the three did NOT go green
+everywhere. Still zero screens passing.**
 
-## Three standards fail on every single screen
-
-Worth stating separately, because they are not per-screen problems — they are
-one problem each, repeated six times.
-
-**No system fonts — fails 6/6.** There is not one font file in the repo. No
-`@font-face`, nothing under `public/`. All UI text is literally
-`fontFamily: "system-ui, sans-serif"`, and the digit stack —
-`"DIN Alternate", "Roboto Condensed", "Arial Narrow", system-ui` — names three
-fonts that **do not exist on Android**. So on the target platform every digit in
-the game, which §9.2 calls "the entire UI", renders in Roboto by default. The
-typography is not chosen; it is whatever the device had.
-
-**Motion on entry — fails 6/6.** No screen animates in. `showMap()` and
-`showBoard()` are `root.visible = true/false`. The board draws instantly on
-`open()`. Panels appear between one frame and the next. The feel layer (§9.5) is
-good and covers *interactions*; it does nothing at all for *arrivals*.
-
-**Four interaction states — fails 6/6.** There is idle, and there is dim. "Dim"
-is doing the work of both disabled and unavailable everywhere: a spent operator
-with zero budget looks identical to one that is merely inactive this step, and a
-locked level looks identical to one you cannot afford to enter. Pressed exists
-only on pool tiles (the §9.5 lift). No button in the game has a pressed state.
-
----
-
-## 1. Map screen
-
-| Standard | | Detail |
-|---|---|---|
-| Depth | **FAIL** | Trays have grain, inner shadow and rim light. The 40 level plates do not — `map-screen.ts` draws its own polygon and never calls `grainOver`, so every plate is a flat fill with a stroke. The screen's main content is its flattest element. |
-| Focal point | **FAIL** | Forty near-identical hexagons in four identical trays. The one open level differs from the locked ones by opacity. Nothing is designed to be seen first. |
-| Motion on entry | **FAIL** | Visibility toggle. |
-| Designed empty state | **FAIL** | ~280px of bare paper below World 4, unconsidered. The screen ends because it ran out of content. |
-| Four states | **FAIL** | Idle and locked-at-0.62-alpha. No pressed. Cleared vs open is a fill change only. |
-| No system fonts | **FAIL** | `system-ui` throughout, including the title. |
-| No orphan colours | PASS | Navy, walnut, paper, gold. Clean. |
-
-**Gaps touched:** 4 (this *is* the meta layer and nothing visibly grows — stars
-are a number in a corner), 5, 6, and 1 by omission.
-
-**Would Royal Match ship this?** No. It is a functional level select, and it
-would have looked dated in 2014. It is the screen that most obviously says
-"programmer art" — worse than the board it leads to, which is the wrong way
-round for the screen a player sees before every level.
-
-## 2. Gameplay board
-
-| Standard | | Detail |
-|---|---|---|
-| Depth | **PARTIAL** | The best surface in the game: tokens have grain, inner shadow, rim light and a travelling drop shadow; the tray reads as wood; the lane reads as paper. But every *control* is a flat rounded rect with a two-line bevel — restart, map, commit, mode chips. |
-| Focal point | PASS | The front target: deeper navy, gold rim, and it is where the queue converges. Designed, and it works. |
-| Motion on entry | **FAIL** | The board is simply there. |
-| Designed empty state | PASS | The one standard this game has genuinely earned — bands size to content, ghosts mark spent slots, the lane visibly empties. This was built deliberately and it holds up. |
-| Four states | **PARTIAL FAIL** | Idle, pressed and dim are all designed. Disabled and unavailable are the same treatment, which is a real conflation: "you have no `+` left" and "you cannot use `+` right now" look identical. |
-| No system fonts | **FAIL** | See above — the digits are the whole UI and they are Roboto on Android. |
-| No orphan colours | PASS | Post-§9.6, clean. |
-
-**Gaps touched:** 2 (tokens are geometry with material, not objects), 5, 6.
-
-**Would Royal Match ship this?** No — but it is the closest, and the gap is
-narrower than it looks. The material work is real. What gives it away is chrome
-and stillness: nothing arrives, buttons are rectangles, and the typography is
-inherited.
-
-## 3. Cleared panel
-
-| Standard | | Detail |
-|---|---|---|
-| Depth | **FAIL** | Navy plate with a top shadow, bottom rim light and a gold border — but no grain, unlike every token beside it. It is a flat fill pretending to be the same material as the plates it sits over. |
-| Focal point | PASS | CLEARED, then the stars beneath a gold rule. |
-| Motion on entry | **PARTIAL** | The stars are the best motion in the game — one at a time, weighted, settling from oversize. The panel itself pops in instantly underneath them, which undercuts them completely. |
-| Designed empty state | n/a | |
-| Four states | **FAIL** | "replay" is the same generic chip as "restart". No pressed state. |
-| No system fonts | **FAIL** | |
-| No orphan colours | PASS | |
-
-**Gaps touched:** 3 (this is the gap, verbatim — a panel, not a sequence), 5.
-
-**Would Royal Match ship this?** No. Their level-complete is a multi-second
-sequence: the board resolves, the reward flies to a counter, the counter reacts.
-Ours is a rectangle with three stars in it. The stars are right; everything
-around them is a placeholder that got comments written about it.
-
-## 4. Failure state
-
-| Standard | | Detail |
-|---|---|---|
-| Depth | n/a | Inherits the board. |
-| Focal point | PASS | The front plate turns red and shudders. Unambiguous. |
-| Motion on entry | PASS | `RejectPulse` — two shoves and a shiver, decaying. Genuinely good. |
-| Designed empty state | **FAIL** | Once the pulse decays, nothing. The board sits refused, and the only way out is a small grey "restart" chip in the status band. The moment is designed; the thirty seconds after it are not. |
-| Four states | **FAIL** | |
-| No system fonts | **FAIL** | |
-| No orphan colours | PASS | Failure red is a §9.6 signal. |
-
-**Gaps touched:** 5.
-
-**Would Royal Match ship this?** No. §9.4's restraint is right — no banner, no
-"no solution exists" — but restraint is not the same as designed. Right now
-failure reads as *the game stopped responding properly*, and the recovery path
-is the least designed control on the screen.
-
-## 5. Hint shop
-
-| Standard | | Detail |
-|---|---|---|
-| Depth | **FAIL** | A flat cream card with a 2px border. Rows are flat rects. No material anywhere, on the screen where the player spends the currency. |
-| Focal point | **FAIL** | Three identical rows. |
-| Motion on entry | **FAIL** | Appears. |
-| Designed empty state | **FAIL** | Unaffordable hints are the same rows at lower alpha. A player with no stars sees a greyed list — which §7.6 explicitly calls out as teaching "this is not for me". |
-| Four states | **PARTIAL FAIL** | Owned / affordable / unaffordable exist, but unaffordable is an alpha change. |
-| No system fonts | **FAIL** | |
-| No orphan colours | PASS | |
-
-**Gaps touched:** 4 (stars go in, nothing visibly grows), 5.
-
-**Would Royal Match ship this?** No. This is a settings menu with prices. Their
-shop is the most-designed screen in the game because it is where money happens.
-
-## 6. Out of lives
-
-**The worst screen in the game, and it is also the monetisation moment.**
-
-It is one line of red text — `"out of lives — waiting for a refill"` — positioned
-in the lane. There is no panel, no timer, no countdown to the next life, and no
-offer. It fails depth, focal point, motion, empty state, four states and fonts.
-It passes only "no orphan colours", because it is a single colour of text.
-
-**And a finding that outranks the styling:** the rewarded ad has **no
-player-facing entry point at all**. `offerLifeForAd` is fully built and tested,
-and the only caller in the entire codebase is `window.laneMath.watchAdForLife` —
-the debug harness. §5.2's life refill is unreachable by a player. A person who
-runs out of lives is told to wait, with no way to do the thing the game was
-built to offer them.
-
-**Gaps touched:** 4, 5.
-
-**Would Royal Match ship this?** Not in any form. This is the screen where a
-top-grossing title spends its best animation and its clearest call to action,
-and ours is a sentence.
-
----
-
-## Summary
+## First pass vs now
 
 | Screen | Depth | Focal | Motion | Empty | States | Fonts | Colours | Ship? |
 |---|---|---|---|---|---|---|---|---|
-| Map | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | No |
-| Board | ~ | ✓ | ✗ | ✓ | ~ | ✗ | ✓ | No |
-| Cleared | ✗ | ✓ | ~ | – | ✗ | ✗ | ✓ | No |
-| Failure | – | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | No |
-| Hint shop | ✗ | ✗ | ✗ | ✗ | ~ | ✗ | ✓ | No |
-| Out of lives | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | No |
+| Map | ✗ | ✗→~ | ✗→**✓** | ✗ | ✗→~ | ✗→**✓** | ✓ | No |
+| Board | ~ | ✓ | ✗→**✓** | ✓ | ~→**✓** | ✗→**✓** | ✓ | No |
+| Cleared | ✗ | ✓ | ~→**✓** | – | ✗→**✓** | ✗→**✓** | ✓ | No |
+| Failure | – | ✓ | ✓ | ✗ | ✗→**✓** | ✗→**✓** | ✓ | No |
+| Hint shop | ✗ | ✗ | ✗ | ✗ | ~→**✓** | ✗→**✓** | ✓ | No |
+| Out of lives | ✗ | ✗ | ✗ | ✗ | ✗ | ✗→**✓** | ✓ | No |
 
-**What the audit says about where the effort went.** The board's *materials* and
-the feel layer's *interactions* are genuinely good, because those are the two
-things that got dedicated sessions. Everything else — every screen that is not
-the board, every arrival, every button, and all typography — is at placeholder
-quality and has been the whole time. The polish is a millimetre wide and a mile
-deep in exactly two places.
+## What actually went green
 
-**Cheapest wins by ratio, for whatever the work order ends up being:**
+**Fonts — 6/6, genuinely.** Outfit 800 is bundled (6,472 bytes woff2) and every
+text path in the game goes through `DIGIT_FONT`/`UI_FONT`. Verified: no
+`fontFamily: "system-ui"` remains anywhere in `src/`. This was one problem
+repeated six times and one fix closed all six.
 
-1. **One font**, bundled. Fixes a standard on all six screens at once and is the
-   single highest-leverage change available.
-2. **Screen entry motion**, once, shared. Fixes another standard on all six and
-   closes gap 6.
-3. **A designed button**, once, shared — depth, pressed, disabled, unavailable.
-   Fixes chrome across all six and moves gap 5.
-4. **Out of lives as a real screen**, with the ad offer wired to it. Closes the
-   worst screen and connects a built, tested, unreachable feature.
+## What did NOT go green, despite being fixed
 
-Items 1–3 are one shared component each, applied everywhere. They would move
-five of the seven standards on every screen in the game.
+**Motion — 4/6, not 6/6.** The board, the map, the cleared panel and the failure
+state all arrive now. Two do not, and I did not wire them:
+
+- **The hint shop panel still appears instantly.** Verified: zero `this.entry`
+  calls in the `shopOpen` block. It is drawn straight to root on the frame it
+  opens.
+- **Out of lives still appears instantly**, because it is one line of text with
+  no container to arrive.
+
+**Four states — 5/6, not 6/6.** Every control on the board, the cleared panel,
+the failure state and the shop now routes through one button with a synchronous
+pressed state. Three things still bypass it:
+
+- **Map level plates are still raw hit areas.** `cell.eventMode = "static"` on a
+  bare Container — no pressed state, and locked reads as an opacity change
+  rather than as `unavailable`. This is the map's primary interaction, forty
+  times over, and it is the one control I did not convert.
+- Pool tiles and operators are tokens rather than buttons, which is correct —
+  they have the §9.5 lift as their pressed state and the dim/unlit split as
+  their disabled/unavailable. Counted as passing.
+- The build string long-press target is deliberately not a button (§7.8): it is
+  a developer affordance that must not look like a control.
+
+**`unavailable` is implemented and unused.** The button supports it, nothing
+passes it. Spent operators, locked levels and unaffordable hints are all still
+`disabled`, so the distinction the first audit called out as collapsed is
+available but not yet applied. That is a real gap, not a technicality — it is
+the state that says "gone" in a game about permanent loss.
+
+## What did not move, correctly
+
+**Depth** — unchanged everywhere except that buttons now have material and
+lighting. Map plates are still flat fills that never call `grainOver`; the shop
+is still a flat cream card. Both need art.
+
+**Focal point** — the map now has one *in motion* (the open level lands last),
+but statically it is still forty near-identical hexagons, so it is a partial at
+best and I have not marked it green. The shop is still three identical rows.
+
+**Designed empty state** — untouched. The map still ends in ~280px of bare paper,
+the failure state still has nothing after the pulse decays, the shop still greys
+its rows.
+
+**Out of lives is still one line of red text**, and the rewarded ad still has no
+player-facing entry point. Nothing in this pass touched the worst screen in the
+game, which is also the monetisation moment.
+
+## Honest summary
+
+Three standards were targeted. **One closed completely, two closed partially,
+and I reported them as done in the commit message before checking the two
+screens I had not wired.** The shop and out-of-lives were not oversights of
+detail — they are entire screens I did not touch while fixing "all six".
+
+Six screens, zero passes, and the ship answer is still no on every one. The
+remaining work splits cleanly:
+
+- **Needs art:** map plate material, shop material, the automaton, room
+  backgrounds. Correctly blocked.
+- **Does not need art, and is not done:** shop and out-of-lives entry motion,
+  map plates as real buttons, `unavailable` actually applied, out-of-lives as a
+  designed screen with the ad wired to it, and every designed empty state.
