@@ -156,6 +156,8 @@ export type InputEvent =
    * screen is showing is not a rule about the game. The Director ignores it.
    */
   | { readonly type: "tapMap" }
+  /** Long-press on the build string: dump the §7.8 funnel off the device. */
+  | { readonly type: "exportTelemetry" }
   | { readonly type: "loadLevel"; readonly id: string }
   /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
   | { readonly type: "tick" }

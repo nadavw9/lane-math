@@ -104,6 +104,11 @@ export class Telemetry {
     });
   }
 
+  /** Which session this is. Tags an export so playtests can be told apart. */
+  get session(): number {
+    return this.sessionIndex;
+  }
+
   record(event: TelemetryEvent): void {
     const recorded: RecordedEvent = { at: this.now(), session: this.sessionIndex, event };
     for (const sink of this.sinks) sink.send(recorded);

@@ -456,6 +456,7 @@ export class Director {
       // Which screen is showing is not a rule about the game (§11): the shell
       // owns it, and the Director has nothing to say.
       case "tapMap":
+      case "exportTelemetry":
         return [];
     }
   }
