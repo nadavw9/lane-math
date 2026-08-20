@@ -765,6 +765,8 @@ Green was removed because gold already meant "ready", so green meant nothing. Fa
 }
 ```
 
+**Metrics do not ship.** The fields under `metrics` are generator and curation output consumed by CI and difficulty tuning, and no runtime code reads them. The repo holds the full files; the build derives a runtime file carrying only the fields the loader accesses. Shipping the metrics cost 549KB of the 560KB level payload.
+
 `null` = unlimited. Budgets are **generator output** (§8.5), never hand-authored. Metrics are per-mode (§8.6), used by CI and difficulty tuning — never read by gameplay code.
 
 Expert budget sums to exactly `T = 3`. Note `maxTrapDepth` differs by mode on the same board.
