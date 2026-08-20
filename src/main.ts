@@ -120,6 +120,8 @@ function open(level: LadderLevel): void {
   currentLevel = level;
   director = new Director(level, economy.selectedMode, economy, telemetry, winnability);
   void renderer.setWorld(level.world);
+  // The board arrives (§9.0). Every open, including a replay of the same level.
+  renderer.beginEntrance();
   apply(director.firstRender());
 }
 
@@ -215,6 +217,13 @@ open(currentLevel);
 
 // Lives regenerate on a timer, so the HUD has to notice without an input event.
 setInterval(() => send({ type: "tick" }), 5_000);
+
+// The map runs its own arrival; drive it while it is on screen.
+const mapTicker = (): void => {
+  if (map.visible) map.advance(16.7);
+  requestAnimationFrame(mapTicker);
+};
+requestAnimationFrame(mapTicker);
 
 for (const id of LEVEL_IDS) {
   const level = levels.get(id);

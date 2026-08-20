@@ -1,5 +1,7 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 
+import { button } from "../renderer/button.js";
+import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { BACKDROP, DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, squaredPaper, woodenTray } from "../renderer/tokens.js";
 import { label } from "../renderer/tokens.js";
@@ -33,6 +35,8 @@ export class MapScreen {
   readonly root = new Container();
   private view: MapView | null = null;
   private events: MapEvents | null = null;
+  /** The map ARRIVES (§9.0), it does not appear. */
+  private entrance: Entrance | null = null;
 
   constructor() {
     this.root.visible = false;
@@ -49,7 +53,29 @@ export class MapScreen {
   show(view: MapView): void {
     this.view = view;
     this.root.visible = true;
+    this.entrance = new Entrance(Object.keys(MAP_BANDS).length);
     this.draw();
+  }
+
+  /** @returns true while the arrival is still running. */
+  advance(deltaMs: number): boolean {
+    if (!this.entrance) return false;
+    if (this.entrance.advance(deltaMs)) {
+      this.draw();
+      return true;
+    }
+    this.entrance = null;
+    this.draw();
+    return false;
+  }
+
+  /** Offset a node for its arrival band. */
+  private entry(node: Container, band: number): Container {
+    if (!this.entrance) return node;
+    const sample = this.entrance.sample(band);
+    node.position.y += sample.dy;
+    node.alpha *= sample.alpha;
+    return node;
   }
 
   hide(): void {
@@ -68,7 +94,7 @@ export class MapScreen {
     });
   }
 
-  /** A tappable chip in the shared material: dark plate, cream or gold label. */
+  /** Every control on the map is the same button as everywhere else. */
   private chip(
     x: number,
     y: number,
@@ -78,29 +104,16 @@ export class MapScreen {
     colour: number,
     onTap?: () => void,
   ): Container {
-    const box = new Container();
-    const g = new Graphics().roundRect(0, 0, w, h, 7).fill(PALETTE.slotFilled);
-    g.moveTo(7, 2)
-      .lineTo(w - 7, 2)
-      .stroke({ width: 2, color: 0x000000, alpha: 0.3 });
-    g.moveTo(7, h - 2)
-      .lineTo(w - 7, h - 2)
-      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.14 });
-    box.addChild(g);
-
-    const t = this.text(text, Math.min(14, h * 0.42), colour);
-    t.anchor.set(0.5);
-    t.position.set(w / 2, h / 2);
-    box.addChild(t);
-
-    box.position.set(x, y);
-    if (onTap) {
-      box.eventMode = "static";
-      box.cursor = "pointer";
-      box.on("pointertap", onTap);
-    }
-    this.root.addChild(box);
-    return box;
+    const control = button({
+      width: w,
+      height: h,
+      label: text,
+      labelColour: colour,
+      onTap,
+    });
+    control.position.set(x, y);
+    this.root.addChild(control);
+    return control;
   }
 
   /**
@@ -110,7 +123,7 @@ export class MapScreen {
    * about SYSTEMS the player has no use for yet, not about the ladder itself.
    * Seeing that there are forty levels is the point of a map.
    */
-  private plate(level: MapLevel, x: number, y: number): void {
+  private plate(level: MapLevel, x: number, y: number, band: number): void {
     const w = CELL;
     const h = CELL * 0.66;
     const cell = new Container();
@@ -157,7 +170,8 @@ export class MapScreen {
       cell.cursor = "pointer";
       cell.on("pointertap", () => this.events?.onPlay(level.id));
     }
-    this.root.addChild(cell);
+    // The one OPEN level lands last: forty plates, and that is the door (§9.0).
+    this.root.addChild(this.entry(cell, level.state === "open" ? MAP_BANDS.open : band));
   }
 
   private draw(): void {
@@ -170,17 +184,17 @@ export class MapScreen {
     // --- header: the desk, with the totals that were crowding the board ---
     const header = squaredPaper(width, 58, BACKDROP);
     header.position.set(PAD, PAD);
-    this.root.addChild(header);
+    this.root.addChild(this.entry(header, MAP_BANDS.header));
 
     const title = this.text("LANE MATH", 18, PALETTE.text, "900");
     title.position.set(PAD + 10, PAD + 9);
-    this.root.addChild(title);
+    this.root.addChild(this.entry(title, MAP_BANDS.header));
 
     // Banked total. The map is the only place this belongs (§9.6: gold = earned).
     const banked = this.text(`${v.starsAvailable}★`, 17, PALETTE.highlightInk);
     banked.anchor.set(1, 0);
     banked.position.set(DESIGN.width - PAD - 10, PAD + 9);
-    this.root.addChild(banked);
+    this.root.addChild(this.entry(banked, MAP_BANDS.header));
 
     // §7.6: lives are ABSENT before 2-8, not greyed out.
     if (v.showLives) {
@@ -207,11 +221,11 @@ export class MapScreen {
 
       const tray = woodenTray(width, trayH, PALETTE.tray, TRAY_ALPHA);
       tray.position.set(PAD, y);
-      this.root.addChild(tray);
+      this.root.addChild(this.entry(tray, MAP_BANDS.header + world));
 
       const name = this.text(`WORLD ${world}`, 11, PALETTE.text, "900");
       name.position.set(PAD + 10, y + 7);
-      this.root.addChild(name);
+      this.root.addChild(this.entry(name, MAP_BANDS.header + world));
 
       const gridWidth = COLS * CELL + (COLS - 1) * GAP;
       const left = (DESIGN.width - gridWidth) / 2;
@@ -220,6 +234,7 @@ export class MapScreen {
           level,
           left + (i % COLS) * (CELL + GAP),
           y + 24 + Math.floor(i / COLS) * (CELL * 0.66 + GAP),
+          MAP_BANDS.header + world,
         );
       });
 

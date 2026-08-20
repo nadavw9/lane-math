@@ -15,6 +15,8 @@ import {
   poolSlot,
   targetSlot,
 } from "./layout.js";
+import { button, type ButtonState } from "./button.js";
+import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
 import { cuesFor } from "../audio/cues.js";
 import type { Sound } from "../audio/sound.js";
@@ -110,6 +112,9 @@ export class Renderer {
   private sound: Sound | null = null;
   /** Which star tweens have already sounded, so each one speaks once. */
   private starsSounded = 0;
+  /** Screens ARRIVE (§9.0). Restarted whenever a board or panel opens. */
+  private entrance: Entrance | null = null;
+  private clearedEntrance: Entrance | null = null;
 
   private get rejecting(): boolean {
     return this.reject !== null;
@@ -231,6 +236,18 @@ export class Renderer {
     this.emit = handler;
   }
 
+  /**
+   * Begin a board arrival (§9.0).
+   *
+   * Called by the shell when a level OPENS, rather than inferred from the state
+   * diff: reopening the same level changes neither the id nor the run counter,
+   * so the renderer cannot tell it apart from a redraw — and a replay would
+   * have appeared instantly while every other open animated.
+   */
+  beginEntrance(): void {
+    this.entrance = new Entrance(Object.keys(BOARD_BANDS).length);
+  }
+
   attachSound(sound: Sound): void {
     this.sound = sound;
   }
@@ -290,6 +307,8 @@ export class Renderer {
       // than swallowed: a silent fallback is how a missing asset survives three
       // weeks of review.
       spritesMissing: missingSprites().length,
+      entranceBand0: this.entrance ? Number(this.entrance.sample(0).alpha.toFixed(2)) : -1,
+      entranceBand5: this.entrance ? Number(this.entrance.sample(5).alpha.toFixed(2)) : -1,
     };
   }
 
@@ -388,6 +407,7 @@ export class Renderer {
       this.shatters.length = 0;
       this.fx.removeChildren();
       this.reject = null;
+      this.entrance = new Entrance(Object.keys(BOARD_BANDS).length);
       // §9.5: retry is instantaneous. A fresh level inherits NO animation —
       // leaving a shudder or a half-finished flight running would make the new
       // board look like it was still recovering from the old one.
@@ -461,6 +481,7 @@ export class Renderer {
     // this game does not use.
     if (next.phase === "won" && this.lastPhase !== "won") {
       const earned = next.economy?.starsIfCleared ?? 0;
+      this.clearedEntrance = new Entrance(Object.keys(CLEARED_BANDS).length);
       this.starArrivals = Array.from(
         { length: earned },
         (_, i) => new Tween(TIMING.starArrive, EASE.settle, i * TIMING.starGap),
@@ -553,6 +574,7 @@ export class Renderer {
   /** Drop every running effect. Used when a level opens or restarts (§9.5). */
   private clearFeel(): void {
     this.starsSounded = 0;
+    this.clearedEntrance = null;
     this.lifts.clear();
     this.flights.clear();
     this.rewrites.clear();
@@ -644,6 +666,15 @@ export class Renderer {
   private advanceAll(deltaMs: number): boolean {
     let running = false;
 
+    if (this.entrance) {
+      if (this.entrance.advance(deltaMs)) running = true;
+      else this.entrance = null;
+    }
+    if (this.clearedEntrance) {
+      if (this.clearedEntrance.advance(deltaMs)) running = true;
+      else this.clearedEntrance = null;
+    }
+
     for (const [id, tween] of this.lifts) {
       if (tween.advance(deltaMs)) running = true;
       else this.lifts.delete(id);
@@ -704,34 +735,52 @@ export class Renderer {
     });
   }
 
+  /**
+   * Every control in the game routes through the one button component.
+   *
+   * This used to draw a flat rounded rect with a two-line bevel inline, and had
+   * no pressed state — which was true of every control on every screen.
+   */
   private box(
     x: number,
     y: number,
     w: number,
     h: number,
     fill: number,
-    label: string,
+    text: string,
     labelColour: number,
     onTap?: () => void,
     outline?: number,
+    state: ButtonState = "idle",
   ): Container {
-    const container = new Container();
-    const g = new Graphics().roundRect(0, 0, w, h, 6).fill(fill);
-    if (outline !== undefined) g.roundRect(0, 0, w, h, 6).stroke({ width: 3, color: outline });
-    container.addChild(g);
+    const control = button({
+      width: w,
+      height: h,
+      label: text,
+      fill,
+      labelColour,
+      outline,
+      state: this.inputLocked ? "disabled" : state,
+      onTap: this.inputLocked ? undefined : onTap,
+    });
+    control.position.set(x, y);
+    return control;
+  }
 
-    const t = this.text(label, Math.min(22, h * 0.5), labelColour);
-    t.anchor.set(0.5);
-    t.position.set(w / 2, h / 2);
-    container.addChild(t);
-
-    container.position.set(x, y);
-    if (onTap && !this.inputLocked) {
-      container.eventMode = "static";
-      container.cursor = "pointer";
-      container.on("pointertap", onTap);
-    }
-    return container;
+  /**
+   * Offset a node for its arrival band (§9.0 motion).
+   *
+   * Applied at placement rather than by animating containers, because the board
+   * is rebuilt every frame — there is nothing persistent to tween, so the
+   * arrival is sampled and drawn like every other effect in this renderer.
+   */
+  private entry(node: Container, band: number, cleared = false): Container {
+    const entrance = cleared ? this.clearedEntrance : this.entrance;
+    if (!entrance) return node;
+    const sample = entrance.sample(band);
+    node.position.y += sample.dy;
+    node.alpha *= sample.alpha;
+    return node;
   }
 
   /** Place a procedural token and make it tappable. */
@@ -765,7 +814,8 @@ export class Renderer {
     // panel would make the gate judge something the player never sees.
     // §9.6: the lane is a strip of squared paper, not a neutral panel. The veil
     // still does the separation job; the ruling sits on top of it.
-    this.place(squaredPaper(lane.width, lane.height, BACKDROP), lane.x, lane.y);
+    this.entry(this.place(squaredPaper(lane.width, lane.height, BACKDROP), lane.x, lane.y),
+      BOARD_BANDS.furniture);
 
     /*
      * Cleared targets are REMOVED and the queue slides down (§2).
@@ -791,7 +841,8 @@ export class Renderer {
       // rejects it. It never leaves its slot — not advancing IS the message.
       const shove = front && this.rejecting ? this.rejectOffset : { dx: 0, dy: 0, glow: 0 };
 
-      this.place(
+      this.entry(
+        this.place(
         targetPlate(slot.width, slot.height, String(s.targets[i]), {
           fill: front
             ? this.rejecting
@@ -808,6 +859,9 @@ export class Renderer {
         }),
         slot.x + shove.dx,
         slot.y + shove.dy,
+        ),
+        // The FRONT target lands last: it is the focal point (§9.0).
+        front ? BOARD_BANDS.front : BOARD_BANDS.queue,
       );
     }
 
@@ -843,7 +897,10 @@ export class Renderer {
       // lands, or the same token would be drawn twice.
       const arriving = this.flights.arrivingAt(index);
       if (!filled || arriving) {
-        this.place(emptySlot(r.width, r.height, shape), r.x + resistDx, r.y, tap);
+        this.entry(
+          this.place(emptySlot(r.width, r.height, shape), r.x + resistDx, r.y, tap),
+          BOARD_BANDS.equation,
+        );
         return;
       }
       // A filled slot keeps the SHAPE of what is in it: circle for the
@@ -860,11 +917,14 @@ export class Renderer {
               text: PALETTE.tokenInk,
               bevel: 1,
             });
-      this.place(
-        token,
-        r.x + resistDx + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0),
-        r.y,
-        tap,
+      this.entry(
+        this.place(
+          token,
+          r.x + resistDx + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0),
+          r.y,
+          tap,
+        ),
+        BOARD_BANDS.equation,
       );
     });
 
@@ -889,7 +949,7 @@ export class Renderer {
       canCommit ? PALETTE.highlight : undefined,
     );
     if (!canCommit) commit.alpha = DIM.alpha;
-    this.root.addChild(commit);
+    this.root.addChild(this.entry(commit, BOARD_BANDS.equation));
 
     // --- operators. Affordance rule (§3.5): bold-active paired with dim-inactive.
     const available = [
@@ -921,7 +981,7 @@ export class Renderer {
       });
       if (!lit) disc.alpha = DIM.alpha;
 
-      this.place(
+      this.entry(this.place(
         disc,
         r.x + (r.width - size) / 2,
         r.y,
@@ -930,7 +990,7 @@ export class Renderer {
           : isUnary
             ? () => this.emit({ type: "tapUnary", op: op as UnaryOp })
             : () => this.emit({ type: "tapOperator", op: op as BinaryOp }),
-      );
+      ), BOARD_BANDS.operators);
     });
 
     // --- number pool ---
@@ -953,7 +1013,7 @@ export class Renderer {
       const r = poolSlot(index, pool, board.grid);
 
       if (tile.consumed) {
-        this.place(ghostSlot(r.width, r.height), r.x, r.y);
+        this.entry(this.place(ghostSlot(r.width, r.height), r.x, r.y), BOARD_BANDS.pool);
         continue;
       }
       // On its way home from the row: drawn as the flight, not here.
@@ -1014,11 +1074,14 @@ export class Renderer {
       token.pivot.set(r.width / 2, r.height / 2);
       token.scale.set(grow * turned, grow);
 
-      this.place(
-        token,
-        r.x + r.width / 2,
-        r.y + r.height / 2 - rise * 5,
-        () => this.emit({ type: "tapTile", id: tile.id }),
+      this.entry(
+        this.place(
+          token,
+          r.x + r.width / 2,
+          r.y + r.height / 2 - rise * 5,
+          () => this.emit({ type: "tapTile", id: tile.id }),
+        ),
+        BOARD_BANDS.pool,
       );
       this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
     }
@@ -1351,12 +1414,15 @@ export class Renderer {
       panel
         .roundRect(bannerX, bannerY, bannerW, bannerH, 10)
         .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.55 });
-      this.root.addChild(panel);
+      // THE PANEL ARRIVES FIRST. It used to pop in instantly beneath its own
+      // staggered stars, so the best motion in the game was landing inside a
+      // container that had not itself arrived.
+      this.root.addChild(this.entry(panel, CLEARED_BANDS.panel, true));
 
       const headline = this.text("CLEARED", 24, PALETTE.highlight);
       headline.anchor.set(0.5);
       headline.position.set(DESIGN.width / 2, bannerY + 28);
-      this.root.addChild(headline);
+      this.root.addChild(this.entry(headline, CLEARED_BANDS.headline, true));
 
       // A hairline under the headline, so the stars sit in a tray of their own
       // rather than floating in the middle of the panel.
@@ -1366,6 +1432,9 @@ export class Renderer {
           .lineTo(bannerX + bannerW - 40, bannerY + 46)
           .stroke({ width: 1, color: PALETTE.highlight, alpha: 0.3 }),
       );
+      // The rule is drawn straight to root above; band it with the headline's
+      // successor so the sequence reads panel -> headline -> rule -> stars.
+      this.entry(this.root.children[this.root.children.length - 1]!, CLEARED_BANDS.rule, true);
 
       /*
        * §9.5: stars arrive ONE AT A TIME, weighted.
@@ -1385,7 +1454,7 @@ export class Renderer {
         glyph.scale.set(lerp(1.9, 1, star.value));
         glyph.alpha = Math.min(1, star.raw * 3);
         glyph.position.set(x, bannerY + 66);
-        this.root.addChild(glyph);
+        this.root.addChild(this.entry(glyph, CLEARED_BANDS.stars, true));
       });
 
       this.root.addChild(
@@ -1419,6 +1488,6 @@ export class Renderer {
     // behind a tile.
     const tray = woodenTray(pool.width, pool.height + 12, PALETTE.tray, TRAY_ALPHA);
     tray.position.set(pool.x, pool.y - 6);
-    this.root.addChildAt(tray, 2);
+    this.root.addChildAt(this.entry(tray, BOARD_BANDS.furniture), 2);
   }
 }
