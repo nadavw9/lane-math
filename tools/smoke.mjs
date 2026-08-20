@@ -71,6 +71,9 @@ const server = createServer((request, response) => {
 
   // Strip leading separators so join() cannot be walked out of dist/.
   const file = join("dist", normalize(path).replace(/^[/\\]+/, ""));
+  if (process.env["SMOKE_DEBUG"]) {
+    process.stdout.write(`    [serve] base=${base} url=${request.url} -> ${file}\n`);
+  }
   if (!existsSync(file) || !statSync(file).isFile()) {
     response.writeHead(404).end("not found");
     return;
@@ -104,8 +107,16 @@ const check = (ok, message) => {
 };
 
 try {
+  // Bind before probing. Without this the probe can be answered by whatever
+  // else happens to hold the port — which is exactly what happened locally, and
+  // gave a PASS that was really a stale dev server answering.
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, resolve);
+  });
+
   if (!(await waitForServer())) {
-    process.stdout.write(`preview server never came up at ${url}\n`);
+    process.stdout.write(`static server never came up at ${url}\n`);
     stop(1);
   }
 
