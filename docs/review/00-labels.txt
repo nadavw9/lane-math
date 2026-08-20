@@ -1,97 +1,129 @@
-Lane Math — Phase 5F: audio. No visual change, so no screenshots this batch.
-Audio cannot be photographed, so everything below is instrumented and measured.
+Lane Math — the tap-latency leak, found and fixed. Plus operator sound and one
+star reading.
 
-1. SYNTHESIS — procedural, no audio files shipped (confirmed: 0 in dist).
-   Every voice is filtered noise plus low detuned oscillators. Nothing is
-   sampled, nothing rings, and no voice uses an interval that could be heard as
-   a melody.
+01-one-star-reading.png   The lane header. ONE star visual where there were three.
 
-   click      tap a tile      bandpass noise 1500-2900Hz (Q 3.5), 28ms, plus a
-                              320-540Hz triangle body. Centre frequency is
-                              driven by the TILE VALUE, so the board sounds like
-                              a set of distinct objects rather than one button.
-   knock      place in slot   9ms lowpassed transient + 190Hz triangle, 130ms,
-                              then a quieter 150Hz second contact at 42%: the
-                              piece lands, rocks once, is still.
-   knockSoft  return          no transient at all, 45ms attack, 155Hz, 160ms.
-                              The MISSING edge is what reads as reversed —
-                              nothing is literally played backwards, which would
-                              sound like an effect rather than a material.
-   thunk      commit correct  30ms lowpassed thump + 96Hz sine, 420ms tail, with
-                              a fifth above for body. The heaviest sound in the
-                              game, arriving into the silent hit-stop gap.
-   scrape     commit wrong    lowpassed noise sliding 620Hz -> 300Hz, 200ms,
-                              18ms attack. NO oscillator at all, so nothing is
-                              pitched and nothing can be heard as a wrong note.
-   tear       transform       bandpass noise 900 -> 2600Hz (Q 1.4), 190ms, and
-                              no wooden body. The only voice without one, so a
-                              transform can never be mistaken for a binary move.
-   fail       failure         68Hz sine, 900ms, lowpassed to 400Hz, and the
-                              quietest pitched voice. The board already said it.
-   star       level complete  6ms transient + 220Hz triangle lowpassed hard at
-                              1100Hz, 220ms. Fired one per star as it SEATS.
-                              The three pitches move about a tone in total, so
-                              it counts a tally rather than resolving a fanfare.
+===============================================================================
+STEP 1 — BISECT. Slope per commit, identical 600-tap measurement, median ms.
 
-   All pitched voices are detuned +/-12% per trigger, so the tenth knock in a
-   row still sounds like an object and not a repeated file.
+  commit                                     100   200   300   400   500   600
+  eb19f2a phase3 playable renderer           0.2   0.2   0.3   0.2   0.2   0.3
+  1b4b7b9 layout: pool holds position        0.4   0.3   0.3   0.2   0.3   0.3
+  86dce2a the feel layer                     2.8   6.6  10.9  23.1  30.9  38.9
+  d226e06 audio (current, before fix)        2.8   6.0  10.4  14.4  19.4  23.4
 
-2. TAP LATENCY — audio on vs muted. UNCHANGED.
-     audio on   median 9.6ms
-     muted      median 9.5ms
-   400 samples, INTERLEAVED: the mute state alternates every sample, because a
-   straight A-then-B run gave audio-on 1.4ms and muted 2.5ms — muted measuring
-   SLOWER, which is causally impossible and showed the run was drifting. The
-   0.1ms difference is noise.
+  The brief asked for three commits; I added 1b4b7b9, the commit IMMEDIATELY
+  before the feel layer, because several commits sit between Phase 3 and 5D and
+  "Phase 3 is clean, 5D leaks" would not have isolated which one. It is flat, so
+  the feel commit introduced it exactly. One commit, not a range.
 
-   SEPARATE FINDING, NOT AUDIO — latency degrades with use.
-   Median tap cost against taps taken, on a fresh page:
-     100 taps 2.8ms   200 6.0   300 10.4   400 14.4   500 19.4   600 23.4
-   Linear, and present with audio muted, so audio is not the cause.
-   TWO HYPOTHESES TESTED AND BOTH FALSIFIED:
-     - undestroyed display objects on redraw: destroying every child each frame
-       did not change the slope at all (and cost more). Reverted rather than
-       left in as an unproven fix.
-     - telemetry O(n^2) writes: only 2 events are recorded per 100 taps, and
-       clearing the log did not help.
-   Cause still unknown. Flagged for Phase 6; it is a real problem — 23ms taps
-   after 600 interactions is below 60fps responsiveness — but it is not this
-   session's and I will not guess at it in a commit message.
+===============================================================================
+STEP 2 — COUNT WHAT GROWS. Tight 600-tap loop, before the fix.
 
-3. NO SOUND DURING THE HIT-STOP — proven, not asserted.
-   Sampled six times inside the hold at a slowed clock:
-     holding true, cues []   x6      then on release: ["thunk"]
-   It is structural rather than timed: cues are produced from the ADOPTED
-   state, and the hold defers adoption, so the thunk cannot physically be made
-   before the beat has passed. A unit test pins the two predicates together.
+  taps                100     200     400     600    verdict
+  median ms           3.0     7.5    16.2    35.6    grows
+  flights             200     400     800    1200    GROWS, 2 per tap
+  rootChildren        222     422     822    1222    grows as 22 + 2x flights
+  heap MB           183.8   507.9  1738.5  3751.5    grows
+  tickerListeners       2       2       2       2    FLAT
+  lifts (Map)           1       1       1       1    FLAT
+  rewrites (Map)        0       0       0       0    FLAT
+  starArrivals          0       0       0       0    FLAT
+  shatters              0       0       0       0    FLAT
+  tileBounds (Map)      6       6       6       6    FLAT
+  fx children           0       0       0       0    FLAT
+  background children   1       1       1       1    FLAT
+  stage children        3       3       3       3    FLAT
 
-4. RETRY STILL EMITS EXACTLY ["render"] — the existing guarantee test passes
-   unchanged. Audio added nothing to that path, and restart is SILENT as well
-   as instant: a rewind is the harshest moment in the game and does not need
-   the game commenting on it.
+  YOUR PRIOR IS DISPROVED, and cleanly: ticker listeners are flat at 2 for the
+  whole run. Nothing registers a callback per effect. Every tween collection is
+  also flat — lifts, rewrites and starArrivals all self-prune correctly. The one
+  thing that grows is `flights`, and rootChildren tracks it exactly, because
+  every live flight draws one extra token on every redraw.
 
-5. NOTHING PLAYS WHILE IDLE — two seconds untouched, zero cues. There is no
-   ambience and no idle loop; the game is silent until the player acts.
+  CAUSE: flights was a plain array, appended to on every placement and pruned
+  ONLY inside the ticker callback. Tap cost is linear in flights because
+  drawFlights() walks it every redraw.
 
-MUTE — persisted in the save, default ON (unmuted). Additive field with a safe
-default, so no schema bump: migrate() already coalesces every field and a save
-written before audio reads as unmuted. Verified: setting it writes muted:true to
-lane-math.save.v1, and nothing plays while set.
+  TRIGGER, and this matters for how to read the numbers: the benchmark drives
+  input in a tight synchronous loop, so no frame is ever delivered, so the
+  pruning never runs. Re-measured with a requestAnimationFrame yield between
+  taps, the SAME pre-fix build is flat at 1.0ms with flights plateauing at
+  12-15. So a player tapping at human speed never saw this. What the code had
+  was not "slow", it was "correct only while frames keep arriving" — which a
+  background tab, a long GC or a slow device all break.
 
-TWO DEFECTS FOUND BY THE INSTRUMENTATION
-  a) RETURNS DOUBLE-KNOCKED. The cue fired when the slot emptied AND again when
-     the travelling token landed. Placement genuinely wants two sounds — a click
-     for the finger, a knock for the piece arriving 260ms later — and the return
-     had followed it by reflex. Now one sound, with a test.
-  b) A MID-LEVEL RESTART WAS NOT DETECTED AS A REWIND. Restarting before
-     anything is consumed produces a state identical to the previous one except
-     the equation row emptying — which is byte-for-byte what returning a tile
-     looks like. It was animating tiles flying home and sounding a knock the
-     player never earned. State-diffing genuinely cannot separate them, so the
-     Director now counts its own rewinds and ViewState carries `run`.
+  STEP 3 not needed. Counting answered it.
 
-KNOWN GAP, FOLLOWING THE BRIEF LITERALLY: tapping a binary OPERATOR makes no
-sound. The sound map lists "tap a pool tile" and not "tap an operator", so it is
-silent by omission rather than by decision. Say if it should have a voice.
+===============================================================================
+THE FIX — bounded by construction, not by the ticker.
 
-Build 1.2766 MB, JS 917.1 KB. Zero audio assets. Tests 248 passing.
+  flights is now keyed by SLOT (src/renderer/flights.ts). A slot holds one thing
+  at a time, so it can have at most one token travelling to or from it, and there
+  are three slots. The collection cannot exceed three however input arrives, and
+  a new flight for a seat supersedes the stale one instead of stacking a second
+  identical token on top of it — which was a second, quieter bug in the same
+  code: rapid taps on one slot drew overlapping tokens.
+
+  The fix removes the dependency on frame delivery rather than making pruning
+  more frequent. Nothing has to be trusted for it to hold.
+
+  AFTER, same tight 600-tap loop that produced 35.6ms:
+  taps            100    200    400    600
+  median ms       0.5    0.5    0.5    0.5     flat
+  flights           1      1      1      1     flat
+  rootChildren     22     22     22     22     flat
+  heap MB        56.6   81.3  107.1  145.3     normal churn, was 3751
+
+REGRESSION TEST — src/renderer/flights.test.ts, 7 tests.
+  Deliberately NOT a millisecond assertion: that would be machine-dependent and
+  flaky, and it would pin the symptom. It asserts the quantity that DRIVES the
+  latency — the number of flights, which is the per-redraw draw work — stays
+  bounded no matter how much input arrives, with the clock never advanced,
+  because that is the exact failing condition. 600 taps with no frame in
+  between: size stays 1. That is the machine-independent form of "600 taps costs
+  what 100 taps costs".
+
+===============================================================================
+STRAIGHT-RUN A/B — independent confirmation, no interleaving.
+
+  order 1:  audio on 0.7ms   then muted 0.4ms
+  order 2:  muted 0.5ms      then audio on 0.7ms
+
+  Audio on is now consistently ~0.25ms slower than muted, in BOTH orders. That
+  is causally sensible — scheduling oscillator nodes costs something — and it no
+  longer depends on which series ran first.
+
+  Before the fix the same straight run gave audio-on 1.4ms and muted 2.5ms:
+  muted measuring SLOWER than unmuted, which is impossible. You were right that
+  the drift I worked around WAS the bug. The interleaving last session was a
+  correct workaround for a real defect and a wrong thing to settle for.
+
+  Honest number: audio costs about 0.25ms per tap, on a 16.7ms frame budget.
+
+===============================================================================
+OPERATOR TAP SOUND — added. Omission corrected.
+
+  clack   18ms, bandpass noise at a FIXED 2400Hz (Q 5) with a trace of body at
+          430Hz. Against the tile click's 28ms, 1500-2900Hz and fuller body:
+          same wooden family, shorter and drier, and fixed because an operator
+          has no value to modulate against. Less resonance is what drier means
+          physically — a small hard thing tapped, where a tile is a heavier one.
+
+  Verified in sequence: click, knock, CLACK, click, knock, thunk.
+
+===============================================================================
+ONE STAR READING — was three.
+
+  The header carried the level best as glyphs, the banked total as "3 stars",
+  and a separate "this run" line: three ways to say three stars, in two sizes
+  and two colours, none saying anything the others did not.
+
+  What survives is the only one that is LIVE and actionable — what this attempt
+  is currently worth, which falls as failures and hints are spent. Rendered as
+  three filled or hollow glyphs in gold, since 9.6 gives gold to "earned" and
+  this is the earning in progress. Best-ever and banked total are
+  meta-progression and belong on a map screen, not on the board — flagging that
+  they now have nowhere to appear until one exists.
+
+Tests 255 passing. Build 1.2774 MB, JS 918.0 KB.

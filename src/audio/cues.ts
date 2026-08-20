@@ -15,6 +15,7 @@ import { isRewind } from "../renderer/transitions.js";
  */
 export type CueName =
   | "click"
+  | "clack"
   | "knock"
   | "knockSoft"
   | "thunk"
@@ -79,6 +80,16 @@ export function cuesFor(
     const was = previous.tiles.find((t) => t.id === tile.id);
     if (was && !was.consumed && was.value !== tile.value) cues.push({ name: "tear" });
   }
+
+  /*
+   * Choosing an operator.
+   *
+   * Was silent, and silent by omission rather than by decision — the sound map
+   * listed the pool tile and never mentioned the operator row. An operator is a
+   * different shape and a different material from a tile, so it gets its own
+   * voice rather than borrowing the tile click.
+   */
+  if (previous.slots.op === null && next.slots.op !== null) cues.push({ name: "clack" });
 
   // Tiles entering or leaving the equation row.
   const slots: [number | null, number | null][] = [

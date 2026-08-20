@@ -18,6 +18,7 @@ import {
 import { RejectPulse, Shatter } from "./effects.js";
 import { cuesFor } from "../audio/cues.js";
 import type { Sound } from "../audio/sound.js";
+import { FlightTable } from "./flights.js";
 import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import {
@@ -31,23 +32,6 @@ import {
   woodenTray,
 } from "./tokens.js";
 
-/**
- * A token in transit between the pool and the equation row (§9.5).
- *
- * Placement and return are the two moves the player makes most, so they are the
- * two that most need weight. Both are drawn as one token travelling — the seat
- * it left and the seat it is heading for both stay empty until it lands.
- */
-interface Flight {
-  readonly kind: "toSlot" | "toPool";
-  readonly slotIndex: 0 | 1 | 2;
-  /** null for the operator, which has no pool slot to return to. */
-  readonly tileId: number | null;
-  readonly label: string;
-  readonly from: { x: number; y: number; w: number; h: number };
-  readonly to: { x: number; y: number; w: number; h: number };
-  readonly tween: Tween;
-}
 
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/"];
 const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
@@ -87,7 +71,7 @@ export class Renderer {
    */
   /** Press feedback per tile: a tile coming up under the finger. */
   private readonly lifts = new Map<number, Tween>();
-  private flights: Flight[] = [];
+  private readonly flights = new FlightTable();
   /** The queue shifting down after a target is cleared. */
   private laneAdvance: Tween | null = null;
   /** The equation row refusing an illegal commit. */
@@ -219,6 +203,37 @@ export class Renderer {
   }
 
   /**
+   * Everything the renderer holds that could grow without bound.
+   *
+   * Exists to answer "what accumulates per tap" with counts rather than
+   * hypotheses. A flat counter is evidence too, which is why this reports all
+   * of them rather than the ones currently under suspicion.
+   */
+  diagnostics(): Record<string, number> {
+    const ticker = this.app.ticker as unknown as { _head?: { next?: unknown } };
+    let tickerListeners = 0;
+    let node = ticker._head?.next as { next?: unknown } | undefined;
+    while (node) {
+      tickerListeners++;
+      node = node.next as { next?: unknown } | undefined;
+    }
+
+    return {
+      tickerListeners,
+      rootChildren: this.root.children.length,
+      fxChildren: this.fx.children.length,
+      backgroundChildren: this.background.children.length,
+      stageChildren: this.app.stage.children.length,
+      flights: this.flights.size,
+      lifts: this.lifts.size,
+      rewrites: this.rewrites.size,
+      starArrivals: this.starArrivals.length,
+      shatters: this.shatters.length,
+      tileBounds: this.tileBounds.size,
+    };
+  }
+
+  /**
    * What the feel layer is doing right now (§9.5).
    *
    * Exposed for the review harness: the effects are the deliverable this
@@ -232,7 +247,7 @@ export class Renderer {
       holding: this.hold !== null,
       holdRemainingMs: this.hold?.remainingMs ?? 0,
       lifts: [...this.lifts.entries()].map(([id, t]) => ({ id, at: Number(t.raw.toFixed(3)) })),
-      flights: this.flights.map((f) => ({
+      flights: this.flights.active().map((f) => ({
         kind: f.kind,
         slot: f.slotIndex,
         label: f.label,
@@ -420,7 +435,7 @@ export class Renderer {
         const home = poolSlot(poolIndex(after), board.pool, board.grid);
         const tile = next.tiles.find((t) => t.id === after);
         this.lifts.set(after, new Tween(TIMING.lift, EASE.lift));
-        this.flights.push({
+        this.flights.launch({
           kind: "toSlot",
           slotIndex,
           tileId: after,
@@ -445,7 +460,7 @@ export class Renderer {
         // Returned. Back to ITS OWN slot — the pool never re-packs (§9.3), so
         // there is always exactly one seat it belongs in.
         const home = poolSlot(poolIndex(before), board.pool, board.grid);
-        this.flights.push({
+        this.flights.launch({
           kind: "toPool",
           slotIndex,
           tileId: before,
@@ -479,7 +494,7 @@ export class Renderer {
   private clearFeel(): void {
     this.starsSounded = 0;
     this.lifts.clear();
-    this.flights = [];
+    this.flights.clear();
     this.rewrites.clear();
     this.laneAdvance = null;
     this.resist = null;
@@ -495,7 +510,7 @@ export class Renderer {
    * rather than an icon sliding across a surface.
    */
   private drawFlights(): void {
-    for (const flight of this.flights) {
+    for (const flight of this.flights.active()) {
       const t = flight.tween.value;
       const x = lerp(flight.from.x, flight.to.x, t);
       const y = lerp(flight.from.y, flight.to.y, t);
@@ -581,15 +596,13 @@ export class Renderer {
      * the placement into a single blip and lose the weight the flight exists to
      * create.
      */
-    const landed = this.flights.filter((flight) => !flight.tween.advance(deltaMs));
-    for (const flight of landed) {
+    for (const flight of this.flights.advance(deltaMs)) {
       // Only a PLACEMENT gets a landing sound. A return already spoke when the
       // player tapped it — sounding it again here double-knocked every undo,
       // which the cue log caught immediately.
       if (flight.kind === "toSlot") this.sound?.play({ name: "knock" });
     }
-    this.flights = this.flights.filter((flight) => !flight.tween.done);
-    if (this.flights.length > 0) running = true;
+    if (this.flights.size > 0) running = true;
 
     if (this.laneAdvance) {
       if (this.laneAdvance.advance(deltaMs)) running = true;
@@ -764,7 +777,7 @@ export class Renderer {
       const shape = index === 1 ? "circle" : "square";
       // A token still in flight has not arrived: its seat stays empty until it
       // lands, or the same token would be drawn twice.
-      const arriving = this.flights.some((f) => f.kind === "toSlot" && f.slotIndex === index);
+      const arriving = this.flights.arrivingAt(index);
       if (!filled || arriving) {
         this.place(emptySlot(r.width, r.height, shape), r.x + resistDx, r.y, tap);
         return;
@@ -880,7 +893,7 @@ export class Renderer {
         continue;
       }
       // On its way home from the row: drawn as the flight, not here.
-      if (this.flights.some((f) => f.kind === "toPool" && f.tileId === tile.id)) {
+      if (this.flights.returningTile(tile.id)) {
         this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
         continue;
       }
@@ -970,25 +983,31 @@ export class Renderer {
         this.root.addChild(hud);
       }
 
-      // Star counter: a prize for clearing 1-1, not pre-existing chrome.
+      /*
+       * ONE star reading, not three.
+       *
+       * The header carried three at once: filled glyphs for this level's best,
+       * a running total, and a separate "this run" line. Three ways to say
+       * three stars, in two type sizes and two colours, none of which told the
+       * player anything the others did not.
+       *
+       * What survives is the only one that is LIVE and actionable — what this
+       * attempt is currently worth, which falls as failures and hints are
+       * spent. The best-ever and the banked total are meta-progression and
+       * belong on a map screen, not on the board. Drawn in gold, because §9.6
+       * gives gold to "earned" and this is the earning in progress.
+       */
       if (u.starCounter) {
+        const earned = s.phase === "won" ? eco.bestStars : eco.starsIfCleared;
         const stars = this.text(
-          `${"★".repeat(eco.bestStars)}${"☆".repeat(3 - eco.bestStars)}  ${eco.totalStars}★`,
-          13,
+          `${"★".repeat(earned)}${"☆".repeat(Math.max(0, 3 - earned))}`,
+          15,
           // Gold is an outline colour for dark tokens; on paper it disappears.
           PALETTE.highlightInk,
         );
         stars.anchor.set(1, 0);
         stars.position.set(lane.x + lane.width - 8, lane.y + 6);
         this.root.addChild(stars);
-
-        const pending = this.text(
-          s.phase === "playing" ? `this run: ${eco.starsIfCleared}★` : "",
-          12,
-          PALETTE.textDim,
-        );
-        pending.position.set(lane.x + 8, lane.y + 26);
-        this.root.addChild(pending);
       }
 
       if (eco.firstFailureExempt) {

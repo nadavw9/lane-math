@@ -215,6 +215,23 @@ const VOICES: Record<CueName, Voice> = {
   },
 
   /**
+   * Choose an operator — the tile click's drier, smaller cousin.
+   *
+   * Same wooden family, deliberately distinguishable: 18ms against the click's
+   * 28ms, a tighter bandpass at a FIXED 2400Hz (an operator has no value to
+   * modulate against), and only a trace of body at 430Hz. Less resonance is
+   * what "drier" means physically — a small hard thing tapped, where a number
+   * tile is a heavier one.
+   */
+  clack: {
+    duration: 0.018,
+    render: (s, at, _cue, seconds) => {
+      s.burst(at, seconds, 0.14, { type: "bandpass", from: 2400, q: 5 });
+      s.body(at, seconds * 1.6, 430, 0.035, "triangle", 2600);
+    },
+  },
+
+  /**
    * Place into a slot — a wooden knock that settles.
    * A 9ms lowpassed transient, a 190Hz triangle body over 130ms, then a
    * quieter second contact at 150Hz: the piece lands, rocks once, is still.
