@@ -205,6 +205,31 @@ that way.
 
 ---
 
+## Settled: do not re-investigate
+
+**PixiJS tree-shaking is not worth it.** Measured 2026-08-20 by splitting Pixi
+into per-feature chunks. The features this game never touches — filters, bitmap
+text, accessibility, spritesheet, dom, mesh — total **58,491 bytes raw / 19,310
+gzipped**, about 9% of Pixi and 3% of the bundle. `pixi-rendering` at 233KB raw
+is the irreducible core.
+
+Collecting it means dropping the `pixi.js` barrel for subpath imports and
+hand-registering the init side effects the barrel pulls in, where a missed one
+makes a render path degrade *silently* rather than throw — a failure class no
+test here would catch. Not worth 19KB.
+
+Two related facts, so nobody re-derives them:
+- **There is no production Pixi build to select.** Pixi 8.19 publishes one
+  artefact; `exports["."]` has no production/development condition.
+- **The deprecation strings are not evidence of a dev build.** The deprecation
+  helper is ungated — `NODE_ENV` appears nowhere in `pixi.js/lib` — so those
+  strings ship in every Pixi 8 build.
+
+For scale, the level-metadata strip (GDD §10) saved **339KB raw at zero runtime
+risk**. Look for that kind of win before this kind.
+
+---
+
 ## Scope discipline
 
 The principal risk on this project is porting weight from Traffic Bomb "because it exists"
