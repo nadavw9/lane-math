@@ -604,6 +604,39 @@ Same board, three genuinely different puzzles.
 
 ## 9. Art direction
 
+### 9.0 The quality bar — non-negotiable
+
+**Target: indistinguishable from a top-100 grossing Play Store puzzle game.** The reference is Dream Games (Royal Match, Royal Kingdom), whose stated standard is Pixar-like animation applied to casual puzzle. This is a hard bar, not an aspiration, and it applies to every screen, state and transition.
+
+**The gate, applied to every visual deliverable:**
+
+> Would Royal Match ship this screen?
+
+If the answer is no or unsure, it does not ship. This is the same gate used on Traffic Bomb and it is blocking, not advisory.
+
+**Minimum standards. A screen failing any of these is not done:**
+
+| Requirement | Test |
+|---|---|
+| Depth | Nothing is a flat fill. Every surface has material, gradient or lighting. |
+| Focal point | One element the eye lands on first, by design. |
+| Motion on entry | Every screen animates in. Nothing appears instantaneously. |
+| Designed empty state | Sparse boards and empty panels look intentional, not unfinished. |
+| Four interaction states | Idle, pressed, disabled, unavailable — all designed, none defaulted. |
+| No system fonts | Typography is chosen, not inherited. |
+| No orphan colours | Every colour is in the §9.6 material or signal set. |
+
+**Known gaps against the bar, tracked until closed:**
+
+1. No character or mascot — carries store icon, ad creative, personality
+2. Tokens are geometry with material, not illustrated objects
+3. Level-complete is a panel, not a celebratory sequence
+4. Meta-layer has no visual payoff (stars buy hints; nothing visibly grows)
+5. UI chrome is functional rather than designed
+6. No screen-transition identity
+
+**Visual quality does not wait for playtest data.** Gameplay tuning depends on telemetry; visual quality does not. They proceed in parallel. "After playtest" is how a game ships looking mediocre.
+
 ### 9.1 Backgrounds — single pre-rendered image
 
 **Rule: composite where things move, single image where nothing does.**
