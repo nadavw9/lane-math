@@ -10,6 +10,7 @@ import type { Command, InputEvent, LadderLevel, ViewState } from "./game/types.j
 import { Renderer } from "./renderer/renderer.js";
 import { setEffectSpeed } from "./renderer/effects.js";
 import { WinnabilityService } from "./game/winnability-service.js";
+import { buildExport, deliver } from "./telemetry/export.js";
 import { ConsoleSink, LocalStorageSink, Telemetry } from "./telemetry/telemetry.js";
 import { enumerate, enumerateTransforms } from "./solver/index.js";
 
@@ -52,6 +53,36 @@ const economy = new Economy(new LocalStorageStore());
 const localSink = new LocalStorageSink();
 const telemetry = new Telemetry([new ConsoleSink(), localSink]);
 telemetry.open();
+
+/** Which build this is, injected at compile time. Shown in the status band. */
+const BUILD = __BUILD_HASH__;
+renderer.setBuildLabel(BUILD);
+
+/**
+ * Get the §7.8 funnel off the device.
+ *
+ * Two ways in, because a playtester on a phone has no DevTools:
+ *   - LONG-PRESS the build string in the status band (600ms)
+ *   - or open the game with ?telemetry=1
+ *
+ * The long-press is the primary one: it needs no typing and leaves no visible
+ * control for a player to find. The query parameter exists because a gesture is
+ * awkward to describe over a message and impossible if the board will not open.
+ */
+async function exportTelemetry(): Promise<string> {
+  const events = localSink.read();
+  const payload = buildExport(events, BUILD, telemetry.session);
+  const method = await deliver(payload);
+  // eslint-disable-next-line no-console
+  console.log(`[telemetry] ${events.length} events via ${method}`, payload.summary);
+  return method;
+}
+
+if (new URLSearchParams(window.location.search).get("telemetry") === "1") {
+  // Deferred so the board is up first — a share sheet over a blank canvas is
+  // indistinguishable from a crash.
+  setTimeout(() => void exportTelemetry(), 400);
+}
 
 // Winnability off the render thread. The Phase 5 commit animation occupies the
 // pause the warm-up used to sit in, so it had to move before the animation.
@@ -157,13 +188,17 @@ map.attach({
  * and everything below is a no-op, so the browser build never carries the
  * native bridge and never waits on it.
  */
-const ads = new Ads({ plugin: await loadAdMob() });
+const ads = new Ads(await loadAdMob());
 void ads.initialize();
 
 renderer.onInput((input) => {
   // §7.6: the map is absent until 1-10 is cleared, so the way back is too.
   if (input.type === "tapMap") {
     showMap();
+    return;
+  }
+  if (input.type === "exportTelemetry") {
+    void exportTelemetry();
     return;
   }
   send(input);
@@ -329,6 +364,8 @@ Object.assign(window, {
     /** Every unbounded-growth candidate the renderer holds. */
     diagnostics: () => renderer.diagnostics(),
     telemetry: () => localSink.read(),
+    exportTelemetry,
+    build: BUILD,
     clearTelemetry: () => localSink.clear(),
     offThread: () => winnability.offThread,
   },

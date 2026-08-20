@@ -91,16 +91,20 @@ export class Ads {
 /**
  * Load the real plugin, but only where one exists.
  *
- * Imported dynamically so the web build never pulls the native bridge into the
- * bundle: on a browser this resolves to null and the game is unchanged.
+ * Returns a BOX rather than the plugin itself, and that is load-bearing.
+ * Capacitor's plugin object is a proxy that intercepts every property access,
+ * including `then` — so returning it from an async function makes the runtime
+ * treat it as a thenable and call `AdMob.then()`, which the web shim throws on.
+ * That took the whole app down at module load on the browser: no laneMath, no
+ * board, blank canvas. Wrapping it means the proxy is never awaited.
  */
-export async function loadAdMob(): Promise<RewardedPlugin | null> {
+export async function loadAdMob(): Promise<{ plugin: RewardedPlugin | null }> {
   try {
     const mod = (await import("@capacitor-community/admob")) as unknown as {
       AdMob?: RewardedPlugin;
     };
-    return mod.AdMob ?? null;
+    return { plugin: mod.AdMob ?? null };
   } catch {
-    return null;
+    return { plugin: null };
   }
 }
