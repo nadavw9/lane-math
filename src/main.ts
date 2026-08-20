@@ -2,6 +2,7 @@ import runtimeLevels from "./generated/levels.json";
 import { Ads, loadAdMob } from "./ads/ads.js";
 import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
+import { loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
 import { Economy } from "./economy/economy.js";
 import { LocalStorageStore } from "./economy/save.js";
@@ -41,6 +42,13 @@ for (const level of runtimeLevels as LadderLevel[]) levels.set(level.id, level);
 
 const host = document.getElementById("app")!;
 const picker = document.getElementById("levels")!;
+
+/*
+ * The sprite path is opt-in with ?sprites=1 until real art lands.
+ * Set BEFORE init, which is where the atlas is loaded.
+ */
+const wantSprites = new URLSearchParams(window.location.search).get("sprites") === "1";
+setSpritesEnabled(wantSprites);
 
 const renderer = new Renderer();
 await renderer.init(host);
@@ -363,6 +371,7 @@ Object.assign(window, {
     feel: () => renderer.feelState(),
     /** Every unbounded-growth candidate the renderer holds. */
     diagnostics: () => renderer.diagnostics(),
+    sprites: () => ({ missing: missingSprites(), loaded: loadedSprites() }),
     telemetry: () => localSink.read(),
     exportTelemetry,
     build: BUILD,

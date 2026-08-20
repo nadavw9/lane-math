@@ -630,10 +630,10 @@ If the answer is no or unsure, it does not ship. This is the same gate used on T
 
 **Known gaps against the bar, tracked until closed:**
 
-1. No character or mascot — carries store icon, ad creative, personality
+1. No character — SPECIFIED in ART_DIRECTION §2 (brass automaton, four states). Not built.
 2. Tokens are geometry with material, not illustrated objects
 3. Level-complete is a panel, not a celebratory sequence
-4. Meta-layer has no visual payoff (stars buy hints; nothing visibly grows)
+4. Meta-layer has no visual payoff — SPECIFIED in ART_DIRECTION §6 (Academy restoration). Not built.
 5. UI chrome is functional rather than designed
 6. No screen-transition identity
 

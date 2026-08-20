@@ -15,6 +15,22 @@ import sharp from "sharp";
  *
  * Built and tested before any real art exists, so that when a sheet arrives the
  * only unknown is the art itself.
+ *
+ * -- TWO THINGS TO READ BEFORE CHANGING THE PALETTE OR THE KEYER --------------
+ *
+ * THE KEY TOLERANCE DEPENDS ON THE PALETTE. The 60/120 band below is wide, and
+ * it is only safe because ART_DIRECTION section 4 contains no magenta-adjacent
+ * hue - brass, amber, deep wood, ink navy, cream and one dark red. Nothing in
+ * the game sits near #FF00FF, so a generous key cannot eat real pixels. IF A
+ * PURPLE OR VIOLET IS EVER ADDED TO THE PALETTE, THIS BAND MUST BE TIGHTENED,
+ * or the keyer will punch holes in the art. That is a property of this
+ * project's palette, not of chroma keying in general.
+ *
+ * THE DESPILL METRIC IS min(r, b) - g, NOT (r+b)/2 - g. Magenta is high in red
+ * AND blue simultaneously, so the minimum of the two detects it and the average
+ * does not. The average scores +45 on section 4's failure red #7A2020 - the
+ * keyer would have quietly desaturated one of the two signal colours every time
+ * it ran. The minimum scores 0 on that red, -123 on brass and -110 on amber.
  */
 
 interface Options {
@@ -217,6 +233,17 @@ interface Audit {
   meanHue: number;
   meanSaturation: number;
   coverage: number;
+  /**
+   * Content box as a fraction of the padded frame.
+   *
+   * Apparent SCALE is drift too: a dial generated half again as large as its
+   * siblings is as wrong as one lit from the right, and just as invisible until
+   * they sit side by side on a board.
+   */
+  boxWidth: number;
+  boxHeight: number;
+  boxX: number;
+  boxY: number;
 }
 
 /**
@@ -282,6 +309,19 @@ function auditSprite(name: string, rgba: Buffer, width: number, height: number):
     }
   }
 
+  // Content bounds at full opacity: the solid object, excluding the soft
+  // contact shadow, which is what "how big does this look" means.
+  let bx0 = width, by0 = height, bx1 = 0, by1 = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (rgba[(y * width + x) * 4 + 3]! < 200) continue;
+      if (x < bx0) bx0 = x;
+      if (y < by0) by0 = y;
+      if (x > bx1) bx1 = x;
+      if (y > by1) by1 = y;
+    }
+  }
+
   const centreX = width / 2;
   const centreY = height / 2;
   const lightX = weight > 0 ? sumX / weight - centreX : 0;
@@ -303,6 +343,10 @@ function auditSprite(name: string, rgba: Buffer, width: number, height: number):
     meanHue,
     meanSaturation: opaque > 0 ? satSum / opaque : 0,
     coverage: opaque / (width * height),
+    boxWidth: bx1 >= bx0 ? (bx1 - bx0 + 1) / width : 0,
+    boxHeight: by1 >= by0 ? (by1 - by0 + 1) / height : 0,
+    boxX: bx1 >= bx0 ? bx0 / width : 0,
+    boxY: by1 >= by0 ? by0 / height : 0,
   };
 }
 
@@ -412,7 +456,16 @@ const padW = Math.max(...sliced.map((s) => s.width));
 const padH = Math.max(...sliced.map((s) => s.height));
 
 const audits: Audit[] = [];
-const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
+interface Frame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** The solid object without its contact shadow — where numerals belong. */
+  content: { x: number; y: number; w: number; h: number };
+}
+
+const frames: Record<string, Frame> = {};
 
 const prepared = await Promise.all(
   sliced.map(async (sprite) => {
@@ -496,7 +549,35 @@ const rows = Math.ceil(meta.length / columns);
 const composites = meta.map((m, i) => {
   const x = (i % columns) * cell;
   const y = Math.floor(i / columns) * cell;
-  frames[m.name] = { x, y, w: m.meta.width ?? 0, h: m.meta.height ?? 0 };
+  const w = m.meta.width ?? 0;
+  const h = m.meta.height ?? 0;
+  const audit = audits.find((a) => a.name === m.name);
+
+  /*
+   * CONTENT BOX, and it is not the same as the frame.
+   *
+   * A sprite's frame includes its soft contact shadow (§3 — every object sits
+   * on something), so the frame's centre sits BELOW the object's visual centre.
+   * A numeral centred on the frame would ride low on every token in the game,
+   * by exactly the height of the shadow.
+   *
+   * This is the box of fully-opaque pixels — the solid object without its
+   * shadow — and it is what the renderer centres numerals on. Recorded here
+   * because only the pipeline can see the pixels; by the time the game has a
+   * texture, the shadow is indistinguishable from the object.
+   */
+  frames[m.name] = {
+    x,
+    y,
+    w,
+    h,
+    content: {
+      x: x + Math.round((audit?.boxX ?? 0) * w),
+      y: y + Math.round((audit?.boxY ?? 0) * h),
+      w: Math.round((audit?.boxWidth ?? 1) * w),
+      h: Math.round((audit?.boxHeight ?? 1) * h),
+    },
+  };
   return { input: m.buffer, left: x, top: y };
 });
 
@@ -528,7 +609,7 @@ for (const a of audits) {
   process.stdout.write(
     `  ${a.name.padEnd(22)} ${a.lightAngle.toFixed(0).padStart(4)}째  ` +
       `${a.specularX.toFixed(2)},${a.specularY.toFixed(2)}  ` +
-      `${a.meanHue.toFixed(0).padStart(5)}째  ${a.meanSaturation.toFixed(2)}\n`,
+      `${a.meanHue.toFixed(0).padStart(5)}째  ${a.meanSaturation.toFixed(2)}  ${(a.boxWidth * 100).toFixed(0)}x${(a.boxHeight * 100).toFixed(0)}%\n`,
   );
 }
 process.stdout.write(
@@ -550,6 +631,13 @@ for (const a of audits) {
   }
   if (a.specularX > 0.55) {
     problems.push(`${a.name}: specular on the right (x=${a.specularX.toFixed(2)}) — §3 wants upper-left`);
+  }
+  const meanBox = audits.reduce((t, x) => t + x.boxWidth * x.boxHeight, 0) / audits.length;
+  const box = a.boxWidth * a.boxHeight;
+  if (meanBox > 0 && Math.abs(box - meanBox) / meanBox > 0.25) {
+    problems.push(
+      `${a.name}: drawn at ${((box / meanBox) * 100).toFixed(0)}% of the family's apparent size`,
+    );
   }
   const hueOff = Math.abs(a.meanHue - hue.mean) % 360;
   if ((hueOff > 180 ? 360 - hueOff : hueOff) > Math.max(20, hue.deviation * 2)) {

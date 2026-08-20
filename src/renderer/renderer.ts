@@ -19,6 +19,7 @@ import { RejectPulse, Shatter } from "./effects.js";
 import { cuesFor } from "../audio/cues.js";
 import type { Sound } from "../audio/sound.js";
 import { FlightTable } from "./flights.js";
+import { loadAtlas, missingSprites, loadedSprites, setSpritesEnabled, spritesEnabled } from "./sprites.js";
 import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import {
@@ -182,6 +183,18 @@ export class Renderer {
       setGrainTexture(null);
     }
 
+    /*
+     * The sprite path (ART_DIRECTION §5), off unless asked for.
+     *
+     * Loading the atlas is not the same as enabling it: a family that fails to
+     * load leaves every token on the procedural path, which is the state the
+     * game already ships in, so there is nothing to fall back FROM.
+     */
+    if (spritesEnabled()) {
+      const ok = await loadAtlas("tokens", import.meta.env.BASE_URL);
+      if (!ok) setSpritesEnabled(false);
+    }
+
     this.app.stage.addChild(this.background);
     this.app.stage.addChild(this.root);
     this.app.stage.addChild(this.fx);
@@ -262,6 +275,12 @@ export class Renderer {
       starArrivals: this.starArrivals.length,
       shatters: this.shatters.length,
       tileBounds: this.tileBounds.size,
+      spritesEnabled: spritesEnabled() ? 1 : 0,
+      spritesLoaded: loadedSprites().length,
+      // Non-zero means the game asked for art it did not get. Surfaced rather
+      // than swallowed: a silent fallback is how a missing asset survives three
+      // weeks of review.
+      spritesMissing: missingSprites().length,
     };
   }
 

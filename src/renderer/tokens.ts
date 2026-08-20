@@ -1,6 +1,7 @@
-import { Container, Graphics, Matrix, Text, TextStyle, type Texture } from "pixi.js";
+import { Container, Graphics, Matrix, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
 import { PALETTE } from "./layout.js";
+import { numeralCentre, opacityFor, spriteFor, spriteNameFor, type TokenState } from "./sprites.js";
 
 /**
  * The shared grain (GDD §9.6).
@@ -140,7 +141,63 @@ export function targetPlate(w: number, h: number, value: string, style: TokenSty
  * "Chunky bevelled tiles, Scrabble weight, slight drop shadow." Text reads as
  * information; a tile reads as a finite thing you spend.
  */
-export function numberTile(w: number, h: number, value: string, style: TokenStyle): Container {
+/**
+ * Draw a token from the atlas if there is art for it (ART_DIRECTION §5).
+ *
+ * Returns null when there is no texture, which is the signal to fall back to
+ * the procedural path below rather than to give up. The numeral is NOT part of
+ * the art (§8) and is drawn over the base by the caller, positioned on the
+ * frame's content box so the contact shadow does not push it low.
+ */
+function spriteBase(
+  base: string,
+  state: TokenState,
+  w: number,
+  h: number,
+): { container: Container; numeral: { x: number; y: number } } | null {
+  const entry = spriteFor(spriteNameFor(base, state));
+  if (!entry) return null;
+
+  const container = new Container();
+  const sprite = new Sprite(entry.texture);
+  sprite.width = w;
+  sprite.height = h;
+  container.addChild(sprite);
+  container.alpha = opacityFor(state);
+
+  return { container, numeral: numeralCentre(entry.frame, w, h) };
+}
+
+/**
+ * Pool number tile — a glass cube once art lands, a drawn rounded square until
+ * then (ART_DIRECTION §5, GDD §9.2).
+ *
+ * Both paths live here permanently. The procedural one is the fallback for any
+ * token without art and the guarantee that a missing texture never blanks the
+ * board.
+ */
+export function numberTile(
+  w: number,
+  h: number,
+  value: string,
+  style: TokenStyle,
+  state: TokenState = "idle",
+): Container {
+  const art = spriteBase("cube", state, w, h);
+  if (art) {
+    const text = label(value, Math.min(h * 0.54, 26), style.text);
+    text.position.set(art.numeral.x, art.numeral.y);
+    art.container.addChild(text);
+    if (style.outline !== undefined) {
+      art.container.addChild(
+        new Graphics()
+          .roundRect(0, 0, w, h, Math.min(w, h) * 0.22)
+          .stroke({ width: 3, color: style.outline }),
+      );
+    }
+    return art.container;
+  }
+
   const token = new Container();
   const r = Math.min(w, h) * 0.22;
   const g = new Graphics();
