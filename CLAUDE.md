@@ -188,6 +188,20 @@ that way.
    unary transform counts as a move for failure detection.
 7. **No hidden difficulty adjustment, ever.** No DDA, no fail-streak mercy, no regenerating a
    level on failure. The fairness contract is what makes planning worth doing (GDD §8.1, §11).
+8. **Frame-dependent correctness.** Logic that is correct only while frames keep arriving. A
+   collection pruned inside a ticker callback is unbounded in a background tab, during a long GC,
+   or on a device under thermal load. Prefer a structural bound (keyed by a fixed set) over
+   pruning harder.
+
+   *Symptom:* linear degradation under synchronous input that disappears when a rAF yield is
+   inserted — so it does not reproduce at human speed and does not show up in a profiler.
+
+   This cost a bisect. The feel layer's in-flight token list was an array pruned only in the
+   ticker; under input faster than frames it reached 1200 entries in 600 taps, each drawing an
+   extra token every redraw, taking tap cost from 3ms to 36ms and the heap to 3.7GB. It is now
+   keyed by equation slot, so it cannot exceed three whatever arrives. The tell that something
+   was wrong showed up first as an A/B measurement where the *muted* run was slower than the
+   unmuted one — an impossible result that was the leak, not noise.
 
 ---
 
