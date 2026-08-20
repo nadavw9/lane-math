@@ -69,6 +69,19 @@ jobs:
           du -b dist | tail -1 | awk '{printf "%d bytes\n", $1}' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+      # BOOT SMOKE — the gate the unit suite structurally cannot be.
+      # Three silent-blank failures so far, all with green CI: a wrong asset
+      # directory, an awaited Capacitor proxy, and PixiJS deadlocking across
+      # split chunks. None is a logic bug; all three exist only in the built
+      # artefact, so this loads dist/ in a real browser and asserts it comes up.
+      - name: Install Chromium for the smoke test
+        run: npx playwright install --with-deps chromium
+
+      - name: Boot smoke — served at the Pages base
+        env:
+          SMOKE_BASE: /lane-math/
+        run: node tools/smoke.mjs
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

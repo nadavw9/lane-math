@@ -205,6 +205,32 @@ that way.
 
 ---
 
+## Silent-blank boot failure
+
+Module load dies with no visible throw and an empty canvas. **Green CI does not
+imply the page loads.** Always assert boot against BUILT output, never the dev
+server — every instance so far has been invisible in dev.
+
+Three so far, each with a fully green suite:
+
+1. the background tool wrote `assets/bg` while the game loaded `public/assets/bg`
+2. `loadAdMob()` returned Capacitor's plugin proxy from an `async` function, so
+   awaiting it called `AdMob.then()`, which the web shim throws on
+3. PixiJS's environment auto-detect deadlocked across split chunks, so
+   `Application.init()` never settled — no error, no rejection, nothing in the
+   console, just a blank page
+
+The tell for the third kind is the worst: a PENDING promise logs nothing at all.
+If boot stops partway with an empty console, instrument the awaits rather than
+looking for an exception that does not exist.
+
+`npm run smoke` is the guard. It serves `dist/` through a plain static server —
+not a dev tool, whose conveniences hid two of the three — and asserts
+`window.laneMath` exists, the canvas has real dimensions, the renderer drew a
+frame, and nothing errored during boot.
+
+---
+
 ## Settled: do not re-investigate
 
 **PixiJS tree-shaking is not worth it.** Measured 2026-08-20 by splitting Pixi

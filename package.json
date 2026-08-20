@@ -16,11 +16,13 @@
     "curate:report": "vite-node src/curation/ladder-report-cli.ts levels",
     "curate:verify": "vite-node src/curation/verify-ladder-cli.ts levels",
     "levels:build": "vite-node tools/build-levels.mts",
-    "prebuild": "npm run levels:build"
+    "prebuild": "npm run levels:build",
+    "smoke": "node tools/smoke.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
     "@types/node": "^22.10.2",
+    "playwright": "^1.62.1",
     "sharp": "^0.35.3",
     "typescript": "^5.7.2",
     "vite": "^5.4.21",

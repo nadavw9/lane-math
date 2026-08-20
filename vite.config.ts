@@ -33,6 +33,29 @@ export default defineConfig({
      * support.
      */
     target: "es2022",
+    rollupOptions: {
+      output: {
+        /*
+         * ALL OF PIXI IN ONE CHUNK. This is a correctness fix, not a size one.
+         *
+         * PixiJS auto-detects its environment and renderer with dynamic
+         * imports. Split across chunks by the default strategy, that import
+         * graph deadlocked in the BUILT output: Application.init() never
+         * settled — no error, no rejection, no canvas, and a completely blank
+         * page. Dev was fine, because dev serves modules unbundled and the
+         * cycle never forms.
+         *
+         * Bundling Pixi together removes the lazy import that deadlocks. It
+         * costs nothing worth having: the renderer chunks were ~10-19KB gzipped
+         * and only one is ever used, and CLAUDE.md already records that
+         * splitting Pixi is not where the wins are.
+         */
+        manualChunks(id) {
+          if (id.includes("node_modules/pixi.js/")) return "pixi";
+          return undefined;
+        },
+      },
+    },
   },
   worker: {
     // The winnability worker is an ES module and imports the solver.
