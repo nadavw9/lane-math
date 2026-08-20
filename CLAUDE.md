@@ -205,6 +205,14 @@ that way.
 
 ---
 
+## QUALITY GATE
+
+Before announcing any visual work done, apply GDD §9.0. Ask **"would Royal Match
+ship this screen?"** and check the seven minimum standards. If any fails, it is
+not done. Report which of the six tracked gaps a change closes or moves.
+
+---
+
 ## Silent-blank boot failure
 
 Module load dies with no visible throw and an empty canvas. **Green CI does not
