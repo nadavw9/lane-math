@@ -60,6 +60,8 @@ export class Renderer {
   private reject: RejectPulse | null = null;
   private rejectOffset = { dx: 0, dy: 0, glow: 0 };
   private lastPhase: string = "playing";
+  /** Build id shown in the status band; long-pressing it exports the funnel. */
+  private buildLabel = "";
 
   /*
    * THE FEEL LAYER (§9.5). All time-sampled, all read during draw().
@@ -128,7 +130,16 @@ export class Renderer {
     this.world = world;
 
     try {
-      const texture = await Assets.load<Texture>(`/assets/bg/world-${world}.webp`);
+      /*
+       * BASE-RELATIVE, not absolute.
+       *
+       * GitHub Pages serves this from /lane-math/, so a leading slash resolves
+       * to the domain root and 404s every background. Capacitor and local dev
+       * both run at "/", where BASE_URL is "/" and this is unchanged.
+       */
+      const texture = await Assets.load<Texture>(
+        `${import.meta.env.BASE_URL}assets/bg/world-${world}.webp`,
+      );
       this.background.removeChildren();
       const sprite = new Sprite(texture);
       // Cover the design surface, cropping from the edges for shorter frames
@@ -162,7 +173,7 @@ export class Renderer {
      * and the tray as well.
      */
     try {
-      const texture = await Assets.load<Texture>("/assets/grain.png");
+      const texture = await Assets.load<Texture>(`${import.meta.env.BASE_URL}assets/grain.png`);
       texture.source.addressMode = "repeat";
       setGrainTexture(texture);
     } catch {
@@ -200,6 +211,10 @@ export class Renderer {
 
   attachSound(sound: Sound): void {
     this.sound = sound;
+  }
+
+  setBuildLabel(label: string): void {
+    this.buildLabel = label;
   }
 
   /**
@@ -1061,6 +1076,35 @@ export class Renderer {
     );
     meta.position.set(status.x, status.y + 22);
     this.root.addChild(meta);
+
+    /*
+     * The build string, and the way telemetry gets off a phone (§7.8).
+     *
+     * LONG-PRESS, not a visible button: the funnel is a development concern and
+     * a player should never find an "export data" control on the board. A build
+     * string is something a playtester needs to see anyway, so it costs no
+     * extra pixels and the gesture is discoverable only if you were told.
+     */
+    const build = this.text(this.buildLabel, 10, PALETTE.textDim);
+    build.anchor.set(1, 0);
+    build.position.set(status.x + status.width, status.y + 22);
+    build.alpha = 0.7;
+    build.eventMode = "static";
+    build.cursor = "pointer";
+
+    let held: ReturnType<typeof setTimeout> | null = null;
+    const cancel = (): void => {
+      if (held !== null) clearTimeout(held);
+      held = null;
+    };
+    build.on("pointerdown", () => {
+      cancel();
+      held = setTimeout(() => this.emit({ type: "exportTelemetry" }), 600);
+    });
+    build.on("pointerup", cancel);
+    build.on("pointerupoutside", cancel);
+    build.on("pointercancel", cancel);
+    this.root.addChild(build);
 
     this.root.addChild(
       this.box(

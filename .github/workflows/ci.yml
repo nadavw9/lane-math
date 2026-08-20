@@ -55,8 +55,11 @@ jobs:
       - name: Full suite
         run: npx vitest run
 
+      # BASE MATTERS: Pages serves from /lane-math/, so the assets have to be
+      # built against that prefix. Capacitor and local dev stay at "/", which is
+      # why this is a flag here rather than a setting in vite.config.
       - name: Build
-        run: npm run build
+        run: npm run build -- --base=/lane-math/
 
       - name: Report web build size
         run: |
