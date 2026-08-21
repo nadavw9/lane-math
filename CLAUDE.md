@@ -241,6 +241,60 @@ frame, and nothing errored during boot.
 
 ---
 
+## Silent degradation — the wrong picture, not no picture
+
+The sibling of the class above, and harder to spot because the page looks fine.
+A fallback path renders something plausible while the real asset is absent. No
+throw, no 404 in view, no blank screen — and to anyone who did not write it, the
+fallback reads as a deliberate art style.
+
+Two so far:
+
+1. **The font was the wrong subset.** `outfit-800.woff2` was Google's LATIN-EXT
+   file, whose `unicode-range` starts at U+0100, so it contained no digits, no
+   `=` and no punctuation. Every glyph in the game fell back to `system-ui` for
+   weeks; the game never once rendered in Outfit. The visible symptom was one
+   button drawing a bar where `=` belonged. Cause: `grep ... | head -1` over a
+   `css2` response that returns TWO `@font-face` blocks, latin-ext first.
+2. **A missing atlas turns the sprite path off.** `Renderer.init` calls
+   `setSpritesEnabled(false)` when a family fails to load, and `spriteFor()`
+   returns early while disabled — so it records NO misses and `spritesMissing`
+   stays 0 while the entire board draws procedurally. The diagnostic that looks
+   like it covers this does not. `spriteAtlasFailures` is the one that does.
+
+**The rule: for anything with a fallback, the build must assert the real path
+was taken.** A player is well served by a graceful fallback; a build is not.
+`SMOKE_QUERY=?sprites=1 npm run smoke` fails on any atlas failure or sprite
+miss, and `npm run font:coverage` fails on any character drawn as text that the
+bundled font cannot supply.
+
+---
+
+## Broken harness, not broken product
+
+**A broken harness and a broken product look identical from the output.** When a
+result is surprising, or contradicts a previous run, suspect the harness first.
+
+- **Stale server answering a probe.** On Windows a second `listen()` can resolve
+  WITHOUT ERROR while another process keeps serving the port. "My server
+  started" is therefore not evidence that my server answered. Five node
+  processes from the previous day were serving ports 4175–4179 here, and a new
+  tool reported a confident PASS on every run before this was noticed — the tell
+  was that a debug line inside the request handler printed nothing. **Any tool
+  that starts its own server must probe the port first and refuse to run if
+  something already answers, and must fail if the app painted nothing.** A gate
+  that measures nothing reports PASS.
+- **Byte-comparing `getImageData` measures antialiasing jitter, not glyph
+  presence.** Successive canvas draws of the same glyph differ by a pixel or
+  two, so a naive bitmap diff called every character present — including `★` in
+  a 6KB subset with no star in it. Use **advance width plus ink-pixel count**:
+  width alone cannot see a space (no ink, real advance), ink alone cannot
+  separate glyphs sharing an advance.
+- **Git Bash rewrites `/lane-math/`** into `C:/Program Files/Git/lane-math/`, in
+  argv AND in env. Prefix with `MSYS_NO_PATHCONV=1`; the tools also normalise.
+
+---
+
 ## Settled: do not re-investigate
 
 **PixiJS tree-shaking is not worth it.** Measured 2026-08-20 by splitting Pixi
