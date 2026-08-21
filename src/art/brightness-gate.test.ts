@@ -256,7 +256,7 @@ describe("background brightness gate", () => {
       `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}`,
     );
     expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
-  });
+  }, 15_000); // Eight full-resolution frame checks can exceed Vitest's 5s default under CI contention.
 });
 
 describe("contrast maths", () => {
