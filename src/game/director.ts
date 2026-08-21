@@ -315,6 +315,7 @@ export class Director {
       firstFailureExempt: this.lastFailureExempt,
       lockedOut: !this.economy.canPlay(this.level.id),
       starsAvailable: this.economy.starsAvailable,
+      msUntilNextLife: this.economy.msUntilNextLife(),
     };
   }
 
@@ -457,6 +458,7 @@ export class Director {
       // owns it, and the Director has nothing to say.
       case "tapMap":
       case "exportTelemetry":
+      case "tapWatchAd":
         return [];
     }
   }

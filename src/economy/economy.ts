@@ -257,6 +257,22 @@ export class Economy {
   }
 
   /** Stars available to spend: banked minus already spent (GDD §5.4). */
+  /**
+   * Milliseconds until the next life regenerates, or 0 when already full.
+   *
+   * The out-of-lives screen must ALWAYS show this, running, whether or not an
+   * ad is available (§5.2). An ad is a way to skip the wait, never the only way
+   * out — a screen whose only exit is a video is a screen that has taken the
+   * player hostage.
+   */
+  msUntilNextLife(): number {
+    this.regenerate();
+    if (this.save.lives >= this.config.maxLives) return 0;
+    const period = this.config.lifeRegenMinutes * MINUTE;
+    const elapsed = Math.max(this.now(), this.save.clockHighWater) - this.save.lastLifeGrantedAt;
+    return Math.max(0, period - (elapsed % period));
+  }
+
   /** The life ceiling, so the map can draw empty pips as well as full ones. */
   get maxLivesAllowed(): number {
     return this.config.maxLives;

@@ -1,10 +1,9 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Text, TextStyle } from "pixi.js";
 
 import { button } from "../renderer/button.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { BACKDROP, DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, squaredPaper, woodenTray } from "../renderer/tokens.js";
-import { label } from "../renderer/tokens.js";
 import type { MapLevel, MapView } from "./model.js";
 
 /**
@@ -126,25 +125,29 @@ export class MapScreen {
   private plate(level: MapLevel, x: number, y: number, band: number): void {
     const w = CELL;
     const h = CELL * 0.66;
-    const cell = new Container();
 
-    const g = new Graphics();
-    const notch = w * 0.16;
-    const path = (): Graphics =>
-      g.poly([notch, 0, w - notch, 0, w, h / 2, w - notch, h, notch, h, 0, h / 2]);
+    /*
+     * A REAL BUTTON, not a bare hit area with a listener.
+     *
+     * These are forty of the most-pressed controls in the game and they had no
+     * pressed state at all. Locked plates are `unavailable` rather than
+     * `disabled`: a locked level does not become playable by waiting, only by
+     * clearing the one before it.
+     */
+    const control = button({
+      width: w,
+      height: h,
+      shape: "hex",
+      label: String(level.slot),
+      fontSize: 20,
+      fill: level.state === "cleared" ? PALETTE.targetFront : PALETTE.targetPlate,
+      labelColour: PALETTE.tokenInk,
+      outline: level.state === "cleared" ? PALETTE.highlight : undefined,
+      state: level.state === "locked" ? "unavailable" : "idle",
+      onTap: level.state === "locked" ? undefined : () => this.events?.onPlay(level.id),
+    });
 
-    path().fill(level.state === "cleared" ? PALETTE.targetFront : PALETTE.targetPlate);
-    path().stroke({ width: 2, color: 0x000000, alpha: 0.35, alignment: 1 });
-    if (level.state === "cleared") {
-      path().stroke({ width: 2, color: PALETTE.highlight, alpha: 0.5 });
-    }
-    cell.addChild(g);
-
-    const number = label(String(level.slot), 20, PALETTE.tokenInk);
-    number.position.set(w / 2, h / 2 - 4);
-    cell.addChild(number);
-
-    // Best-ever stars, finally with somewhere to live.
+    // Best-ever stars, which only a cleared plate has.
     if (level.state === "cleared") {
       const stars = this.text(
         `${"★".repeat(level.stars)}${"☆".repeat(Math.max(0, 3 - level.stars))}`,
@@ -153,25 +156,12 @@ export class MapScreen {
       );
       stars.anchor.set(0.5);
       stars.position.set(w / 2, h - 9);
-      cell.addChild(stars);
+      control.addChild(stars);
     }
 
-    cell.position.set(x, y);
-    if (level.state === "locked") {
-      /*
-       * Recessive but still NAVY (§9.6: dim is less presence, not a different
-       * substance). Measured lower than this the plate composites against the
-       * warm tray into a grey-brown, which is a colour the palette does not
-       * have — the exact failure the rule is written to prevent.
-       */
-      cell.alpha = 0.62;
-    } else {
-      cell.eventMode = "static";
-      cell.cursor = "pointer";
-      cell.on("pointertap", () => this.events?.onPlay(level.id));
-    }
+    control.position.set(x, y);
     // The one OPEN level lands last: forty plates, and that is the door (§9.0).
-    this.root.addChild(this.entry(cell, level.state === "open" ? MAP_BANDS.open : band));
+    this.root.addChild(this.entry(control, level.state === "open" ? MAP_BANDS.open : band));
   }
 
   private draw(): void {
@@ -240,6 +230,29 @@ export class MapScreen {
 
       y += trayH + 12;
     }
+
+    /*
+     * THE TAIL OF THE MAP, designed rather than left over (§9.0).
+     *
+     * There used to be ~280px of bare paper below World 4 — the screen simply
+     * ended because it ran out of content. It now closes with a progress line,
+     * which is information the player wants at exactly the moment they have
+     * finished scanning the ladder.
+     *
+     * STILL BLOCKED ON ART: ART_DIRECTION §6 makes this space the Academy
+     * restoration — the rooms furnishing themselves as stars are spent — and
+     * that is the real answer. This is a composed placeholder, not the design.
+     */
+    const cleared = v.levels.filter((l) => l.state === "cleared").length;
+    const progress = this.text(
+      `${cleared} of ${v.levels.length} cleared · ${v.totalStars}★ earned`,
+      12,
+      PALETTE.text,
+    );
+    progress.anchor.set(0.5, 0);
+    progress.position.set(DESIGN.width / 2, y + 44);
+    progress.alpha = 0.75;
+    this.root.addChild(this.entry(progress, MAP_BANDS.footer));
 
     // --- footer: shop and modes, each absent before its unlock (§7.6) ---
     let footerX = PAD;

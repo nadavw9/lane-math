@@ -102,6 +102,8 @@ export interface EconomyView {
   /** Set on the failure that was absorbed by the free first failure (§5.2). */
   readonly firstFailureExempt: boolean;
   readonly lockedOut: boolean;
+  /** Milliseconds to the next free life. Always shown while locked out (§5.2). */
+  readonly msUntilNextLife: number;
   readonly starsAvailable: number;
 }
 
@@ -158,6 +160,8 @@ export type InputEvent =
   | { readonly type: "tapMap" }
   /** Long-press on the build string: dump the §7.8 funnel off the device. */
   | { readonly type: "exportTelemetry" }
+  /** Offer the §5.2 rewarded refill. Handled by the shell, not the Director. */
+  | { readonly type: "tapWatchAd" }
   | { readonly type: "loadLevel"; readonly id: string }
   /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
   | { readonly type: "tick" }

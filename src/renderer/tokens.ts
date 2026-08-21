@@ -267,7 +267,20 @@ export function numberTile(
  * Operator token — a circle (§9.2). Different shape from numbers means the
  * player can never wonder what goes where.
  */
-export function operatorToken(size: number, glyph: string, style: TokenStyle): Container {
+export function operatorToken(
+  size: number,
+  glyph: string,
+  style: TokenStyle,
+  state: TokenState = "idle",
+): Container {
+  const art = spriteBase("dial", state, size, size);
+  if (art) {
+    const text = label(glyph, size * 0.5, style.text);
+    text.position.set(art.numeral.x, art.numeral.y);
+    art.container.addChild(text);
+    return art.container;
+  }
+
   const token = new Container();
   const radius = size / 2;
   const g = new Graphics();

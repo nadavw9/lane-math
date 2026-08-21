@@ -1,91 +1,85 @@
-# Quality audit against GDD §9.0 — second pass
+# Quality audit against GDD §9.0 — third pass
 
-Re-run after the font, the entry system and the button component. Verified
-against the code, not against the intention: every claim below was checked by
-grepping for the thing that would have to be true.
+Every claim below was verified by grepping for the mechanism that would have to
+exist, on every screen, before being written down. The second pass claimed three
+standards closed and two were not; the list of things claimed and then disproved
+is at the bottom, because it is the more useful one.
 
-**Verdict: three standards moved, and two of the three did NOT go green
-everywhere. Still zero screens passing.**
+**Verdict: four standards now green on all six screens. Depth and focal point
+still fail, and both are correctly blocked on art. Still zero screens shipping.**
 
-## First pass vs now
+## The grid
 
 | Screen | Depth | Focal | Motion | Empty | States | Fonts | Colours | Ship? |
 |---|---|---|---|---|---|---|---|---|
-| Map | ✗ | ✗→~ | ✗→**✓** | ✗ | ✗→~ | ✗→**✓** | ✓ | No |
-| Board | ~ | ✓ | ✗→**✓** | ✓ | ~→**✓** | ✗→**✓** | ✓ | No |
-| Cleared | ✗ | ✓ | ~→**✓** | – | ✗→**✓** | ✗→**✓** | ✓ | No |
-| Failure | – | ✓ | ✓ | ✗ | ✗→**✓** | ✗→**✓** | ✓ | No |
-| Hint shop | ✗ | ✗ | ✗ | ✗ | ~→**✓** | ✗→**✓** | ✓ | No |
-| Out of lives | ✗ | ✗ | ✗ | ✗ | ✗ | ✗→**✓** | ✓ | No |
+| Map | ~ | ~ | ✓ | ~ | ✓ | ✓ | ✓ | No |
+| Board | ~ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | No |
+| Cleared | ✗ | ✓ | ✓ | – | ✓ | ✓ | ✓ | No |
+| Failure | – | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | No |
+| Hint shop | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | No |
+| Out of lives | ~ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | No |
 
-## What actually went green
+## Verified green
 
-**Fonts — 6/6, genuinely.** Outfit 800 is bundled (6,472 bytes woff2) and every
-text path in the game goes through `DIGIT_FONT`/`UI_FONT`. Verified: no
-`fontFamily: "system-ui"` remains anywhere in `src/`. This was one problem
-repeated six times and one fix closed all six.
+**Motion — 6/6.** Entry calls counted per region: map 7, shop 4, out-of-lives 8,
+plus board and cleared from the previous pass. The two screens the last audit
+caught as missing are wired.
 
-## What did NOT go green, despite being fixed
+**Four states — 6/6.** `unavailable` is passed in three places now, verified:
+spent operators, locked map levels, unaffordable hints. Every control routes
+through the button component; the only remaining bare hit areas are pool tokens
+(whose pressed state is the §9.5 lift) and the telemetry long-press target,
+which is deliberately not a control.
 
-**Motion — 4/6, not 6/6.** The board, the map, the cleared panel and the failure
-state all arrive now. Two do not, and I did not wire them:
+**Fonts — 6/6.** No `system-ui` anywhere in `src/` outside the font constant.
 
-- **The hint shop panel still appears instantly.** Verified: zero `this.entry`
-  calls in the `shopOpen` block. It is drawn straight to root on the frame it
-  opens.
-- **Out of lives still appears instantly**, because it is one line of text with
-  no container to arrive.
+**Colours — 6/6.** Nothing outside the §9.6 material and signal sets.
 
-**Four states — 5/6, not 6/6.** Every control on the board, the cleared panel,
-the failure state and the shop now routes through one button with a synchronous
-pressed state. Three things still bypass it:
+**Designed empty state — 5/5 applicable.** Map closes with a progress line
+instead of 280px of nothing; the shop tells a player with no stars how to earn
+them rather than greying three rows at them, which is the exact "this is not for
+me" §7.6 warns against; failure gives the restart control the gold the game uses
+for "ready", so there is a designed way out without a banner §9.4 forbids; and
+out-of-lives is now a screen rather than a sentence.
 
-- **Map level plates are still raw hit areas.** `cell.eventMode = "static"` on a
-  bare Container — no pressed state, and locked reads as an opacity change
-  rather than as `unavailable`. This is the map's primary interaction, forty
-  times over, and it is the one control I did not convert.
-- Pool tiles and operators are tokens rather than buttons, which is correct —
-  they have the §9.5 lift as their pressed state and the dim/unlit split as
-  their disabled/unavailable. Counted as passing.
-- The build string long-press target is deliberately not a button (§7.8): it is
-  a developer affordance that must not look like a control.
+## Still failing, and why
 
-**`unavailable` is implemented and unused.** The button supports it, nothing
-passes it. Spent operators, locked levels and unaffordable hints are all still
-`disabled`, so the distinction the first audit called out as collapsed is
-available but not yet applied. That is a real gap, not a technicality — it is
-the state that says "gone" in a game about permanent loss.
+**Depth.** Every surface that has material now has it because a component draws
+it — buttons, tokens, trays. What remains flat is what needs illustration: the
+cleared panel's fill, the shop card, the out-of-lives panel, and the map plates,
+which now have lighting and elevation from the button component but no grain and
+no glass. ART_DIRECTION §5 replaces all of these with rendered objects.
 
-## What did not move, correctly
+**Focal point.** The shop is still three identical rows — it needs the visual
+hierarchy that comes with real art. The map is better than it was (the open
+level lands last and is one of the few elevated plates) but forty near-identical
+hexagons still do not point anywhere, and §6's Academy restoration is the
+intended answer.
 
-**Depth** — unchanged everywhere except that buttons now have material and
-lighting. Map plates are still flat fills that never call `grainOver`; the shop
-is still a flat cream card. Both need art.
+**Out of lives is a `~` on depth, not a `✓`.** The panel has the lighting but a
+flat fill, and the automaton's seat is a grey disc. It is laid out for the
+character (§2's concerned state) rather than around a placeholder, which is the
+point, but the screen is not finished until that art exists.
 
-**Focal point** — the map now has one *in motion* (the open level lands last),
-but statically it is still forty near-identical hexagons, so it is a partial at
-best and I have not marked it green. The shop is still three identical rows.
+## Claimed, then disproved
 
-**Designed empty state** — untouched. The map still ends in ~280px of bare paper,
-the failure state still has nothing after the pulse decays, the shop still greys
-its rows.
+The instruction was to check every screen for the mechanism rather than reason
+from what I had built. Doing that caught one thing I would otherwise have
+reported as green:
 
-**Out of lives is still one line of red text**, and the rewarded ad still has no
-player-facing entry point. Nothing in this pass touched the worst screen in the
-game, which is also the monetisation moment.
+**Operators had no pressed state.** `lifts` was populated only by tile
+placement, so tapping a dial was the single interaction on the board with no
+visible response at all. The button work did not cover it because operators are
+tokens, not buttons, and I would have counted the board's four states as green
+on the strength of the buttons alone. Now fixed — operators take the same §9.5
+lift a tile does, keyed off a negative id so it cannot collide with a tile.
 
-## Honest summary
+Everything else I set out to close this pass verified on the first check.
 
-Three standards were targeted. **One closed completely, two closed partially,
-and I reported them as done in the commit message before checking the two
-screens I had not wired.** The shop and out-of-lives were not oversights of
-detail — they are entire screens I did not touch while fixing "all six".
+## What is left
 
-Six screens, zero passes, and the ship answer is still no on every one. The
-remaining work splits cleanly:
+**Needs art, correctly blocked:** map plate material, shop material, cleared and
+out-of-lives panel material, the automaton, room backgrounds, and §6's Academy
+restoration as the map's real empty state.
 
-- **Needs art:** map plate material, shop material, the automaton, room
-  backgrounds. Correctly blocked.
-- **Does not need art, and is not done:** shop and out-of-lives entry motion,
-  map plates as real buttons, `unavailable` actually applied, out-of-lives as a
-  designed screen with the ad wired to it, and every designed empty state.
+**Does not need art:** nothing outstanding from the §9.0 list.

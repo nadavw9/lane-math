@@ -121,6 +121,7 @@ function open(level: LadderLevel): void {
   director = new Director(level, economy.selectedMode, economy, telemetry, winnability);
   void renderer.setWorld(level.world);
   // The board arrives (§9.0). Every open, including a replay of the same level.
+  renderer.setAdMessage(null);
   renderer.beginEntrance();
   apply(director.firstRender());
 }
@@ -211,12 +212,37 @@ renderer.onInput((input) => {
     void exportTelemetry();
     return;
   }
+  /*
+   * §5.2's rewarded refill — the first player-facing route to it.
+   *
+   * Every outcome is reported back to the screen, because silence after a
+   * dismissed ad is indistinguishable from a bug, and a player who suspects the
+   * button is broken will not press it again.
+   */
+  if (input.type === "tapWatchAd") {
+    void (async () => {
+      renderer.setAdMessage("opening…");
+      const outcome = await ads.offerLifeForAd(economy);
+      renderer.setAdMessage(
+        outcome === "rewarded"
+          ? "a life is yours — back to it"
+          : outcome === "dismissed"
+            ? "no life this time, and nothing lost — the timer is still running"
+            : "no ad available just now — the timer is still running",
+      );
+      send({ type: "tick" });
+    })();
+    return;
+  }
   send(input);
 });
 open(currentLevel);
 
 // Lives regenerate on a timer, so the HUD has to notice without an input event.
-setInterval(() => send({ type: "tick" }), 5_000);
+// Lives regenerate on a timer, so the HUD notices without an input event. Once
+// a second rather than every five, because the out-of-lives screen shows a
+// COUNTDOWN and a clock that jumps five seconds at a time reads as broken.
+setInterval(() => send({ type: "tick" }), 1_000);
 
 // The map runs its own arrival; drive it while it is on screen.
 const mapTicker = (): void => {

@@ -39,6 +39,13 @@ export interface ButtonOptions {
   readonly fill?: number;
   readonly outline?: number | undefined;
   readonly fontSize?: number;
+  /**
+   * Hexagonal buttons exist for the map, whose level plates are the same
+   * hexagon the lane queues (§9.2 shape-coding). Routing them through this
+   * component rather than leaving them as bare hit areas is what gives forty
+   * of the game's most-pressed controls a pressed state.
+   */
+  readonly shape?: "rect" | "hex";
   readonly onTap?: (() => void) | undefined;
 }
 
@@ -55,6 +62,7 @@ export function button(options: ButtonOptions): Container {
     fill = PALETTE.slotFilled,
     outline,
     fontSize,
+    shape = "rect",
     onTap,
   } = options;
 
@@ -72,6 +80,18 @@ export function button(options: ButtonOptions): Container {
     const g = new Graphics();
     const elevated = state !== "unavailable";
     const lift = elevated ? 1 - depth / PRESS_DEPTH : 0;
+    const notch = width * 0.16;
+    const path = (gr: Graphics, dy: number): Graphics =>
+      shape === "hex"
+        ? gr.poly([
+            notch, dy,
+            width - notch, dy,
+            width, dy + height / 2,
+            width - notch, dy + height,
+            notch, dy + height,
+            0, dy + height / 2,
+          ])
+        : gr.roundRect(0, dy, width, height, radius);
 
     /*
      * The shadow is the state. An idle button casts, a pressed one pulls its
@@ -79,13 +99,10 @@ export function button(options: ButtonOptions): Container {
      * unavailable one casts nothing at all because it is flush with it.
      */
     if (elevated && lift > 0) {
-      g.roundRect(1, 2 + 1.5 * lift, width, height, radius).fill({
-        color: 0x000000,
-        alpha: 0.3 * lift,
-      });
+      path(g, 2 + 1.5 * lift).fill({ color: 0x000000, alpha: 0.3 * lift });
     }
 
-    g.roundRect(0, depth, width, height, radius).fill(fill);
+    path(g, depth).fill(fill);
     // Same lighting as every other surface (§9.6): shadow along the top edge,
     // rim light along the bottom.
     g.moveTo(radius, depth + 2)
@@ -97,7 +114,7 @@ export function button(options: ButtonOptions): Container {
         .stroke({ width: 1.5, color: 0xffffff, alpha: 0.14 });
     }
     if (outline !== undefined) {
-      g.roundRect(0, depth, width, height, radius).stroke({ width: 2, color: outline });
+      path(g, depth).stroke({ width: 2, color: outline });
     }
     body.addChild(g);
 

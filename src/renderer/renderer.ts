@@ -9,6 +9,7 @@ import {
   PALETTE,
   TRAY_ALPHA,
   type Bands,
+  type Rect,
   bands,
   equationSlot,
   operatorSlot,
@@ -29,6 +30,7 @@ import {
   spriteFor,
   spriteNameFor,
   spritesEnabled,
+  type TokenState,
 } from "./sprites.js";
 import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
@@ -47,6 +49,9 @@ import {
 
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/"];
 const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
+/** Tile ids are non-negative, so a negative key can never collide with one. */
+const OPERATOR_LIFT_KEY = -1;
+
 const LABEL: Record<string, string> = { sqrt: "√", sq: "x²", "*": "×", "/": "÷", "-": "−" };
 
 /**
@@ -114,6 +119,8 @@ export class Renderer {
   private starsSounded = 0;
   /** Screens ARRIVE (§9.0). Restarted whenever a board or panel opens. */
   private entrance: Entrance | null = null;
+  /** Outcome of the last rewarded-ad attempt, shown on the out-of-lives screen. */
+  private adMessage: string | null = null;
   private clearedEntrance: Entrance | null = null;
 
   private get rejecting(): boolean {
@@ -244,6 +251,12 @@ export class Renderer {
    * so the renderer cannot tell it apart from a redraw — and a replay would
    * have appeared instantly while every other open animated.
    */
+  /** Report an ad outcome to the player. Cleared when they leave the screen. */
+  setAdMessage(message: string | null): void {
+    this.adMessage = message;
+    this.draw();
+  }
+
   beginEntrance(): void {
     this.entrance = new Entrance(Object.keys(BOARD_BANDS).length);
   }
@@ -499,6 +512,20 @@ export class Renderer {
    */
   private reactToSlots(previous: ViewState, next: ViewState): void {
     const board = this.bandsFor(next);
+
+    /*
+     * An operator being chosen gets press feedback too.
+     *
+     * Only tile placement populated `lifts`, so tapping a dial was the one
+     * interaction on the board with no visible response at all — found by
+     * checking every control for the mechanism rather than assuming the button
+     * work had covered it. Operators are tokens, not buttons, so they take the
+     * same §9.5 lift a tile does. Keyed off the operator slot's own id space so
+     * it cannot collide with a tile id.
+     */
+    if (previous.slots.op === null && next.slots.op !== null) {
+      this.lifts.set(OPERATOR_LIFT_KEY, new Tween(TIMING.lift, EASE.lift));
+    }
     const poolIndex = (id: number): number => next.tiles.findIndex((t) => t.id === id);
 
     const pairs: [0 | 1 | 2, number | null, number | null][] = [
@@ -591,6 +618,123 @@ export class Renderer {
    * as it lands, which is what sells it as a piece being LIFTED and set down
    * rather than an icon sliding across a surface.
    */
+  /**
+   * OUT OF LIVES (GDD §5.2, §13, §9.0).
+   *
+   * This was one line of red text, at the exact moment the game asks for
+   * money — the least designed screen in the build and the most commercially
+   * important. It now answers the three questions a player actually has: what
+   * happened, when do I get back in for free, and is there a faster way.
+   *
+   * THE TIMER IS ALWAYS VISIBLE AND ALWAYS RUNNING, whether or not an ad is
+   * available. An ad skips the wait; it is never the only way out. A screen
+   * whose sole exit is a video has taken the player hostage, and §13 is
+   * explicit that being out of lives must never be a dead end.
+   */
+  private drawOutOfLives(lane: Rect, eco: NonNullable<ViewState["economy"]>): void {
+    const width = lane.width - 24;
+    const height = 214;
+    const x = lane.x + 12;
+    const y = lane.y + lane.height / 2 - height / 2;
+
+    const panel = new Graphics()
+      .roundRect(x, y, width, height, 12)
+      .fill({ color: PALETTE.targetPlate, alpha: 0.97 });
+    panel
+      .moveTo(x + 12, y + 2)
+      .lineTo(x + width - 12, y + 2)
+      .stroke({ width: 3, color: 0x000000, alpha: 0.3 });
+    panel
+      .moveTo(x + 12, y + height - 2)
+      .lineTo(x + width - 12, y + height - 2)
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.14 });
+    panel
+      .roundRect(x, y, width, height, 12)
+      .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.5 });
+    this.root.addChild(this.entry(panel, BOARD_BANDS.furniture));
+
+    /*
+     * THE AUTOMATON'S SEAT (ART_DIRECTION §2, concerned state).
+     *
+     * Laid out now and filled with art later, rather than retrofitted: this
+     * screen is one of the four roles §2 names for the character, and the
+     * difference between a layout designed around a face and one with a face
+     * dropped into it afterwards is visible.
+     */
+    const seat = 58;
+    const seatX = x + 18;
+    const seatY = y + 22;
+    const placeholder = spriteFor("automaton-concerned");
+    if (placeholder) {
+      const art = new Sprite(placeholder.texture);
+      art.width = seat;
+      art.height = seat;
+      art.position.set(seatX, seatY);
+      this.root.addChild(this.entry(art, BOARD_BANDS.pool));
+    } else {
+      // Reserved, and visibly reserved — a dim brass disc holding the space so
+      // the layout is designed around the character rather than beside it.
+      const stand = new Graphics()
+        .circle(seatX + seat / 2, seatY + seat / 2, seat / 2)
+        .fill({ color: PALETTE.tray, alpha: 0.35 })
+        .circle(seatX + seat / 2, seatY + seat / 2, seat / 2)
+        .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.3 });
+      this.root.addChild(this.entry(stand, BOARD_BANDS.pool));
+    }
+
+    const headline = this.text("Out of lives", 20, PALETTE.highlight);
+    headline.position.set(seatX + seat + 14, y + 26);
+    this.root.addChild(this.entry(headline, BOARD_BANDS.operators));
+
+    const minutes = Math.floor(eco.msUntilNextLife / 60000);
+    const seconds = Math.floor((eco.msUntilNextLife % 60000) / 1000);
+    const clock = eco.msUntilNextLife > 0
+      ? `next life in ${minutes}:${String(seconds).padStart(2, "0")}`
+      : "a life is on its way";
+    const timer = this.text(clock, 14, PALETTE.tokenInk);
+    timer.position.set(seatX + seat + 14, y + 54);
+    this.root.addChild(this.entry(timer, BOARD_BANDS.operators));
+
+    // §5.2's refill, and the first player-facing route to it. Until now
+    // offerLifeForAd had no caller outside the debug harness.
+    this.root.addChild(
+      this.entry(
+        this.box(
+          x + 20,
+          y + 104,
+          width - 40,
+          44,
+          PALETTE.armed,
+          "watch to continue",
+          PALETTE.highlight,
+          () => this.emit({ type: "tapWatchAd" }),
+          PALETTE.highlight,
+        ),
+        BOARD_BANDS.equation,
+      ),
+    );
+
+    /*
+     * The outcome of the last attempt, stated plainly. All three AdMob results
+     * are visible to the player: a completed view grants a life, a dismissal
+     * grants nothing AND costs nothing, and a no-fill says so and leaves the
+     * timer as the way back. Silence after a dismissed ad reads as a bug.
+     */
+    if (this.adMessage) {
+      const note = this.text(this.adMessage, 12, PALETTE.tokenInk);
+      note.anchor.set(0.5, 0);
+      note.position.set(DESIGN.width / 2, y + 156);
+      note.alpha = 0.85;
+      this.root.addChild(this.entry(note, BOARD_BANDS.equation));
+    }
+
+    const wait = this.text("or wait — the timer is always running", 11, PALETTE.tokenInk);
+    wait.anchor.set(0.5, 0);
+    wait.position.set(DESIGN.width / 2, y + height - 26);
+    wait.alpha = 0.6;
+    this.root.addChild(this.entry(wait, BOARD_BANDS.status));
+  }
+
   private drawFlights(): void {
     for (const flight of this.flights.active()) {
       const t = flight.tween.value;
@@ -970,6 +1114,17 @@ export class Renderer {
       // alone is easy to miss and poor for low-vision players.
       const size = Math.min(r.width, r.height);
       const lit = enabled && active;
+      const opLift = this.lifts.get(OPERATOR_LIFT_KEY);
+      const opRise = opLift && s.slots.op === op ? Math.sin(Math.PI * opLift.value) : 0;
+      /*
+       * SPENT is not the same as inactive (§9.6, ART_DIRECTION §5).
+       *
+       * A `-` with no budget left is gone for this level; a `-` waiting for a
+       * number comes back the moment one is staged. They looked identical, and
+       * on a board about spending finite operators that is the single most
+       * important distinction the screen can draw. Spent loses its light.
+       */
+      const tokenState: TokenState = spent ? "unavailable" : lit ? "idle" : "disabled";
       const disc = operatorToken(size, LABEL[op] ?? op, {
         // §9.6: teal-slate whether it is available or not. Only its presence
         // changes — the disc goes flat and loses its shadow.
@@ -978,13 +1133,25 @@ export class Renderer {
         bevel: lit ? 1 : DIM.bevel,
         elevation: lit ? 1 : DIM.elevation,
         outline: s.transformOp === op ? PALETTE.highlight : undefined,
-      });
-      if (!lit) disc.alpha = DIM.alpha;
+      }, tokenState);
+      // Spent keeps full opacity and loses its light; disabled keeps its light
+      // and loses presence. Two different signals, never the same treatment.
+      if (tokenState === "disabled") disc.alpha = DIM.alpha;
+      if (tokenState === "unavailable") {
+        disc.alpha = 0.85;
+        disc.addChild(
+          new Graphics()
+            .roundRect(size * 0.16, size * 0.46, size * 0.68, 3, 1.5)
+            .fill({ color: PALETTE.failed, alpha: 0.85 }),
+        );
+      }
 
+      disc.pivot.set(size / 2, size / 2);
+      disc.scale.set(1 + opRise * 0.07);
       this.entry(this.place(
         disc,
-        r.x + (r.width - size) / 2,
-        r.y,
+        r.x + r.width / 2,
+        r.y + size / 2 - opRise * 4,
         spent
           ? undefined
           : isUnary
@@ -1144,13 +1311,8 @@ export class Renderer {
         this.root.addChild(exempt);
       }
 
-      // Hard-lock exit (GDD §13): out of lives must never be a dead end.
-      if (eco.lockedOut) {
-        const lock = this.text("out of lives — waiting for a refill", 13, PALETTE.failed);
-        lock.anchor.set(0.5, 0);
-        lock.position.set(DESIGN.width / 2, lane.y + lane.height - 26);
-        this.root.addChild(lock);
-      }
+      // Out of lives (GDD §5.2, §13). A designed screen, not a line of text.
+      if (eco.lockedOut) this.drawOutOfLives(lane, eco);
     }
 
     // --- status line + restart ---
@@ -1209,8 +1371,13 @@ export class Renderer {
         32,
         PALETTE.slotFilled,
         "restart",
-        PALETTE.tokenInk,
+        // §9.4 forbids a banner, not a designed way out. On failure the one
+        // control that matters takes the gold the game uses for "ready", so
+        // the recovery affordance is findable without the board narrating a
+        // loss the player can already see.
+        s.phase === "failed" ? PALETTE.highlight : PALETTE.tokenInk,
         () => this.emit({ type: "tapRestart" }),
+        s.phase === "failed" ? PALETTE.highlight : undefined,
       ),
     );
 
@@ -1269,21 +1436,40 @@ export class Renderer {
         const panelH = 30 + s.shop.length * 40;
         const panelY = status.y - panelH - 8;
         this.root.addChild(
-          new Graphics()
-            .roundRect(status.x, panelY, status.width, panelH, 8)
-            .fill({ color: PALETTE.card, alpha: 0.98 })
-            .roundRect(status.x, panelY, status.width, panelH, 8)
-            .stroke({ width: 2, color: PALETTE.highlightInk }),
+          this.entry(
+            new Graphics()
+              .roundRect(status.x, panelY, status.width, panelH, 8)
+              .fill({ color: PALETTE.card, alpha: 0.98 })
+              .roundRect(status.x, panelY, status.width, panelH, 8)
+              .stroke({ width: 2, color: PALETTE.highlightInk }),
+            BOARD_BANDS.furniture,
+          ),
         );
         const title = this.text("hints — none reveals a keystone", 12, PALETTE.textDim);
         title.position.set(status.x + 8, panelY + 7);
-        this.root.addChild(title);
+        this.root.addChild(this.entry(title, BOARD_BANDS.pool));
+
+        /*
+         * DESIGNED EMPTY STATE (§9.0). With nothing affordable the shop used to
+         * be three greyed rows, which §7.6 names as the exact thing to avoid —
+         * a greyed shop teaches "this is not for me". It now says how to earn
+         * the stars instead, which is a route rather than a wall.
+         */
+        if (s.shop.every((e) => !e.owned && !e.affordable)) {
+          const how = this.text("clear levels with fewer failures to earn stars", 11, PALETTE.textDim);
+          how.anchor.set(0.5, 0);
+          how.position.set(DESIGN.width / 2, panelY + panelH - 16);
+          how.alpha = 0.8;
+          this.root.addChild(this.entry(how, BOARD_BANDS.status));
+        }
 
         s.shop.forEach((entry, i) => {
           const y = panelY + 26 + i * 40;
           const enabled = entry.owned || entry.affordable;
           // Owned is "earned", so it is gold on the dark chip. Unaffordable is
           // the same chip under the dim treatment, not a greyer chip.
+          // Cannot afford it: UNAVAILABLE, not disabled. It will not become
+          // buyable by waiting — only by earning stars elsewhere.
           const row = this.box(
             status.x + 8,
             y,
@@ -1293,9 +1479,10 @@ export class Renderer {
             `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}★`}`,
             entry.owned ? PALETTE.highlight : PALETTE.tokenInk,
             () => this.emit({ type: "buyHint", hint: entry.type }),
+            undefined,
+            enabled ? "idle" : "unavailable",
           );
-          if (!enabled) row.alpha = DIM.alpha;
-          this.root.addChild(row);
+          this.root.addChild(this.entry(row, BOARD_BANDS.equation));
         });
       }
     }
