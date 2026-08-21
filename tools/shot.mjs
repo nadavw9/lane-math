@@ -70,12 +70,63 @@ await new Promise((resolve, reject) => {
   server.listen(port, resolve);
 });
 
+/**
+ * Optional seeded save, written before the app boots.
+ *
+ * Most of the emblems only appear with progress behind them — star meters need
+ * cleared levels, the pocket-watches need lives unlocked at 2-8, the hints chip
+ * needs the shop at 3-6. Reviewing them on a fresh save shows an empty header
+ * and proves nothing.
+ */
+const seed = process.env["SHOT_SAVE"] ?? "";
+
 const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
 const page = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3 });
+const level = process.env["SHOT_LEVEL"] ?? "";
+if (seed) {
+  await page.addInitScript((save) => {
+    try {
+      window.localStorage.setItem("lane-math.save.v1", save);
+    } catch {
+      /* private mode; the shot just shows a fresh save */
+    }
+  }, seed);
+}
 await page.goto(url, { waitUntil: "networkidle" });
-await page.waitForTimeout(2000);
+await page.waitForTimeout(1500);
+if (level) {
+  // Lives are off in World 1 (§7.2), so the HUD watches only exist deeper in.
+  await page.evaluate((id) => window.laneMath.load(id), level);
+  await page.waitForTimeout(1500);
+}
+
+// Optional screen to drive to before the shutter, so the map and the cleared
+// panel can be reviewed without a hand-written harness each time.
+const screen = process.env["SHOT_SCREEN"] ?? "";
+if (screen) {
+  await page.evaluate(async (name) => {
+    const api = window.laneMath;
+    if (name === "map") api.showMap();
+    if (name === "cleared") {
+      api.showBoard();
+      api.playIntoFailure?.();
+    }
+    if (name === "shop") {
+      api.send({ type: "toggleShop" });
+    }
+    if (name === "hint") {
+      // A bought hint is the only way the hint line, and its mark, appear.
+      api.send({ type: "buyHint", hint: "narrow" });
+    }
+  }, screen);
+  // Long enough for the entrance to finish. The map lands in bands and the
+  // footer is one of the last, so a short wait photographs a half-arrived
+  // screen and the missing element looks like a bug rather than a shutter
+  // fired early — which is exactly how it read the first time.
+  await page.waitForTimeout(3000);
+}
 
 // Say what was actually photographed, so a fallback render is never mistaken
 // for missing art again.
@@ -89,6 +140,22 @@ const state = await page.evaluate(() => {
     missing: window.laneMath?.sprites?.().missing ?? [],
   };
 });
+
+/*
+ * Optional tap-latency probe, taken through the same built artefact.
+ *
+ * The board is rebuilt every frame, so anything added to a draw is paid for on
+ * every tap. This project has already shipped one O(n)-per-tap leak, so a
+ * change that adds objects to the board says what it cost rather than assuming
+ * it cost nothing.
+ */
+if (process.env["SHOT_PROBE"] === "latency") {
+  const latency = await page.evaluate(() => window.laneMath.measureTapLatency(200));
+  process.stdout.write(
+    `  tap latency: median ${latency.median.toFixed(3)}ms  mean ${latency.mean.toFixed(3)}ms  max ${latency.max.toFixed(3)}ms
+`,
+  );
+}
 
 await page.screenshot({ path: out });
 process.stdout.write(
