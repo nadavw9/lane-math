@@ -82,6 +82,15 @@ jobs:
           SMOKE_BASE: /lane-math/
         run: node tools/smoke.mjs
 
+      # FONT COVERAGE — the other gate that only the artefact can answer.
+      # The bundled Outfit file was the latin-ext subset (unicode-range starts
+      # at U+0100), so it contained no digits, no `=` and no punctuation, and
+      # every glyph in the game silently fell back to system-ui for weeks. A
+      # missing glyph 404s nothing and logs nothing; it is only visible in
+      # pixels, which is exactly what this measures.
+      - name: Font coverage — every glyph the UI draws
+        run: node tools/font-coverage.mjs
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
