@@ -72,12 +72,14 @@ function union(rects: readonly Rect[]): Rect {
   };
 }
 
-const EXTREMES = [
-  { targets: CONTENT_RANGE.targets.min, tiles: CONTENT_RANGE.tiles.min, hints: 0 },
-  { targets: CONTENT_RANGE.targets.max, tiles: CONTENT_RANGE.tiles.max, hints: 0 },
-  { targets: CONTENT_RANGE.targets.min, tiles: CONTENT_RANGE.tiles.max, hints: 3 },
-  { targets: CONTENT_RANGE.targets.max, tiles: CONTENT_RANGE.tiles.min, hints: 3 },
-].map((size) => bands(size));
+const EXTREMES = [1, 5].flatMap((operators) =>
+  [
+    { targets: CONTENT_RANGE.targets.min, tiles: CONTENT_RANGE.tiles.min, operators, hints: 0 },
+    { targets: CONTENT_RANGE.targets.max, tiles: CONTENT_RANGE.tiles.max, operators, hints: 0 },
+    { targets: CONTENT_RANGE.targets.min, tiles: CONTENT_RANGE.tiles.max, operators, hints: 3 },
+    { targets: CONTENT_RANGE.targets.max, tiles: CONTENT_RANGE.tiles.min, operators, hints: 3 },
+  ].map((size) => bands(size)),
+);
 
 /** Design-space rect -> fractions of the frame the background is fitted to. */
 function asZone(name: string, rect: Rect, token: number): ZoneSpec {
