@@ -8,6 +8,7 @@ import {
   setSpritesEnabled,
   spriteFor,
   spriteNameFor,
+  spriteNameForVariant,
   type Frame,
 } from "./sprites.js";
 
@@ -117,5 +118,11 @@ describe("four interaction states (ART_DIRECTION §5)", () => {
     expect(opacityFor("disabled")).toBeLessThan(1);
     expect(spriteNameFor("cube", "unavailable")).toBe("cube-unlit");
     expect(opacityFor("unavailable")).toBe(1);
+  });
+
+  it("selects a stable cube variant without inventing unavailable art", () => {
+    expect(spriteNameForVariant("cube", "idle", 0)).toBe("cube-lit");
+    expect(spriteNameForVariant("cube", "idle", 2)).toBe("cube-lit-3");
+    expect(spriteNameForVariant("cube", "unavailable", 2)).toBe("cube-unlit");
   });
 });

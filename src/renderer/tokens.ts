@@ -1,7 +1,13 @@
 import { Container, Graphics, Matrix, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
 import { PALETTE } from "./layout.js";
-import { numeralCentre, opacityFor, spriteFor, spriteNameFor, type TokenState } from "./sprites.js";
+import {
+  numeralCentre,
+  opacityFor,
+  spriteFor,
+  spriteNameForVariant,
+  type TokenState,
+} from "./sprites.js";
 
 /**
  * The shared grain (GDD §9.6).
@@ -171,8 +177,9 @@ function spriteBase(
   state: TokenState,
   w: number,
   h: number,
+  variant = 0,
 ): { container: Container; numeral: { x: number; y: number } } | null {
-  const entry = spriteFor(spriteNameFor(base, state));
+  const entry = spriteFor(spriteNameForVariant(base, state, variant));
   if (!entry) return null;
 
   const container = new Container();
@@ -199,10 +206,11 @@ export function numberTile(
   value: string,
   style: TokenStyle,
   state: TokenState = "idle",
+  variant = 0,
 ): Container {
-  const art = spriteBase("cube", state, w, h);
+  const art = spriteBase("cube", state, w, h, Math.abs(variant) % 3);
   if (art) {
-    const text = label(value, Math.min(h * 0.54, 26), style.text);
+    const text = label(value, Math.min(h * 0.54, 26), PALETTE.glassNumeral);
     text.position.set(art.numeral.x, art.numeral.y);
     art.container.addChild(text);
     if (style.outline !== undefined) {
@@ -273,11 +281,19 @@ export function operatorToken(
   style: TokenStyle,
   state: TokenState = "idle",
 ): Container {
-  const art = spriteBase("dial", state, size, size);
+  const dialBase = {
+    "+": "dial-plus",
+    "−": "dial-minus",
+    "-": "dial-minus",
+    "×": "dial-times",
+    "*": "dial-times",
+    "÷": "dial-divide",
+    "/": "dial-divide",
+    "√": "dial-sqrt",
+  }[glyph];
+  const art = dialBase ? spriteBase(dialBase, state, size, size) : null;
   if (art) {
-    const text = label(glyph, size * 0.5, style.text);
-    text.position.set(art.numeral.x, art.numeral.y);
-    art.container.addChild(text);
+    // Operators are raised relief in their real dial artwork, not live text.
     return art.container;
   }
 
@@ -394,6 +410,17 @@ export function woodenTray(w: number, h: number, colour: number, alpha: number):
   g.roundRect(0, 0, w, h, r).stroke({ width: 1, color: 0x000000, alpha: 0.14 });
 
   tray.addChild(g);
+  return tray;
+}
+
+/** The wood frame and opaque felt surface that physically support real art. */
+export function feltLinedTray(w: number, h: number, colour: number, alpha: number, felt: number): Container {
+  const tray = woodenTray(w, h, colour, alpha);
+  tray.addChild(
+    new Graphics()
+      .roundRect(6, 6, Math.max(0, w - 12), Math.max(0, h - 12), 7)
+      .fill({ color: felt }),
+  );
   return tray;
 }
 

@@ -71,6 +71,10 @@ describe("the pool does not re-pack (§9.3)", () => {
 });
 
 describe("tokens scale to board size (§9.2)", () => {
+  it("caps rendered tokens at the real-art coverage ceiling", () => {
+    expect(TOKEN_SIZE.max).toBe(120);
+  });
+
   it("stays within the tappable/childish bounds on every board", () => {
     for (const board of BOARDS) {
       const { grid } = bands(board);

@@ -17,6 +17,25 @@ export interface Rgb {
   readonly b: number;
 }
 
+export type ComparisonDirection = "brightest" | "darkest";
+
+export interface SpriteImageData {
+  readonly width: number;
+  readonly height: number;
+  /** RGBA bytes, row-major. */
+  readonly pixels: Uint8Array;
+}
+
+export interface SpriteColourMeasurement {
+  /** A robust shadow-side colour: the 20th opaque luminance percentile. */
+  readonly darkestRepresentative: Rgb;
+  /** The opaque-pixel median used to derive light-versus-dark direction. */
+  readonly median: Rgb;
+  /** A robust highlight-side colour: the 80th opaque luminance percentile. */
+  readonly brightestRepresentative: Rgb;
+  readonly opaquePixels: number;
+}
+
 export interface ImageData {
   readonly width: number;
   readonly height: number;
@@ -43,6 +62,69 @@ export function contrastRatio(a: Rgb, b: Rgb): number {
 
 export function rgbFromHex(hex: number): Rgb {
   return { r: (hex >> 16) & 0xff, g: (hex >> 8) & 0xff, b: hex & 0xff };
+}
+
+function asRgb(colour: number | Rgb): Rgb {
+  return typeof colour === "number" ? rgbFromHex(colour) : colour;
+}
+
+/**
+ * Measure material colour from the actual processed sprite, never a palette
+ * proxy. Percentiles deliberately reject single-pixel alpha fringes and sharp
+ * specular peaks, neither of which describes the token's readable body.
+ */
+export function measureSpriteColours(
+  image: SpriteImageData,
+  alphaThreshold = 224,
+): SpriteColourMeasurement {
+  const opaque: Rgb[] = [];
+  for (let i = 0; i < image.pixels.length; i += 4) {
+    if (image.pixels[i + 3]! < alphaThreshold) continue;
+    opaque.push({ r: image.pixels[i]!, g: image.pixels[i + 1]!, b: image.pixels[i + 2]! });
+  }
+  if (opaque.length === 0) throw new Error("cannot measure a sprite with no opaque pixels");
+  const byLuminance = opaque.sort((a, b) => luminance(a) - luminance(b));
+  const percentile = (fraction: number): Rgb =>
+    byLuminance[Math.round((byLuminance.length - 1) * fraction)]!;
+  return {
+    darkestRepresentative: percentile(0.2),
+    median: percentile(0.5),
+    brightestRepresentative: percentile(0.8),
+    opaquePixels: opaque.length,
+  };
+}
+
+/**
+ * The governing background extreme follows the measured token colour. A light
+ * object is least distinct on the brightest ground; a dark object on the
+ * darkest. This must stay derived because different materials can reverse it
+ * under the same scene lighting.
+ */
+export function comparisonDirection(token: Rgb, background: Rgb): ComparisonDirection {
+  return luminance(token) >= luminance(background) ? "brightest" : "darkest";
+}
+
+/**
+ * Select the measured material centre after deriving the governing background
+ * extreme from the sprite median. The background point is the worst case; a
+ * local shadow or one-pixel highlight inside a textured token is not a second
+ * background and must not double-count pessimism.
+ */
+export function worstCaseSpriteColour(
+  colours: SpriteColourMeasurement,
+  background: Rgb,
+): { direction: ComparisonDirection; colour: Rgb } {
+  const direction = comparisonDirection(colours.median, background);
+  return {
+    direction,
+    colour: colours.median,
+  };
+}
+
+function isSpriteColourMeasurement(
+  colour: number | Rgb | SpriteColourMeasurement,
+): colour is SpriteColourMeasurement {
+  return typeof colour !== "number" && "median" in colour;
 }
 
 function pixelAt(image: ImageData, x: number, y: number): Rgb {
@@ -112,6 +194,21 @@ export function worstPointColour(
   step = 3,
 ): Rgb {
   return worstPoint(image, zone, (bg) => contrastRatio(bg, token), step).rgb;
+}
+
+/** The lightest or darkest sampled ground point, as derived from token colour. */
+export function worstPointForDirection(
+  image: ImageData,
+  zone: { x: number; y: number; w: number; h: number },
+  direction: ComparisonDirection,
+  step = 3,
+): Rgb {
+  return worstPoint(
+    image,
+    zone,
+    (background) => (direction === "brightest" ? -luminance(background) : luminance(background)),
+    step,
+  ).rgb;
 }
 
 /**
@@ -203,12 +300,12 @@ export interface ZoneSpec {
   readonly w: number;
   readonly h: number;
   /** Token colour drawn over this zone. */
-  readonly token: number;
+  readonly token: number | Rgb | SpriteColourMeasurement;
   /**
    * Furniture between the background and the token (§9.6) — the pool tray.
    * Composited onto the background before the token is judged against it.
    */
-  readonly furniture?: { readonly colour: number; readonly alpha: number } | undefined;
+  readonly furniture?: readonly SurfaceLayer[] | undefined;
   /**
    * Token opacity, for dim states (§9.6). Below 1 the token is composited onto
    * whatever is behind it, which on a light ground COSTS contrast — dimming a
@@ -217,10 +314,22 @@ export interface ZoneSpec {
   readonly tokenAlpha?: number | undefined;
 }
 
+/** Ordered from room-facing tray material to the surface the token touches. */
+export interface SurfaceLayer {
+  readonly colour: number;
+  readonly alpha: number;
+}
+
+function compositeSurface(background: Rgb, layers: readonly SurfaceLayer[] | undefined): Rgb {
+  return layers?.reduce((under, layer) => composite(under, rgbFromHex(layer.colour), layer.alpha), background) ?? background;
+}
+
 export interface ZoneResult {
   readonly aspect: string;
   readonly zone: string;
   readonly ratio: number;
+  readonly direction: ComparisonDirection;
+  readonly token: Rgb;
   readonly background: Rgb;
   readonly passes: boolean;
 }
@@ -280,21 +389,37 @@ export function checkBackground(
        * and the contrast is between those two. Measuring the raw token against
        * the raw background would flatter both the tray and every dim state.
        */
-      const token = rgbFromHex(zone.token);
-      const evaluate = (pixel: Rgb): number => {
-        const ground = zone.furniture
-          ? composite(pixel, rgbFromHex(zone.furniture.colour), zone.furniture.alpha)
-          : pixel;
-        const drawn =
-          zone.tokenAlpha === undefined ? token : composite(ground, token, zone.tokenAlpha);
-        return contrastRatio(ground, drawn);
-      };
-
-      const { rgb: background, ratio } = worstPoint(image, box, evaluate);
+      const middle = medianColour(image, box);
+      const middleGround = compositeSurface(middle, zone.furniture);
+      let measured: { direction: ComparisonDirection; colour: Rgb } | null = null;
+      let token: Rgb;
+      if (isSpriteColourMeasurement(zone.token)) {
+        measured = worstCaseSpriteColour(zone.token, middleGround);
+        token = measured.colour;
+      } else {
+        token = asRgb(zone.token);
+      }
+      const middleToken =
+        zone.tokenAlpha === undefined ? token : composite(middleGround, token, zone.tokenAlpha);
+      const direction = measured?.direction ?? comparisonDirection(middleToken, middleGround);
+      const background = worstPoint(
+        image,
+        box,
+        (pixel) => {
+          const ground = compositeSurface(pixel, zone.furniture);
+          return direction === "brightest" ? -luminance(ground) : luminance(ground);
+        },
+      ).rgb;
+      const ground = compositeSurface(background, zone.furniture);
+      const drawn =
+        zone.tokenAlpha === undefined ? token : composite(ground, token, zone.tokenAlpha);
+      const ratio = contrastRatio(ground, drawn);
       results.push({
         aspect: aspect.name,
         zone: zone.name,
         ratio,
+        direction,
+        token,
         background,
         passes: ratio >= minContrast,
       });

@@ -25,6 +25,8 @@ export interface Frame {
 
 export interface AtlasData {
   readonly family: string;
+  /** Image file is explicit so the atlas can change codec without loader edits. */
+  readonly image?: string;
   readonly cell: number;
   readonly frames: Record<string, Frame>;
 }
@@ -83,10 +85,15 @@ export function spriteFor(name: string): SpriteEntry | null {
  */
 export async function loadAtlas(family: string, base = "/"): Promise<boolean> {
   try {
-    const data = (await Assets.load<AtlasData>(`${base}assets/sprites/${family}.json`)) as
-      | AtlasData
-      | undefined;
-    const sheet = await Assets.load<Texture>(`${base}assets/sprites/${family}.png`);
+    // Pixi sees a `frames` field and may claim atlas metadata as a spritesheet
+    // before this loader can read its explicit WebP image field. Fetching the
+    // small manifest as JSON keeps ownership here and leaves Pixi to load the
+    // texture, which is the part it is designed to cache and decode.
+    const response = await fetch(`${base}assets/sprites/${family}.json`);
+    if (!response.ok) return false;
+    const data = (await response.json()) as AtlasData;
+    const image = data?.image ?? `${family}.png`;
+    const sheet = await Assets.load<Texture>(`${base}assets/sprites/${image}`);
     if (!data?.frames || !sheet) return false;
 
     for (const [name, frame] of Object.entries(data.frames)) {
@@ -163,6 +170,16 @@ export type TokenState = "idle" | "pressed" | "disabled" | "unavailable";
 
 export function spriteNameFor(base: string, state: TokenState): string {
   return state === "unavailable" ? `${base}-unlit` : `${base}-lit`;
+}
+
+/**
+ * Related glass frames are selected deterministically from a tile's stable id.
+ * Spent art has no variants in this delivery, so it deliberately stays on the
+ * exact `*-unlit` name and falls back to procedural rendering when absent.
+ */
+export function spriteNameForVariant(base: string, state: TokenState, variant: number): string {
+  const name = spriteNameFor(base, state);
+  return state === "unavailable" || variant <= 0 ? name : `${name}-${variant + 1}`;
 }
 
 /** Opacity for a state. Only `disabled` is expressed as opacity. */

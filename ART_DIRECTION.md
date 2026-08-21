@@ -84,8 +84,9 @@ Non-negotiable, applied to every asset:
 |---|---|---|
 | **Brass** | `#C9A227` → `#8A6D1F` gradient | Plates, dials, frames, furniture, the automaton |
 | **Amber glass** | `#F2A93B` core, `#FFD98A` inner glow | Number tiles. The signature. |
-| **Deep wood** | `#4A3428` | Desk surface, trays |
-| **Ink navy** | `#1E2A3A` | Numerals on brass, dark accents |
+| **Deep wood** | `#4A3428` | Placeholder desk surface, tray rim |
+| **Felt lining** | `#0E0805` | Opaque token surface inside trays; derived for brass contrast |
+| **Ink navy** | `#1E2A3A` | Live numerals on glass, dark accents |
 | **Cream** | `#F4E9D4` | Light text only. NOT numerals on glass — see §5. |
 | **Gold accent** | `#FFC94A` | Ready, armed, earned. Stars. |
 | **Failure red** | `#7A2020` | Refused, blocked. Unchanged from §9.6. |
@@ -163,7 +164,7 @@ GDD §9.5's register stands — **weight, not energy** — but it is now a physi
 
 ## 8. Asset inventory
 
-Generated at 4× target size and downscaled. Largest on-screen token is 92 design px; at 3× device pixel ratio that is 276px, so **512px generation is the floor** for tokens.
+Generated at 4× target size and downscaled. Largest on-screen token is capped at 120 design px; at 3× device pixel ratio that is 360px, so **512px generation is the floor** for tokens.
 
 | Asset | Count | Generate at | Notes |
 |---|---|---|---|
@@ -193,7 +194,9 @@ Generated at 4× target size and downscaled. Largest on-screen token is 92 desig
 
 **Locked reference.** Once one asset in a family is right, it is uploaded as a reference for every subsequent generation in that family. Never generate a set independently.
 
-**Consistency audit.** Claude Code measures lighting direction, specular position and palette across a completed sprite set and flags outliers. More reliable than the human eye across forty assets.
+**Consistency audit.** Claude Code measures lighting direction, specular position and palette across a completed sprite set and flags outliers. More reliable than the human eye across forty assets. Judge **consistency**, not an implementation-independent absolute angle: within one sheet, the measured spread must stay under 3 degrees. Compare mean angles only between sheets of the same material, against that material's recorded baseline (within 5 degrees). Never compare brass and glass; §3 explains why the same upper-left source presents differently through each material.
+
+**Brass baseline (this tool).** `operators-sheet.png` measures 117 degrees mean light angle with a 1.2-degree spread across its five dials in `tools/process-sprites.mts`. This value belongs to that implementation's high-luminance-centroid metric, not to the art itself; re-derive the baseline whenever that metric changes.
 
 **Atlas and compression.** Traffic Bomb's pipeline returns (GDD §11). It was excluded only because tokens were procedural.
 
