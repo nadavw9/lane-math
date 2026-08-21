@@ -70,6 +70,8 @@ Non-negotiable, applied to every asset:
 | **Readable silhouette** | Recognisable as a black shape at 55px |
 | **Slight asymmetry** | Hand-placed highlights and wear. Perfect symmetry reads as procedural |
 
+**Transparent and opaque materials show the same light differently.** Brass shows a specular highlight in the upper-left quadrant. Glass refracts light through its body and concentrates it at the lower-right. Both are correct under the same upper-left source. A consistency audit must not treat this as drift — compare like materials only.
+
 **No outlines.** This is not the toon family. Separation comes from lighting and contact shadow.
 
 ---
@@ -84,7 +86,7 @@ Non-negotiable, applied to every asset:
 | **Amber glass** | `#F2A93B` core, `#FFD98A` inner glow | Number tiles. The signature. |
 | **Deep wood** | `#4A3428` | Desk surface, trays |
 | **Ink navy** | `#1E2A3A` | Numerals on brass, dark accents |
-| **Cream** | `#F4E9D4` | Numerals in glass, light text |
+| **Cream** | `#F4E9D4` | Light text only. NOT numerals on glass — see §5. |
 | **Gold accent** | `#FFC94A` | Ready, armed, earned. Stars. |
 | **Failure red** | `#7A2020` | Refused, blocked. Unchanged from §9.6. |
 
@@ -98,7 +100,9 @@ Shape-coding from GDD §9.2 is preserved exactly. Only the material changes.
 
 ### Number tiles — glass cubes
 
-Rounded glass cubes with the numeral **suspended inside**, lit from within. Amber core, cream numeral, sharp specular on the upper-left face, soft internal glow, faint refraction at the edges.
+Rounded glass cubes with the numeral **suspended inside**, lit from within. Amber core, DARK numeral in ink navy #1E2A3A.
+
+Measured: the glass centre sits at 0.70 relative luminance — nearly as bright as cream. Cream numerals score 1.17:1 against it and would be invisible. Ink navy scores 10.34:1. The glow surrounds the digit rather than competing with it.
 
 **Why glass:** the design premise is that numbers are precious and permanently spent. Glass reads as valuable, and it makes §9.3's shatter literal rather than metaphorical. It also holds the rounded-square shape code — marbles or beads would collide with circular operators.
 
