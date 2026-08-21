@@ -2,7 +2,7 @@ import runtimeLevels from "./generated/levels.json";
 import { Ads, loadAdMob } from "./ads/ads.js";
 import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
-import { loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
+import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
 import { Economy } from "./economy/economy.js";
 import { LocalStorageStore } from "./economy/save.js";
@@ -406,7 +406,7 @@ Object.assign(window, {
     feel: () => renderer.feelState(),
     /** Every unbounded-growth candidate the renderer holds. */
     diagnostics: () => renderer.diagnostics(),
-    sprites: () => ({ missing: missingSprites(), loaded: loadedSprites() }),
+    sprites: () => ({ missing: missingSprites(), loaded: loadedSprites(), failed: failedAtlases() }),
     telemetry: () => localSink.read(),
     exportTelemetry,
     build: BUILD,

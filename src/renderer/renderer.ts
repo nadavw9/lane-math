@@ -23,6 +23,7 @@ import { cuesFor } from "../audio/cues.js";
 import type { Sound } from "../audio/sound.js";
 import { FlightTable } from "./flights.js";
 import {
+  failedAtlases,
   loadAtlas,
   loadedSprites,
   missingSprites,
@@ -297,6 +298,10 @@ export class Renderer {
       // than swallowed: a silent fallback is how a missing asset survives three
       // weeks of review.
       spritesMissing: missingSprites().length,
+      // Atlas families that did not load. A failed load disables the sprite
+      // path, and a disabled path records no misses — so spritesMissing alone
+      // cannot see the failure that matters most.
+      spriteAtlasFailures: failedAtlases().length,
       entranceBand0: this.entrance ? Number(this.entrance.sample(0).alpha.toFixed(2)) : -1,
       entranceBand5: this.entrance ? Number(this.entrance.sample(5).alpha.toFixed(2)) : -1,
     };

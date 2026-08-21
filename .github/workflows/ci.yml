@@ -82,6 +82,16 @@ jobs:
           SMOKE_BASE: /lane-math/
         run: node tools/smoke.mjs
 
+      # SPRITES MUST NOT SILENTLY FALL BACK. Every token can draw itself
+      # procedurally, so a broken atlas renders flat rectangles instead of amber
+      # glass — no throw, no log, and it reads as a deliberate art style to
+      # anyone who did not write it. With ?sprites=1 the fallback is a failure.
+      - name: Boot smoke — real sprite atlas
+        env:
+          SMOKE_BASE: /lane-math/
+          SMOKE_QUERY: "?sprites=1"
+        run: node tools/smoke.mjs
+
       # FONT COVERAGE — the other gate that only the artefact can answer.
       # The bundled Outfit file was the latin-ext subset (unicode-range starts
       # at U+0100), so it contained no digits, no `=` and no punctuation, and
