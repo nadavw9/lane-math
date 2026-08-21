@@ -416,11 +416,24 @@ export function woodenTray(w: number, h: number, colour: number, alpha: number):
 /** The wood frame and opaque felt surface that physically support real art. */
 export function feltLinedTray(w: number, h: number, colour: number, alpha: number, felt: number): Container {
   const tray = woodenTray(w, h, colour, alpha);
-  tray.addChild(
-    new Graphics()
-      .roundRect(6, 6, Math.max(0, w - 12), Math.max(0, h - 12), 7)
-      .fill({ color: felt }),
-  );
+  const inset = 6;
+  const innerW = Math.max(0, w - inset * 2);
+  const innerH = Math.max(0, h - inset * 2);
+  const lining = new Graphics();
+  const drawFelt = (g: Graphics): Graphics =>
+    g.roundRect(inset, inset, innerW, innerH, 7);
+
+  drawFelt(lining).fill({ color: felt });
+  // The shared fine grain reads as a short nap at this restrained opacity.
+  grainOver(lining, drawFelt, 0.24);
+
+  // Layered inset strokes soften the join instead of drawing a hard outline.
+  drawFelt(lining).stroke({ width: 5, color: 0x000000, alpha: 0.2, alignment: 1 });
+  lining
+    .roundRect(inset + 2, inset + 2, Math.max(0, innerW - 4), Math.max(0, innerH - 4), 5)
+    .stroke({ width: 2, color: 0x000000, alpha: 0.1, alignment: 1 });
+
+  tray.addChild(lining);
   return tray;
 }
 
