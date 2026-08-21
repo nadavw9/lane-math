@@ -13,8 +13,8 @@ export const PALETTE = {
    * Temporary desk surface until the four desk-in-room scenes arrive. The old
    * paper worlds are superseded art and must not be used as a contrast surface.
    */
-  placeholderDesk: 0x4a3428,
-  background: 0x4a3428,
+  placeholderDesk: 0x704a32,
+  background: 0x704a32,
 
   /*
    * TOKENS — dark ink on a light ground (§9.2).
@@ -71,8 +71,8 @@ export const PALETTE = {
 
   /** The pool tray: light wood, warm, translucent over the paper (§9.6). */
   tray: 0xc9a678,
-  /** Opaque lining under every real tile and dial: dark enough for brass. */
-  felt: 0x0e0805,
+  /** Dark brown felt under every real tile and dial. */
+  felt: 0x241812,
   /** Ink navy is reserved for numerals drawn over the glass sprite. */
   glassNumeral: 0x1e2a3a,
   /** Ruling on the lane's squared paper. */

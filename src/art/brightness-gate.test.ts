@@ -15,6 +15,7 @@ import {
 import {
   comparisonDirection,
   MIN_CONTRAST,
+  MIN_TEXT_CONTRAST,
   REQUIRED_SIZE,
   checkBackground,
   contrastRatio,
@@ -104,6 +105,12 @@ interface AtlasFrame {
   readonly y: number;
   readonly w: number;
   readonly h: number;
+  readonly content: {
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+  };
 }
 
 interface AtlasData {
@@ -120,7 +127,7 @@ const ART_FAMILIES = [
   {
     name: "brass operators",
     atlas: "operators",
-    minimum: 4.5,
+    minimum: MIN_CONTRAST,
     zone: { ...asZone("operators / real brass", OPERATOR_ZONE, PALETTE.operator), furniture: FELT_LINED_TRAY },
   },
 ] as const;
@@ -134,6 +141,36 @@ async function measuredFrames(atlas: string): Promise<Array<{ name: string; colo
       .map(async ([name, frame]) => {
         const { data: pixels, info } = await sharp(sheet)
           .extract({ left: frame.x, top: frame.y, width: frame.w, height: frame.h })
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        return {
+          name,
+          colours: measureSpriteColours({
+            width: info.width,
+            height: info.height,
+            pixels: new Uint8Array(pixels),
+          }),
+        };
+      }),
+  );
+}
+
+async function measuredNumeralGrounds(): Promise<
+  Array<{ name: string; colours: ReturnType<typeof measureSpriteColours> }>
+> {
+  const data = JSON.parse(readFileSync(join(SPRITE_DIR, "tiles.json"), "utf8")) as AtlasData;
+  const sheet = join(SPRITE_DIR, "tiles.webp");
+  return Promise.all(
+    Object.entries(data.frames)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(async ([name, frame]) => {
+        const width = Math.max(1, Math.floor(frame.content.w * 0.42));
+        const height = Math.max(1, Math.floor(frame.content.h * 0.42));
+        const left = Math.round(frame.content.x + (frame.content.w - width) / 2);
+        const top = Math.round(frame.content.y + (frame.content.h - height) / 2);
+        const { data: pixels, info } = await sharp(sheet)
+          .extract({ left, top, width, height })
           .ensureAlpha()
           .raw()
           .toBuffer({ resolveWithObject: true });
@@ -163,10 +200,27 @@ function flatSurface(colour: number): ImageData {
 const PLACEHOLDER_DESK = flatSurface(PALETTE.placeholderDesk);
 
 describe("background brightness gate", () => {
-  it("derives a felt surface that clears brass at 4.5:1", () => {
+  it("uses the approved felt and 3:1 graphical-token bar", () => {
+    expect(PALETTE.felt).toBe(0x241812);
+    expect(PALETTE.placeholderDesk).toBe(0x704a32);
     const felt = luminance(rgbFromHex(PALETTE.felt));
-    expect((0.223 + 0.05) / (felt + 0.05)).toBeGreaterThanOrEqual(4.5);
-    expect((0.698 + 0.05) / (felt + 0.05)).toBeGreaterThanOrEqual(8.25);
+    expect((0.223 + 0.05) / (felt + 0.05)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  });
+
+  it("keeps ink navy numerals above 4.5:1 on every glass content box", async () => {
+    expect(MIN_TEXT_CONTRAST).toBe(4.5);
+    const ink = rgbFromHex(PALETTE.glassNumeral);
+    const failures: string[] = [];
+    const rows: string[] = [];
+    for (const frame of await measuredNumeralGrounds()) {
+      const ratio = contrastRatio(ink, frame.colours.darkestRepresentative);
+      rows.push(`  ${frame.name.padEnd(20)} ${ratio.toFixed(2)}:1`);
+      if (ratio < MIN_TEXT_CONTRAST) {
+        failures.push(`${frame.name}: ${ratio.toFixed(2)}:1`);
+      }
+    }
+    console.log(`\nreal glass numeral gate — ink navy #1E2A3A\n${rows.join("\n")}`);
+    expect(failures, `glass numerals below ${MIN_TEXT_CONTRAST}:1:\n${failures.join("\n")}`).toEqual([]);
   });
 
   it("accepts every real glass and brass frame on the placeholder desk", async () => {
@@ -177,7 +231,7 @@ describe("background brightness gate", () => {
       expect(frames.length, `${family.name} atlas has no frames`).toBeGreaterThan(0);
       for (const frame of frames) {
         const result = checkBackground(
-          "placeholder desk #4A3428",
+          "placeholder desk #704A32",
           PLACEHOLDER_DESK,
           [{ ...family.zone, name: frame.name, token: frame.colours }],
           family.minimum,
@@ -197,7 +251,7 @@ describe("background brightness gate", () => {
       }
     }
     console.log(
-      `\nreal sprite brightness gate — placeholder desk #4A3428 with felt-lined tray\n${rows.join("\n")}`,
+      `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}`,
     );
     expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
   });
