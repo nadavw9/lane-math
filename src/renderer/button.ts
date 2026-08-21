@@ -46,6 +46,15 @@ export interface ButtonOptions {
    * of the game's most-pressed controls a pressed state.
    */
   readonly shape?: "rect" | "hex";
+  /**
+   * An emblem set beside the label, sharing its centring — a star on the hints
+   * chip, for instance, which used to be a `★` inside the label string.
+   *
+   * A FACTORY, not a Container, because paint() destroys and rebuilds every
+   * child on each press; a single instance would be destroyed on the first
+   * press and drawn as a hole on the second.
+   */
+  readonly emblem?: (() => Container) | undefined;
   readonly onTap?: (() => void) | undefined;
 }
 
@@ -63,6 +72,7 @@ export function button(options: ButtonOptions): Container {
     outline,
     fontSize,
     shape = "rect",
+    emblem,
     onTap,
   } = options;
 
@@ -128,8 +138,21 @@ export function button(options: ButtonOptions): Container {
       }),
     });
     text.anchor.set(0.5);
-    text.position.set(width / 2, depth + height / 2);
-    body.addChild(text);
+    const midY = depth + height / 2;
+    if (emblem) {
+      // Label and emblem are centred as one run, so the pair sits where a plain
+      // label would rather than the text drifting left of centre.
+      const mark = emblem();
+      const gap = 4;
+      const run = text.width + gap + mark.width;
+      text.position.set(width / 2 - run / 2 + text.width / 2, midY);
+      mark.position.set(width / 2 + run / 2 - mark.width / 2, midY);
+      body.addChild(text);
+      body.addChild(mark);
+    } else {
+      text.position.set(width / 2, midY);
+      body.addChild(text);
+    }
   };
 
   paint(0);

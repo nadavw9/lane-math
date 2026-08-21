@@ -19,6 +19,7 @@ import {
 import { button, type ButtonState } from "./button.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
+import { emblemMeter, hintDiamond, meterWidth, star } from "./emblems.js";
 import { cuesFor } from "../audio/cues.js";
 import type { Sound } from "../audio/sound.js";
 import { FlightTable } from "./flights.js";
@@ -53,7 +54,16 @@ const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
 /** Tile ids are non-negative, so a negative key can never collide with one. */
 const OPERATOR_LIFT_KEY = -1;
 
-const LABEL: Record<string, string> = { sqrt: "√", sq: "x²", "*": "×", "/": "÷", "-": "−" };
+/**
+ * Display forms for the operator codes.
+ *
+ * `sqrt` maps to ITSELF, not to a radical character: U+221A is not in Outfit at
+ * any subset, so typing it would fall back to a system font while the other
+ * four dials render in the game's own. operatorToken() recognises the ASCII
+ * identity and draws the radical (emblems.ts). The character does not appear in
+ * this codebase at all, which is what keeps it from being typed by accident.
+ */
+const LABEL: Record<string, string> = { sqrt: "sqrt", sq: "x²", "*": "×", "/": "÷", "-": "−" };
 
 /**
  * The Renderer draws commands and emits input. It holds a view model built from
@@ -878,6 +888,7 @@ export class Renderer {
     onTap?: () => void,
     outline?: number,
     state: ButtonState = "idle",
+    emblem?: () => Container,
   ): Container {
     const control = button({
       width: w,
@@ -886,6 +897,7 @@ export class Renderer {
       fill,
       labelColour,
       outline,
+      emblem,
       state: this.inputLocked ? "disabled" : state,
       onTap: this.inputLocked ? undefined : onTap,
     });
@@ -1250,12 +1262,18 @@ export class Renderer {
     if (eco) {
       // Lives: absent entirely until 2-8 (§7.6), and off in World 1 (§7.2).
       if (u.lives && eco.livesActive) {
+        // §8: brass pocket-watches, not hearts. Lives refill on a timer.
+        const size = 14;
+        const watches = emblemMeter("life", eco.lives, eco.maxLives, size);
+        watches.position.set(lane.x + 8, lane.y + 6);
+        this.root.addChild(watches);
+
         const hud = this.text(
-          `${"♥".repeat(eco.lives)}${"·".repeat(Math.max(0, eco.maxLives - eco.lives))}  ${eco.lives}/${eco.maxLives}`,
+          `${eco.lives}/${eco.maxLives}`,
           14,
           eco.lives === 0 ? PALETTE.failed : PALETTE.text,
         );
-        hud.position.set(lane.x + 8, lane.y + 6);
+        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 8, lane.y + 6);
         this.root.addChild(hud);
       }
 
@@ -1275,14 +1293,9 @@ export class Renderer {
        */
       if (u.starCounter) {
         const earned = s.phase === "won" ? eco.bestStars : eco.starsIfCleared;
-        const stars = this.text(
-          `${"★".repeat(earned)}${"☆".repeat(Math.max(0, 3 - earned))}`,
-          15,
-          // Gold is an outline colour for dark tokens; on paper it disappears.
-          PALETTE.highlightInk,
-        );
-        stars.anchor.set(1, 0);
-        stars.position.set(lane.x + lane.width - 8, lane.y + 6);
+        const size = 15;
+        const stars = emblemMeter("star", earned, 3, size);
+        stars.position.set(lane.x + lane.width - 8 - meterWidth(3, size), lane.y + 6);
         this.root.addChild(stars);
       }
 
@@ -1388,8 +1401,12 @@ export class Renderer {
     // Their own band, sized to how many are owned, so they neither overlap the
     // pool on a small board nor reserve a strip nobody is using.
     s.hints.forEach((hint, i) => {
-      const label = this.text(`◆ ${hint.text}`, 12, PALETTE.highlightInk);
-      label.position.set(board.hints.x + 4, board.hints.y + i * 16);
+      const mark = hintDiamond(10);
+      mark.position.set(board.hints.x + 4 + 5, board.hints.y + i * 16 + 7);
+      this.root.addChild(mark);
+
+      const label = this.text(hint.text, 12, PALETTE.highlightInk);
+      label.position.set(board.hints.x + 4 + 14, board.hints.y + i * 16);
       this.root.addChild(label);
     });
 
@@ -1402,10 +1419,13 @@ export class Renderer {
           92,
           32,
           PALETTE.slotFilled,
-          `hints ${eco.starsAvailable}★`,
+          `hints ${eco.starsAvailable}`,
           // Open is an "armed" state, so it is gold — the only accent (§9.6).
           s.shopOpen ? PALETTE.highlight : PALETTE.tokenInk,
           () => this.emit({ type: "toggleShop" }),
+          undefined,
+          "idle",
+          () => star(11),
         ),
       );
 
@@ -1458,11 +1478,12 @@ export class Renderer {
             status.width - 16,
             34,
             PALETTE.slotFilled,
-            `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}★`}`,
+            `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}`}`,
             entry.owned ? PALETTE.highlight : PALETTE.tokenInk,
             () => this.emit({ type: "buyHint", hint: entry.type }),
             undefined,
             enabled ? "idle" : "unavailable",
+            entry.owned ? undefined : () => star(11),
           );
           this.root.addChild(this.entry(row, BOARD_BANDS.equation));
         });
@@ -1613,15 +1634,14 @@ export class Renderer {
        * celebration; three landing in sequence is a tally being counted out,
        * which is the register this game earns its reward in.
        */
-      this.starArrivals.forEach((star, i) => {
-        if (!star.started) return;
-        const glyph = this.text("★", 26, PALETTE.highlight);
-        glyph.anchor.set(0.5);
+      this.starArrivals.forEach((arrival, i) => {
+        if (!arrival.started) return;
+        const glyph = star(26);
         const spread = 34;
         const x = DESIGN.width / 2 + (i - (this.starArrivals.length - 1) / 2) * spread;
         // Comes in oversize and settles down onto the banner.
-        glyph.scale.set(lerp(1.9, 1, star.value));
-        glyph.alpha = Math.min(1, star.raw * 3);
+        glyph.scale.set(lerp(1.9, 1, arrival.value));
+        glyph.alpha = Math.min(1, arrival.raw * 3);
         glyph.position.set(x, bannerY + 66);
         this.root.addChild(this.entry(glyph, CLEARED_BANDS.stars, true));
       });
