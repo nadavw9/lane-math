@@ -43,7 +43,7 @@ import {
   setGrainTexture,
   squaredPaper,
   targetPlate,
-  woodenTray,
+  feltLinedTray,
 } from "./tokens.js";
 
 
@@ -143,39 +143,13 @@ export class Renderer {
   }
 
   /**
-   * One pre-rendered image per world (GDD §9.1) — the only raster assets in the
-   * game. Backgrounds are wallpaper: nothing traverses them and nothing
-   * scrolls, so they are a single image rather than a composited playfield.
+   * Temporary world surface until desk-in-room backgrounds replace the retired
+   * paper art. The canvas's #4A3428 background is intentional, not a load error.
    */
   async setWorld(world: number): Promise<void> {
     if (this.world === world) return;
     this.world = world;
-
-    try {
-      /*
-       * BASE-RELATIVE, not absolute.
-       *
-       * GitHub Pages serves this from /lane-math/, so a leading slash resolves
-       * to the domain root and 404s every background. Capacitor and local dev
-       * both run at "/", where BASE_URL is "/" and this is unchanged.
-       */
-      const texture = await Assets.load<Texture>(
-        `${import.meta.env.BASE_URL}assets/bg/world-${world}.webp`,
-      );
-      this.background.removeChildren();
-      const sprite = new Sprite(texture);
-      // Cover the design surface, cropping from the edges for shorter frames
-      // exactly as §9.1 specifies.
-      const scale = Math.max(DESIGN.width / texture.width, DESIGN.height / texture.height);
-      sprite.scale.set(scale);
-      sprite.anchor.set(0.5);
-      sprite.position.set(DESIGN.width / 2, DESIGN.height / 2);
-      this.background.addChild(sprite);
-    } catch {
-      // A missing background must not take the game down; the flat fill behind
-      // it is already legible. CI is what refuses to ship one (brightness gate).
-      this.background.removeChildren();
-    }
+    this.background.removeChildren();
   }
 
   async init(host: HTMLElement): Promise<void> {
@@ -212,8 +186,10 @@ export class Renderer {
      * game already ships in, so there is nothing to fall back FROM.
      */
     if (spritesEnabled()) {
-      const ok = await loadAtlas("tokens", import.meta.env.BASE_URL);
-      if (!ok) setSpritesEnabled(false);
+      const loaded = await Promise.all(
+        ["tiles", "operators"].map((family) => loadAtlas(family, import.meta.env.BASE_URL)),
+      );
+      if (!loaded.every(Boolean)) setSpritesEnabled(false);
     }
 
     this.app.stage.addChild(this.background);
@@ -1232,7 +1208,7 @@ export class Renderer {
           transformable || pulsed.has(tile.id) || hinted.has(tile.id)
             ? PALETTE.highlight
             : undefined,
-      });
+      }, "idle", tile.id);
       if (dimmed) token.alpha = DIM.alpha;
 
       // Scale about the tile's own centre so it grows in place rather than
@@ -1670,10 +1646,19 @@ export class Renderer {
         .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
       1,
     );
-    // §9.6: the pool is a shallow wooden tray the tiles sit in. Translucent, so
-    // the paper still reads through it and the gate can measure what is really
-    // behind a tile.
-    const tray = woodenTray(pool.width, pool.height + 12, PALETTE.tray, TRAY_ALPHA);
+    const operatorTray = feltLinedTray(
+      operators.width + 12,
+      operators.height + 12,
+      PALETTE.tray,
+      TRAY_ALPHA,
+      PALETTE.felt,
+    );
+    operatorTray.position.set(operators.x - 6, operators.y - 6);
+    this.root.addChildAt(this.entry(operatorTray, BOARD_BANDS.furniture), 2);
+
+    // The felt is the physical surface behind every number tile, and the same
+    // opaque lining measured by the real-art brightness gate.
+    const tray = feltLinedTray(pool.width, pool.height + 12, PALETTE.tray, TRAY_ALPHA, PALETTE.felt);
     tray.position.set(pool.x, pool.y - 6);
     this.root.addChildAt(this.entry(tray, BOARD_BANDS.furniture), 2);
   }

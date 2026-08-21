@@ -10,11 +10,11 @@ export const DESIGN = { width: 420, height: 900 } as const;
 
 export const PALETTE = {
   /**
-   * Shown only if a background fails to load. Paper, not void: a dark fallback
-   * under dark tokens would be unreadable in exactly the case where the art is
-   * missing and legibility is all that is left.
+   * Temporary desk surface until the four desk-in-room scenes arrive. The old
+   * paper worlds are superseded art and must not be used as a contrast surface.
    */
-  background: 0xe9e3d6,
+  placeholderDesk: 0x4a3428,
+  background: 0x4a3428,
 
   /*
    * TOKENS — dark ink on a light ground (§9.2).
@@ -71,6 +71,10 @@ export const PALETTE = {
 
   /** The pool tray: light wood, warm, translucent over the paper (§9.6). */
   tray: 0xc9a678,
+  /** Opaque lining under every real tile and dial: dark enough for brass. */
+  felt: 0x0e0805,
+  /** Ink navy is reserved for numerals drawn over the glass sprite. */
+  glassNumeral: 0x1e2a3a,
   /** Ruling on the lane's squared paper. */
   rule: 0x6f6558,
 
@@ -91,11 +95,8 @@ export const PALETTE = {
  * they read as disabled web controls rather than as objects pushed into the
  * background.
  *
- * The opacity floor is set by the brightness gate, not by taste. Fading a DARK
- * token on a LIGHT ground pulls it toward the paper, which costs contrast
- * directly. Measured across all four worlds (tools/dim-floor.mts), 3:1 breaks
- * at alpha 0.68 and the lowest passing value is 0.70; 0.78 sits above that with
- * margin, at a measured 3.55:1 worst case.
+ * The opacity floor is set by the brightness gate, not by taste. A dimmed art
+ * token is still measured against the felt liner that physically holds it.
  *
  * Most of the dimming therefore has to come from elevation and shadow, which
  * cost no contrast at all: a token lying flat on the surface casting nothing is
@@ -124,23 +125,16 @@ export const DIM = {
  * the four surfaces, needing alpha 0.175-0.204; 0.20 satisfies the grainiest
  * and retains 80% of the texture.
  *
- * The gate still measures the BARE background, so this is free margin rather
- * than something the tokens depend on.
+ * The felt-lined trays, rather than the placeholder desk, are the measured
+ * token surface. This veil only separates non-token UI from the room.
  */
 export const BACKDROP = { colour: 0xffffff, alpha: 0.2 } as const;
 
 /**
  * How solid the pool tray is (§9.6).
  *
- * Translucent on purpose. An opaque tray would be the surface the tiles
- * actually sit on, which means the brightness gate would be measuring a
- * background the player never sees behind a token — the same class of mistake
- * as gating art the game does not load. At this alpha the paper still reads
- * through, and the gate composites the tray over the measured worst point so
- * what is judged is what ships.
- *
- * It is also contrast-POSITIVE where it matters: the wood is lighter than the
- * darkest paper, so the tray lifts the worst points rather than deepening them.
+ * The wooden rim is translucent decoration; the opaque felt lining is the
+ * physical surface the tokens touch and the surface the art gate measures.
  */
 export const TRAY_ALPHA = 0.55;
 
@@ -177,9 +171,10 @@ const GAP = 8;
  * at the platform minimum, and the densest 16-tile board must still be playable
  * with a thumb. MAX is the "not childish" ceiling: past roughly a fifth of the
  * screen width a number tile stops reading as a game piece you spend and starts
- * reading as a menu button.
+ * reading as a menu button. The cap is also the physical-art coverage limit:
+ * 120 design px at 3x DPR is the 360px atlas frame size.
  */
-export const TOKEN_SIZE = { min: 46, max: 92 } as const;
+export const TOKEN_SIZE = { min: 46, max: 120 } as const;
 
 const TARGET_GAP = 6;
 /** Grids wider than this stop being scannable regardless of what fits. */

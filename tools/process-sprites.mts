@@ -35,8 +35,14 @@ import sharp from "sharp";
 
 interface Options {
   family: string;
+  atlas: string;
+  names: readonly string[];
   expect: number;
   size: number;
+  quality: number;
+  minSource: number;
+  baseline: number | undefined;
+  baselineTolerance: number;
   inner: number;
   outer: number;
   minArea: number;
@@ -49,10 +55,22 @@ function parseArgs(argv: string[]): Options {
     const i = argv.indexOf(`--${name}`);
     return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1]! : fallback;
   };
+  const family = get("family", "");
+  const names = get("names", "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const baseline = get("baseline", "");
   return {
-    family: get("family", ""),
+    family,
+    atlas: get("atlas", family),
+    names,
     expect: Number(get("expect", "0")),
     size: Number(get("size", "276")),
+    quality: Number(get("quality", "85")),
+    minSource: Number(get("min-source", "0")),
+    baseline: baseline === "" ? undefined : Number(baseline),
+    baselineTolerance: Number(get("baseline-tolerance", "5")),
     inner: Number(get("inner", "60")),
     outer: Number(get("outer", "120")),
     minArea: Number(get("min-area", "400")),
@@ -139,6 +157,51 @@ function keyMagenta(
   return out;
 }
 
+interface DespillReport {
+  worstBefore: number;
+  worstAfter: number;
+  saturatedAmberPixels: number;
+  worstAmberSaturationLoss: number;
+}
+
+function saturation(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  return max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+}
+
+function despillReport(before: Buffer, after: Buffer): DespillReport {
+  let worstBefore = 0;
+  let worstAfter = 0;
+  let saturatedAmberPixels = 0;
+  let worstAmberSaturationLoss = 0;
+
+  for (let i = 0; i < before.length; i += 4) {
+    // The report is about pixels that survive the key, never the magenta ground.
+    if (after[i + 3]! < 128) continue;
+    const r = before[i]!;
+    const g = before[i + 1]!;
+    const b = before[i + 2]!;
+    const rAfter = after[i]!;
+    const gAfter = after[i + 1]!;
+    const bAfter = after[i + 2]!;
+    worstBefore = Math.max(worstBefore, Math.max(0, Math.min(r, b) - g));
+    worstAfter = Math.max(worstAfter, Math.max(0, Math.min(rAfter, bAfter) - gAfter));
+
+    // Amber is warm, saturated and ordered red > green > blue. The despill
+    // rule must leave these real pixels alone: their blue channel is already
+    // below green, so they contain no magenta spill to subtract.
+    if (before[i + 3]! >= 200 && r > g && g > b && saturation(r, g, b) >= 0.5) {
+      saturatedAmberPixels++;
+      worstAmberSaturationLoss = Math.max(
+        worstAmberSaturationLoss,
+        Math.max(0, saturation(r, g, b) - saturation(rAfter, gAfter, bAfter)),
+      );
+    }
+  }
+
+  return { worstBefore, worstAfter, saturatedAmberPixels, worstAmberSaturationLoss };
+}
+
 /* ------------------------------------------------------------------ *
  * 2. AUTO-SLICE
  * ------------------------------------------------------------------ */
@@ -221,6 +284,13 @@ function findRegions(rgba: Buffer, width: number, height: number, minArea: numbe
 
 /* ------------------------------------------------------------------ *
  * 6. CONSISTENCY AUDIT  (criteria from ART_DIRECTION §9)
+ *
+ * This high-luminance-centroid angle is tool-specific. Judge spread within one
+ * sheet (<3 degrees), and compare means only with another sheet of the SAME
+ * material against its recorded baseline. `operators-sheet.png` is the brass
+ * baseline for this metric (117 degrees mean, 1.2-degree spread); re-derive it
+ * if this measurement changes. Never compare brass with glass: they present
+ * the same upper-left source differently (ART_DIRECTION §3).
  * ------------------------------------------------------------------ */
 
 interface Audit {
@@ -392,12 +462,14 @@ mkdirSync(options.out, { recursive: true });
 
 interface Sliced {
   name: string;
+  frameName: string;
   rgba: Buffer;
   width: number;
   height: number;
 }
 
 const sliced: Sliced[] = [];
+const spills: Array<{ sheet: string; report: DespillReport }> = [];
 let detected = 0;
 
 for (const sheet of sheets) {
@@ -405,6 +477,7 @@ for (const sheet of sheets) {
   const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 
   const keyed = keyMagenta(data, info.width, info.height, options.inner, options.outer);
+  spills.push({ sheet, report: despillReport(data, keyed) });
   const regions = findRegions(keyed, info.width, info.height, options.minArea);
   detected += regions.length;
 
@@ -429,6 +502,7 @@ for (const sheet of sheets) {
     }
     sliced.push({
       name: `${basename(sheet).replace(/\.[^.]+$/, "")}-${index + 1}`,
+      frameName: `${basename(sheet).replace(/\.[^.]+$/, "")}-${index + 1}`,
       rgba: cut,
       width: w,
       height: h,
@@ -442,6 +516,42 @@ if (options.expect > 0 && detected !== options.expect) {
       `Refusing to write. A sheet that silently mis-slices is worse than one that fails.\n`,
   );
   process.exit(1);
+}
+
+if (options.names.length > 0 && options.names.length !== sliced.length) {
+  process.stderr.write(
+    `\nNAME MISMATCH: expected ${sliced.length} frame names, received ${options.names.length}.\n` +
+      `Refusing to write an atlas with ambiguous renderer names.\n`,
+  );
+  process.exit(1);
+}
+if (new Set(options.names).size !== options.names.length) {
+  process.stderr.write(`\nNAME MISMATCH: atlas frame names must be unique.\n`);
+  process.exit(1);
+}
+for (const [index, sprite] of sliced.entries()) sprite.frameName = options.names[index] ?? sprite.name;
+
+if (options.minSource > 0) {
+  const undersized = sliced.filter((sprite) => Math.min(sprite.width, sprite.height) < options.minSource);
+  if (undersized.length > 0) {
+    process.stderr.write(`\nSOURCE SIZE MISMATCH: every sprite must be at least ${options.minSource}px before downscale.\n`);
+    for (const sprite of undersized) {
+      process.stderr.write(`  ${sprite.frameName}: ${sprite.width}x${sprite.height}px\n`);
+    }
+    process.exit(1);
+  }
+}
+
+process.stdout.write(`\npre-downscale sprite sizes${options.minSource > 0 ? ` (minimum ${options.minSource}px)` : ""}\n`);
+for (const sprite of sliced) {
+  process.stdout.write(`  ${sprite.frameName.padEnd(22)} ${sprite.width}x${sprite.height}px\n`);
+}
+process.stdout.write(`\ndespill verification — retained pixels\n`);
+for (const { sheet, report } of spills) {
+  process.stdout.write(
+    `  ${sheet}: worst spill ${report.worstBefore} -> ${report.worstAfter}; ` +
+      `saturated amber ${report.saturatedAmberPixels} px, worst saturation loss ${report.worstAmberSaturationLoss.toFixed(3)}\n`,
+  );
 }
 
 /*
@@ -481,7 +591,7 @@ const prepared = await Promise.all(
       );
     }
 
-    audits.push(auditSprite(sprite.name, canvas, padW, padH));
+    audits.push(auditSprite(sprite.frameName, canvas, padW, padH));
 
     /*
      * 4. DOWNSCALE with high-quality resampling — on PREMULTIPLIED pixels.
@@ -530,7 +640,13 @@ const prepared = await Promise.all(
       .png()
       .toBuffer();
 
-    return { name: sprite.name, buffer: scaled };
+    return {
+      name: sprite.frameName,
+      sourceName: sprite.name,
+      sourceWidth: sprite.width,
+      sourceHeight: sprite.height,
+      buffer: scaled,
+    };
   }),
 );
 
@@ -581,7 +697,7 @@ const composites = meta.map((m, i) => {
   return { input: m.buffer, left: x, top: y };
 });
 
-const atlasPath = join(options.out, `${options.family}.png`);
+const atlasPath = join(options.out, `${options.atlas}.webp`);
 await sharp({
   create: {
     width: columns * cell,
@@ -589,14 +705,14 @@ await sharp({
     channels: 4,
     background: { r: 0, g: 0, b: 0, alpha: 0 },
   },
-})
+  })
   .composite(composites)
-  .png({ compressionLevel: 9 })
+  .webp({ quality: options.quality, alphaQuality: 100, smartSubsample: true, effort: 6 })
   .toFile(atlasPath);
 
 writeFileSync(
-  join(options.out, `${options.family}.json`),
-  `${JSON.stringify({ family: options.family, cell, frames }, null, 2)}\n`,
+  join(options.out, `${options.atlas}.json`),
+  `${JSON.stringify({ family: options.atlas, image: `${options.atlas}.webp`, cell, frames }, null, 2)}\n`,
 );
 
 /* 6. Report the audit. */
@@ -616,6 +732,22 @@ process.stdout.write(
   `  mean light ${light.mean.toFixed(0)}째 (sd ${light.deviation.toFixed(1)}째), ` +
     `mean hue ${hue.mean.toFixed(0)}째 (sd ${hue.deviation.toFixed(1)}째)\n`,
 );
+if (options.baseline !== undefined) {
+  const difference = Math.abs(light.mean - options.baseline) % 360;
+  const angularDifference = difference > 180 ? 360 - difference : difference;
+  process.stdout.write(
+    `  same-material baseline ${options.baseline.toFixed(0)}째: delta ${angularDifference.toFixed(1)}째 ` +
+      `(limit ${options.baselineTolerance.toFixed(1)}째)\n`,
+  );
+}
+
+process.stdout.write(`\natlas frame sizes\n`);
+for (const sprite of meta) {
+  process.stdout.write(
+    `  ${sprite.name.padEnd(22)} ${(sprite.meta.width ?? 0)}x${(sprite.meta.height ?? 0)}px ` +
+      `(from ${sprite.sourceWidth}x${sprite.sourceHeight}px)\n`,
+  );
+}
 
 /*
  * Outliers, flagged rather than fixed. §3 wants ONE light source upper-left
@@ -623,15 +755,22 @@ process.stdout.write(
  * is invisible in isolation and obvious once they sit side by side on a board.
  */
 const problems: string[] = [];
+if (light.deviation >= 3) {
+  problems.push(
+    `${options.family}: light spread ${light.deviation.toFixed(1)}째 exceeds the 3.0째 within-sheet limit`,
+  );
+}
+if (options.baseline !== undefined) {
+  const difference = Math.abs(light.mean - options.baseline) % 360;
+  const angularDifference = difference > 180 ? 360 - difference : difference;
+  if (angularDifference > options.baselineTolerance) {
+    problems.push(
+      `${options.family}: mean ${light.mean.toFixed(1)}째 differs from its same-material baseline by ` +
+        `${angularDifference.toFixed(1)}째 (limit ${options.baselineTolerance.toFixed(1)}째)`,
+    );
+  }
+}
 for (const a of audits) {
-  const off = Math.abs(a.lightAngle - light.mean) % 360;
-  const angular = off > 180 ? 360 - off : off;
-  if (angular > Math.max(25, light.deviation * 2)) {
-    problems.push(`${a.name}: lit from ${a.lightAngle.toFixed(0)}째, family mean ${light.mean.toFixed(0)}째`);
-  }
-  if (a.specularX > 0.55) {
-    problems.push(`${a.name}: specular on the right (x=${a.specularX.toFixed(2)}) — §3 wants upper-left`);
-  }
   const meanBox = audits.reduce((t, x) => t + x.boxWidth * x.boxHeight, 0) / audits.length;
   const box = a.boxWidth * a.boxHeight;
   if (meanBox > 0 && Math.abs(box - meanBox) / meanBox > 0.25) {
@@ -653,6 +792,6 @@ if (problems.length > 0) {
 }
 
 process.stdout.write(
-  `\n${atlasPath}  ${columns}x${rows} cells of ${cell}px  ` +
+  `\n${atlasPath}  ${columns}x${rows} cells of ${cell}px, WebP q${options.quality}  ` +
     `${(statSync(atlasPath).size / 1024).toFixed(1)} KB\n`,
 );

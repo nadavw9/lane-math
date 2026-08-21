@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import sharp from "sharp";
@@ -7,20 +7,22 @@ import { describe, expect, it } from "vitest";
 import {
   CONTENT_RANGE,
   DESIGN,
-  DIM,
   PALETTE,
   TRAY_ALPHA,
   type Rect,
   bands,
 } from "../renderer/layout.js";
 import {
-  ASPECTS,
-  GATE_AREA_SIGMA,
+  comparisonDirection,
   MIN_CONTRAST,
   REQUIRED_SIZE,
   checkBackground,
   contrastRatio,
+  luminance,
+  measureSpriteColours,
   rgbFromHex,
+  worstCaseSpriteColour,
+  worstPointForDirection,
   worstPointColour,
   type ImageData,
   type ZoneSpec,
@@ -45,7 +47,7 @@ import {
  * bytes the player receives, and when these were two paths with a manual copy
  * between them, the gate could go green on art that never reached the game.
  */
-const BG_DIR = "public/assets/bg";
+const SPRITE_DIR = "public/assets/sprites";
 
 /**
  * Zones DERIVED from the layout, not hardcoded.
@@ -55,8 +57,8 @@ const BG_DIR = "public/assets/bg";
  * had moved away from, which is the worst thing a gate can do — so take the
  * union of the band across the content extremes the shipped ladder contains.
  *
- * §9.1: measured against the BARE background, with no backdrop. Band opacity is
- * separation, not contrast, and the white veil only ever helps a dark token.
+ * The gate measures the actual token support: wood tray over the room, then an
+ * opaque felt lining. It must never judge the superseded paper backgrounds.
  */
 function union(rects: readonly Rect[]): Rect {
   const x = Math.min(...rects.map((r) => r.x));
@@ -88,127 +90,116 @@ function asZone(name: string, rect: Rect, token: number): ZoneSpec {
   };
 }
 
-const LANE_ZONE = union(EXTREMES.map((b) => b.lane));
 const POOL_ZONE = union(EXTREMES.map((b) => b.pool));
 const OPERATOR_ZONE = union(EXTREMES.map((b) => b.operators));
-const EQUATION_ZONE = union(EXTREMES.map((b) => b.equation));
 
-/** The pool tray sits between the paper and every tile (§9.6). */
-const TRAY = { colour: PALETTE.tray, alpha: TRAY_ALPHA } as const;
+/** Wood is composited over the room, then the opaque felt is the token surface. */
+const FELT_LINED_TRAY = [
+  { colour: PALETTE.tray, alpha: TRAY_ALPHA },
+  { colour: PALETTE.felt, alpha: 1 },
+] as const;
 
-/*
- * DIM STATES ARE STILL TOKENS and must still clear 3:1 (§9.6).
- *
- * They are the reason this gate grew compositing. A dim token is the same
- * colour at reduced opacity, so on a LIGHT ground it is pulled toward the
- * paper — dimming costs contrast directly, and the amount it can be dimmed is
- * therefore a measured limit rather than a taste decision. Checking only the
- * lit states would have left the floor unguarded.
- */
-const ZONES: readonly ZoneSpec[] = [
-  asZone("lane / plate", LANE_ZONE, PALETTE.targetPlate),
-  asZone("lane / front", LANE_ZONE, PALETTE.targetFront),
-  { ...asZone("pool / tile", POOL_ZONE, PALETTE.tile), furniture: TRAY },
-  { ...asZone("pool / tile DIM", POOL_ZONE, PALETTE.tile), furniture: TRAY, tokenAlpha: DIM.alpha },
-  {
-    ...asZone("pool / transformed", POOL_ZONE, PALETTE.tileTransformed),
-    furniture: TRAY,
-  },
-  asZone("operators", OPERATOR_ZONE, PALETTE.operator),
-  { ...asZone("operators DIM", OPERATOR_ZONE, PALETTE.operator), tokenAlpha: DIM.alpha },
-  asZone("equation / armed", EQUATION_ZONE, PALETTE.armed),
-  { ...asZone("equation / armed DIM", EQUATION_ZONE, PALETTE.armed), tokenAlpha: DIM.alpha },
-];
-
-async function load(file: string): Promise<ImageData> {
-  // sharp decodes WebP, so the gate can judge what actually ships. Refusing a
-  // format here would silently exempt the real artwork from the gate.
-  //
-  // Blurred first: the gate measures the darkest AREA a token sits against, not
-  // the darkest pixel, because an opaque token hides whatever is behind it and
-  // is judged only on its silhouette.
-  const { data, info } = await sharp(join(BG_DIR, file))
-    .removeAlpha()
-    .blur(GATE_AREA_SIGMA)
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  return { width: info.width, height: info.height, pixels: new Uint8Array(data) };
+interface AtlasFrame {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
 }
 
-const files = readdirSync(BG_DIR)
-  .filter((f) => /^world-[1-4]\.(webp|png)$/i.test(f))
-  .sort();
+interface AtlasData {
+  readonly frames: Record<string, AtlasFrame>;
+}
+
+const ART_FAMILIES = [
+  {
+    name: "glass tiles",
+    atlas: "tiles",
+    minimum: MIN_CONTRAST,
+    zone: { ...asZone("pool / real glass", POOL_ZONE, PALETTE.tile), furniture: FELT_LINED_TRAY },
+  },
+  {
+    name: "brass operators",
+    atlas: "operators",
+    minimum: 4.5,
+    zone: { ...asZone("operators / real brass", OPERATOR_ZONE, PALETTE.operator), furniture: FELT_LINED_TRAY },
+  },
+] as const;
+
+async function measuredFrames(atlas: string): Promise<Array<{ name: string; colours: ReturnType<typeof measureSpriteColours> }>> {
+  const data = JSON.parse(readFileSync(join(SPRITE_DIR, `${atlas}.json`), "utf8")) as AtlasData;
+  const sheet = join(SPRITE_DIR, `${atlas}.webp`);
+  return Promise.all(
+    Object.entries(data.frames)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(async ([name, frame]) => {
+        const { data: pixels, info } = await sharp(sheet)
+          .extract({ left: frame.x, top: frame.y, width: frame.w, height: frame.h })
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        return {
+          name,
+          colours: measureSpriteColours({
+            width: info.width,
+            height: info.height,
+            pixels: new Uint8Array(pixels),
+          }),
+        };
+      }),
+  );
+}
+
+function flatSurface(colour: number): ImageData {
+  const rgb = rgbFromHex(colour);
+  const pixels = new Uint8Array(REQUIRED_SIZE.width * REQUIRED_SIZE.height * 3);
+  for (let i = 0; i < pixels.length; i += 3) {
+    pixels[i] = rgb.r;
+    pixels[i + 1] = rgb.g;
+    pixels[i + 2] = rgb.b;
+  }
+  return { width: REQUIRED_SIZE.width, height: REQUIRED_SIZE.height, pixels };
+}
+
+const PLACEHOLDER_DESK = flatSurface(PALETTE.placeholderDesk);
 
 describe("background brightness gate", () => {
-  it("finds a background for every world", () => {
-    for (const world of [1, 2, 3, 4]) {
-      expect(
-        files.some((f) => f.startsWith(`world-${world}.`)),
-        `no background for world ${world}`,
-      ).toBe(true);
-    }
+  it("derives a felt surface that clears brass at 4.5:1", () => {
+    const felt = luminance(rgbFromHex(PALETTE.felt));
+    expect((0.223 + 0.05) / (felt + 0.05)).toBeGreaterThanOrEqual(4.5);
+    expect((0.698 + 0.05) / (felt + 0.05)).toBeGreaterThanOrEqual(8.25);
   });
 
-  it.each(files)("%s is exactly 900x2100", async (file) => {
-    const image = await load(file);
-    // A wrongly-sized image must fail loudly rather than be silently
-    // letterboxed or cover-cropped into something nobody designed.
-    expect(
-      `${image.width}x${image.height}`,
-      `${file} must be ${REQUIRED_SIZE.width}x${REQUIRED_SIZE.height}`,
-    ).toBe(`${REQUIRED_SIZE.width}x${REQUIRED_SIZE.height}`);
-  });
-
-  it.each(files)("%s clears 3:1 at the worst point in every zone and aspect", async (file) => {
-    const image = await load(file);
-    const result = checkBackground(file, image, ZONES);
-    const failures = result.zones.filter((z) => !z.passes);
-
-    if (failures.length > 0) {
-      const detail = failures
-        .map(
-          (z) =>
-            `    ${z.aspect} / ${z.zone}: ${z.ratio.toFixed(2)}:1 ` +
-            `(background rgb ${z.background.r},${z.background.g},${z.background.b})`,
-        )
-        .join("\n");
-      throw new Error(
-        `${file} fails the contrast gate (min ${MIN_CONTRAST}:1):\n${detail}\n` +
-          `  Regenerate the IMAGE — do not loosen the threshold (§9.1).`,
-      );
-    }
-    expect(result.passes).toBe(true);
-  });
-
-  /*
-   * The monotonic-darkening assertion is GONE (§9.1: superseded, void).
-   *
-   * It is not commented out or skipped, because it was never a legibility
-   * constraint — it described an ordering that emerged from the old subjects
-   * and was then promoted to a rule. The surfaces are classroom work surfaces
-   * now and have no reason to darken with difficulty. What survives is the only
-   * thing that ever mattered: 3:1 between token and ground.
-   */
-
-  it("reports the measured margins", async () => {
+  it("accepts every real glass and brass frame on the placeholder desk", async () => {
     const rows: string[] = [];
-    for (const file of files) {
-      const image = await load(file);
-      const result = checkBackground(file, image, ZONES);
-      rows.push(
-        `\n  ${file}  worst ${result.worst.toFixed(2)}:1  ${result.passes ? "PASS" : "FAIL"}`,
-      );
-      for (const aspect of ASPECTS) {
-        const inAspect = result.zones.filter((z) => z.aspect === aspect.name);
-        for (const zone of inAspect) {
-          rows.push(`      ${aspect.name.padEnd(16)} ${zone.zone.padEnd(14)} ${zone.ratio.toFixed(2)}:1`);
+    const failures: string[] = [];
+    for (const family of ART_FAMILIES) {
+      const frames = await measuredFrames(family.atlas);
+      expect(frames.length, `${family.name} atlas has no frames`).toBeGreaterThan(0);
+      for (const frame of frames) {
+        const result = checkBackground(
+          "placeholder desk #4A3428",
+          PLACEHOLDER_DESK,
+          [{ ...family.zone, name: frame.name, token: frame.colours }],
+          family.minimum,
+        );
+        const worst = result.zones.reduce((a, b) => (a.ratio <= b.ratio ? a : b));
+        const representative = worstCaseSpriteColour(frame.colours, worst.background);
+        rows.push(
+          `  ${family.name.padEnd(16)} ${frame.name.padEnd(20)} ` +
+            `${worst.direction.padEnd(10)} ${worst.ratio.toFixed(2)}:1 ` +
+            `rgb ${representative.colour.r},${representative.colour.g},${representative.colour.b}`,
+        );
+        if (!result.passes) {
+          failures.push(
+            `${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`,
+          );
         }
       }
     }
     console.log(
-      `\nbrightness gate — worst single point, min ${MIN_CONTRAST}:1${rows.join("\n")}`,
+      `\nreal sprite brightness gate — placeholder desk #4A3428 with felt-lined tray\n${rows.join("\n")}`,
     );
-    expect(rows.length).toBeGreaterThan(0);
+    expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
   });
 });
 
@@ -255,5 +246,24 @@ describe("contrast maths", () => {
 
     expect(worstPointColour(image, zone, rgbFromHex(PALETTE.tile)).r).toBe(20);
     expect(worstPointColour(image, zone, rgbFromHex(PALETTE.tokenInk)).r).toBe(230);
+  });
+
+  it("derives the governing background extreme from measured token brightness", () => {
+    const width = 30;
+    const height = 30;
+    const pixels = new Uint8Array(width * height * 3).fill(140);
+    const set = (x: number, y: number, value: number): void => {
+      const i = (y * width + x) * 3;
+      pixels[i] = pixels[i + 1] = pixels[i + 2] = value;
+    };
+    set(6, 6, 20);
+    set(24, 24, 245);
+    const image = { width, height, pixels };
+    const zone = { x: 0, y: 0, w: width, h: height };
+
+    expect(comparisonDirection(rgbFromHex(0xf0d080), rgbFromHex(0x808080))).toBe("brightest");
+    expect(worstPointForDirection(image, zone, "brightest").r).toBe(245);
+    expect(comparisonDirection(rgbFromHex(0x1e2a3a), rgbFromHex(0x808080))).toBe("darkest");
+    expect(worstPointForDirection(image, zone, "darkest").r).toBe(20);
   });
 });

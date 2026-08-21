@@ -31,11 +31,13 @@ that all difficulty lands on resource planning.** Anything that makes the mental
 
 ## Current phase
 
-**Phase 2 — level generator.** Solver (Phase 1) is done; change it only to add functions it is
-missing. See GDD §12 for the phase ladder.
+**Phase 5 — art pass.** This is the current unfinished gate in GDD §12. Solver, generator,
+curation, renderer, feel, audio, economy, map, Capacitor, AdMob, CI and the signed release are all
+done. Phase 6's technical shipping work was completed ahead of sequence; the game is not finished
+until the Phase 5 art gate clears.
 
-The phase is not decoration. It decides how work gets verified (below). Update this heading when
-the phase changes, in the same commit that crosses the boundary.
+The phase is not decoration. It decides how work gets verified (below). Update this when the phase
+changes. A stale phase marker misleads every agent that reads this file.
 
 ### Resolved spec questions
 

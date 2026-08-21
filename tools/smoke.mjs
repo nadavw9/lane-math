@@ -45,7 +45,9 @@ function readBase() {
 
 const base = readBase();
 const port = 4173;
-const url = `http://localhost:${port}${base}`;
+const query = process.env["SMOKE_QUERY"] ?? "";
+const url = `http://localhost:${port}${base}${query}`;
+const expectsSprites = new URLSearchParams(query).get("sprites") === "1";
 
 const TYPES = {
   ".html": "text/html",
@@ -168,6 +170,8 @@ try {
       // only has children once draw() has run over a real board.
       drawnChildren: api?.diagnostics ? api.diagnostics().rootChildren : -1,
       levelId: api?.state ? (api.state()?.levelId ?? null) : null,
+      spritesEnabled: api?.diagnostics ? api.diagnostics().spritesEnabled : 0,
+      spritesLoaded: api?.diagnostics ? api.diagnostics().spritesLoaded : 0,
     };
   });
 
@@ -175,6 +179,9 @@ try {
   check(state.canvasWidth > 0 && state.canvasHeight > 0, `canvas is ${state.canvasWidth}x${state.canvasHeight}`);
   check(state.drawnChildren > 0, `renderer drew a frame (${state.drawnChildren} objects)`);
   check(state.levelId !== null, `a level is open (${state.levelId})`);
+  if (expectsSprites) {
+    check(state.spritesEnabled === 1 && state.spritesLoaded === 8, `real WebP sprites loaded (${state.spritesLoaded}/8)`);
+  }
   check(errors.length === 0, `no errors during boot${errors.length ? `:\n      ${errors.join("\n      ")}` : ""}`);
 
   await browser.close();
