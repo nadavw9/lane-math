@@ -341,8 +341,11 @@ export interface GateResult {
   readonly zones: readonly ZoneResult[];
 }
 
-/** WCAG AA for large text. Digits are the entire UI; 3:1 is the floor. */
+/** WCAG non-text contrast for large graphical game pieces. */
 export const MIN_CONTRAST = 3;
+
+/** Numerals drawn over glass remain text even when the tile itself is graphical. */
+export const MIN_TEXT_CONTRAST = 4.5;
 
 /**
  * Crop the image to an aspect the way the game does: §9.1 generates at 9:21

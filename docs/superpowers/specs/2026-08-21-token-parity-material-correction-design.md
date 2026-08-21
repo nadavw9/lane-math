@@ -61,7 +61,16 @@ The usable vertical budget is exactly `876px`: a 900px design surface minus 12px
 
 Add an explicit layout test for this configuration. It must assert the solved size, the exact 12px top anchor, and the exact 12px bottom anchor so future vertical additions fail loudly.
 
-There is no guaranteed flow space for the automaton on a portrait phone. The expected future placement is a non-flow overlay on the desk/room layer, tucked behind or beside furniture and allowed to tolerate partial occlusion. Giving it a dedicated band inside the column would force every token smaller. The automaton is not implemented in this change.
+There is no guaranteed flow space for the automaton on a portrait phone. It must be a non-flow overlay on the desk/room layer, working in the narrow desk margin beside or partially behind the column rather than above or below it. Putting decoration into layout flow would shrink every token on every board; the board is the game and the character is not. Overlay placement costs the layout nothing and must not later be "fixed" by giving the automaton a dedicated row.
+
+This placement constrains the future automaton art:
+
+- it must read clearly at small size because the available margin is narrow;
+- its silhouette must survive partial occlusion by the board column;
+- it must not depend on centred or full-height presentation;
+- it must also work large and isolated for the store icon and advertising creative, which use a different composition from the in-game overlay.
+
+The in-game overlay and large isolated presentation may require two separate assets rather than one compromised source. The automaton itself is not implemented in this change.
 
 ## Visual Acceptance
 

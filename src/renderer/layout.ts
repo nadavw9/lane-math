@@ -13,8 +13,8 @@ export const PALETTE = {
    * Temporary desk surface until the four desk-in-room scenes arrive. The old
    * paper worlds are superseded art and must not be used as a contrast surface.
    */
-  placeholderDesk: 0x4a3428,
-  background: 0x4a3428,
+  placeholderDesk: 0x704a32,
+  background: 0x704a32,
 
   /*
    * TOKENS — dark ink on a light ground (§9.2).
@@ -71,8 +71,8 @@ export const PALETTE = {
 
   /** The pool tray: light wood, warm, translucent over the paper (§9.6). */
   tray: 0xc9a678,
-  /** Opaque lining under every real tile and dial: dark enough for brass. */
-  felt: 0x0e0805,
+  /** Dark brown felt under every real tile and dial. */
+  felt: 0x241812,
   /** Ink navy is reserved for numerals drawn over the glass sprite. */
   glassNumeral: 0x1e2a3a,
   /** Ruling on the lane's squared paper. */
@@ -157,6 +157,8 @@ export interface BoardSize {
    * they are meant to mark.
    */
   readonly tiles: number;
+  /** Operator pieces present for this level and mode, spent or unspent. */
+  readonly operators: number;
   /** Hint lines currently owned; the strip vanishes when there are none. */
   readonly hints: number;
 }
@@ -179,7 +181,6 @@ export const TOKEN_SIZE = { min: 46, max: 120 } as const;
 const TARGET_GAP = 6;
 /** Grids wider than this stop being scannable regardless of what fits. */
 const POOL_MAX_PER_ROW = 6;
-const OPERATOR_H = 58;
 const EQUATION_ROW_H = 60;
 const EQUATION_PAD = 10;
 const HINT_LINE_H = 16;
@@ -202,6 +203,7 @@ export interface Bands {
   readonly hints: Rect;
   readonly status: Rect;
   readonly grid: Grid;
+  readonly operatorGrid: Grid;
 }
 
 const bandWidth = DESIGN.width - PAD * 2;
@@ -218,6 +220,14 @@ function gridFor(tiles: number, size: number): Grid {
   const cap = Math.max(1, Math.min(POOL_MAX_PER_ROW, fits));
   const rows = Math.max(1, Math.ceil(Math.max(1, tiles) / cap));
   return { size, perRow: Math.ceil(Math.max(1, tiles) / rows), rows };
+}
+
+/** Operators share token scale and wrap only when that shared size requires it. */
+function operatorGridFor(operators: number, size: number): Grid {
+  const count = Math.max(1, operators);
+  const fits = Math.max(1, Math.floor((bandWidth + GAP) / (size + GAP)));
+  const perRow = Math.min(count, fits);
+  return { size, perRow, rows: Math.ceil(count / perRow) };
 }
 
 /**
@@ -238,10 +248,11 @@ function laneHeight(targets: number, size: number): number {
 
 function heightsAt(board: BoardSize, size: number): number[] {
   const grid = gridFor(board.tiles, size);
+  const operatorGrid = operatorGridFor(board.operators, size);
   return [
     laneHeight(board.targets, size),
     EQUATION_PAD * 2 + EQUATION_ROW_H,
-    OPERATOR_H,
+    operatorGrid.rows * (size + GAP) - GAP,
     grid.rows * (size + GAP) - GAP,
     board.hints > 0 ? board.hints * HINT_LINE_H : 0,
     STATUS_H,
@@ -295,7 +306,7 @@ const sizeCache = new Map<string, number>();
  * smaller board costs one 14-tile board two pixels and makes the rule true.
  */
 function fittedSize(board: BoardSize): number {
-  const key = `${board.targets}:${board.tiles}:${board.hints}`;
+  const key = `${board.targets}:${board.tiles}:${board.operators}:${board.hints}`;
   const cached = sizeCache.get(key);
   if (cached !== undefined) return cached;
 
@@ -319,6 +330,7 @@ function fittedSize(board: BoardSize): number {
 export function bands(board: BoardSize): Bands {
   const size = fittedSize(board);
   const grid = gridFor(board.tiles, size);
+  const operatorGrid = operatorGridFor(board.operators, size);
   const heights = heightsAt(board, size);
   const total = stackHeight(heights);
 
@@ -347,7 +359,7 @@ export function bands(board: BoardSize): Bands {
     height: poolBand.height,
   };
 
-  return { lane, equation, operators, pool, hints, status, grid };
+  return { lane, equation, operators, pool, hints, status, grid, operatorGrid };
 }
 
 /**
@@ -390,18 +402,29 @@ export function poolSlot(index: number, pool: Rect, grid: Grid): Rect {
 }
 
 /**
- * Operators size to content across the row too, not only down the screen.
+ * Operators are game pieces, so their slots use the number grid's solved size.
  *
- * Dividing the full width by the count put two operators at the quarter points
- * with 130px of nothing between them, which reads as a row missing its middle
- * rather than as a row of two. Capped and centred, two operators look like two
- * operators and six still fill the row.
+ * Each row is centred independently. Sparse levels keep their few dials
+ * together, while a count that cannot fit at the shared size wraps without
+ * changing the size relationship between brass and glass.
  */
-export function operatorSlot(index: number, count: number, operators: Rect): Rect {
-  const width = Math.min((operators.width - GAP * (count - 1)) / count, OPERATOR_H + 6);
-  const row = width * count + GAP * (count - 1);
-  const left = operators.x + (operators.width - row) / 2;
-  return { x: left + index * (width + GAP), y: operators.y, width, height: OPERATOR_H };
+export function operatorSlot(
+  index: number,
+  count: number,
+  operators: Rect,
+  grid: Grid,
+): Rect {
+  const row = Math.floor(index / grid.perRow);
+  const col = index % grid.perRow;
+  const rowCount = Math.min(grid.perRow, count - row * grid.perRow);
+  const rowWidth = rowCount * grid.size + Math.max(0, rowCount - 1) * GAP;
+  const left = operators.x + (operators.width - rowWidth) / 2;
+  return {
+    x: left + col * (grid.size + GAP),
+    y: operators.y + row * (grid.size + GAP),
+    width: grid.size,
+    height: grid.size,
+  };
 }
 
 /** Three equation slots plus the commit button, across one row. */

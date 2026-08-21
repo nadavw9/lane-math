@@ -6,6 +6,7 @@ import {
   TOKEN_SIZE,
   type BoardSize,
   bands,
+  operatorSlot,
   poolSlot,
   targetSlot,
 } from "./layout.js";
@@ -20,7 +21,9 @@ import {
 const BOARDS: BoardSize[] = [];
 for (let targets = CONTENT_RANGE.targets.min; targets <= CONTENT_RANGE.targets.max; targets++) {
   for (let tiles = CONTENT_RANGE.tiles.min; tiles <= CONTENT_RANGE.tiles.max; tiles++) {
-    BOARDS.push({ targets, tiles, hints: 0 });
+    for (let operators = 1; operators <= 5; operators++) {
+      BOARDS.push({ targets, tiles, hints: 0, operators });
+    }
   }
 }
 
@@ -88,11 +91,13 @@ describe("tokens scale to board size (§9.2)", () => {
     // the size is solved for, so pinning values would break on any band change
     // while telling us nothing about the property that matters.
     for (let targets = CONTENT_RANGE.targets.min; targets <= CONTENT_RANGE.targets.max; targets++) {
-      let previous = Infinity;
-      for (let tiles = CONTENT_RANGE.tiles.min; tiles <= CONTENT_RANGE.tiles.max; tiles++) {
-        const { grid } = bands({ targets, tiles, hints: 0 });
-        expect(grid.size, `${targets} targets, ${tiles} tiles`).toBeLessThanOrEqual(previous);
-        previous = grid.size;
+      for (let operators = 1; operators <= 5; operators++) {
+        let previous = Infinity;
+        for (let tiles = CONTENT_RANGE.tiles.min; tiles <= CONTENT_RANGE.tiles.max; tiles++) {
+          const { grid } = bands({ targets, tiles, operators, hints: 0 });
+          expect(grid.size, `${targets} targets, ${tiles} tiles, ${operators} operators`).toBeLessThanOrEqual(previous);
+          previous = grid.size;
+        }
       }
     }
   });
@@ -107,6 +112,24 @@ describe("tokens scale to board size (§9.2)", () => {
       if (grid.rows > 1) expect(lastRow).toBeGreaterThan(1);
     }
   });
+
+  it("gives every operator exact size parity with number tiles", () => {
+    for (const board of BOARDS) {
+      const layout = bands(board);
+      expect(layout.operatorGrid.size).toBe(layout.grid.size);
+      for (let index = 0; index < board.operators; index++) {
+        const slot = operatorSlot(index, board.operators, layout.operators, layout.operatorGrid);
+        expect(slot.width).toBe(layout.grid.size);
+        expect(slot.height).toBe(layout.grid.size);
+      }
+    }
+  });
+
+  it("settles sparse World 1 at 106px parity", () => {
+    const layout = bands({ targets: 3, tiles: 6, hints: 0, operators: 2 });
+    expect(layout.grid.size).toBe(106);
+    expect(layout.operatorGrid.size).toBe(106);
+  });
 });
 
 describe("the stack fits and sits low (§9.1)", () => {
@@ -118,6 +141,32 @@ describe("the stack fits and sits low (§9.1)", () => {
           b.status.y + b.status.height,
           `board ${board.targets}/${board.tiles} with ${hints} hints`,
         ).toBeLessThanOrEqual(DESIGN.height);
+      }
+    }
+  });
+
+  it("pins the shipped 4-01 casual worst case to both 12px anchors", () => {
+    const layout = bands({ targets: 6, tiles: 14, hints: 1, operators: 5 });
+    expect(layout.grid.size).toBe(59);
+    expect(layout.lane.y).toBe(12);
+    expect(layout.status.y + layout.status.height).toBe(888);
+  });
+
+  it("keeps every operator inside its band across the complete matrix", () => {
+    for (const board of BOARDS) {
+      for (const hints of [0, 1, 3]) {
+        const layout = bands({ ...board, hints });
+        for (let index = 0; index < board.operators; index++) {
+          const slot = operatorSlot(index, board.operators, layout.operators, layout.operatorGrid);
+          expect(slot.x).toBeGreaterThanOrEqual(layout.operators.x - 1e-9);
+          expect(slot.x + slot.width).toBeLessThanOrEqual(
+            layout.operators.x + layout.operators.width + 1e-9,
+          );
+          expect(slot.y).toBeGreaterThanOrEqual(layout.operators.y - 1e-9);
+          expect(slot.y + slot.height).toBeLessThanOrEqual(
+            layout.operators.y + layout.operators.height + 1e-9,
+          );
+        }
       }
     }
   });

@@ -138,13 +138,14 @@ export class Renderer {
     return bands({
       targets: state.targets.length,
       tiles: state.tiles.length,
+      operators: Object.keys(state.budget).length,
       hints: state.hints.length,
     });
   }
 
   /**
    * Temporary world surface until desk-in-room backgrounds replace the retired
-   * paper art. The canvas's #4A3428 background is intentional, not a load error.
+   * paper art. The canvas's #704A32 background is intentional, not a load error.
    */
   async setWorld(world: number): Promise<void> {
     if (this.world === world) return;
@@ -1077,7 +1078,7 @@ export class Renderer {
       ...UNARY.filter((op) => s.budget[op] !== undefined),
     ];
     available.forEach((op, i) => {
-      const r = operatorSlot(i, available.length, operators);
+      const r = operatorSlot(i, available.length, operators, board.operatorGrid);
       const remaining = s.budget[op];
       const isUnary = (UNARY as readonly string[]).includes(op);
       const spent = remaining === 0;

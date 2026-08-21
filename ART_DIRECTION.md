@@ -84,8 +84,8 @@ Non-negotiable, applied to every asset:
 |---|---|---|
 | **Brass** | `#C9A227` → `#8A6D1F` gradient | Plates, dials, frames, furniture, the automaton |
 | **Amber glass** | `#F2A93B` core, `#FFD98A` inner glow | Number tiles. The signature. |
-| **Deep wood** | `#4A3428` | Placeholder desk surface, tray rim |
-| **Felt lining** | `#0E0805` | Opaque token surface inside trays; derived for brass contrast |
+| **Warm walnut** | `#704A32` | Placeholder desk surface; replaced when desk-in-room scenes arrive |
+| **Felt lining** | `#241812` | Dark brown opaque token surface inside trays |
 | **Ink navy** | `#1E2A3A` | Live numerals on glass, dark accents |
 | **Cream** | `#F4E9D4` | Light text only. NOT numerals on glass — see §5. |
 | **Gold accent** | `#FFC94A` | Ready, armed, earned. Stars. |
