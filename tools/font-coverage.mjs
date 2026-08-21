@@ -127,6 +127,44 @@ async function waitForServer(attempts = 40) {
 const cp = (ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}`;
 
 /**
+ * Source files whose string literals become drawn text.
+ *
+ * Scanned WITH the runtime inventory, not instead of it. The inventory can only
+ * see screens the walk reaches — the cleared panel needs a win — while a static
+ * scan cannot see interpolated values but does see every branch. Each covers
+ * the other's blind spot.
+ */
+const DRAWABLE_SOURCES = [
+  "src/renderer/renderer.ts",
+  "src/renderer/tokens.ts",
+  "src/renderer/button.ts",
+  "src/renderer/effects.ts",
+  "src/map/map-screen.ts",
+  "src/main.ts",
+];
+
+/** Characters in drawable string literals, comments stripped. */
+function literalChars() {
+  const found = new Map();
+  for (const file of DRAWABLE_SOURCES) {
+    if (!existsSync(file)) continue;
+    const source = readFileSync(file, "utf8");
+    // Prose is full of — and §; a comment is not drawn, and counting it would
+    // make this gate cry wolf on every doc block in the renderer.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    for (const match of code.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+      for (const ch of match[2]) {
+        if (KNOWN_ABSENT.has(ch)) {
+          if (!found.has(ch)) found.set(ch, new Set());
+          found.get(ch).add(file);
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
  * REFUSE TO MEASURE THROUGH SOMEONE ELSE'S SERVER.
  *
  * On Windows a second listen() on this port can succeed while a stale process
@@ -273,6 +311,19 @@ try {
     { bytes, chars },
   );
 
+  /*
+   * THE SECOND FAILURE MODE, and the one that motivated the emblems.
+   *
+   * A character the bundled font cannot supply must not be drawn as TEXT. The
+   * five known-absent ones are not in Outfit at any subset, so every one was
+   * rendering in whatever the device's fallback happened to be — the game's
+   * entire reward currency drawn by a system dingbat. They are objects now
+   * (emblems.ts), and this stops them coming back as glyphs the next time
+   * somebody needs a star in a hurry.
+   */
+  const drawnAbsent = observed.filter((ch) => KNOWN_ABSENT.has(ch));
+  const inSource = literalChars();
+
   const present = coverage.filter((c) => c.present).map((c) => c.ch);
   const absent = coverage.filter((c) => !c.present).map((c) => c.ch);
   const unexpected = absent.filter((ch) => !KNOWN_ABSENT.has(ch));
@@ -287,9 +338,24 @@ try {
     `  UNEXPECTEDLY ABSENT (${unexpected.length}): ${unexpected.map((c) => `${c} ${cp(c)}`).join("   ") || "none"}\n`,
   );
 
+  process.stdout.write(`\nUNSUPPLIABLE CHARACTERS MUST NOT BE DRAWN AS TEXT\n`);
+  process.stdout.write(
+    `  painted at runtime (${drawnAbsent.length}): ${drawnAbsent.map((c) => `${c} ${cp(c)}`).join("   ") || "none"}\n`,
+  );
+  process.stdout.write(
+    `  in drawable literals (${inSource.size}): ${
+      [...inSource].map(([ch, files]) => `${ch} ${cp(ch)} in ${[...files].join(", ")}`).join("   ") || "none"
+    }\n`,
+  );
+
   await browser.close();
-  const ok = unexpected.length === 0;
-  process.stdout.write(ok ? "\nfont coverage PASSED\n" : `\nfont coverage FAILED (${unexpected.length} missing)\n`);
+  const ok = unexpected.length === 0 && drawnAbsent.length === 0 && inSource.size === 0;
+  const why = [
+    unexpected.length ? `${unexpected.length} missing from the font` : "",
+    drawnAbsent.length ? `${drawnAbsent.length} unsuppliable drawn as text` : "",
+    inSource.size ? `${inSource.size} unsuppliable in source literals` : "",
+  ].filter(Boolean);
+  process.stdout.write(ok ? "\nfont coverage PASSED\n" : `\nfont coverage FAILED (${why.join("; ")})\n`);
   stop(ok ? 0 : 1);
 } catch (error) {
   process.stdout.write(`\nfont coverage threw: ${String(error)}\n`);
