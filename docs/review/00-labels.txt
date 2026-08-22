@@ -46,3 +46,34 @@ MEASURED (tools/emblem-light.mjs, over each object's own pixels)
 
 Crops are nearest-neighbour upscales of the 1179x2556 (393x852 @3x) captures,
 so no resampling is mistaken for a facet or an edge.
+
+================================================================================
+LATER BATCH — angle metric, recessed target panel (2026-08-22)
+
+BLOCKED: assets/raw/plaques-sheet.png does not exist. Searched the repo and the
+whole of the user profile directory. Everything below did not depend on it.
+
+27-plaque-panel.png     World 1: the recessed felt panel on every target plate
+28-world1-sprites.png   World 1 at phone aspect, ?sprites=1
+29-world4-sprites.png   World 4 at phone aspect, ?sprites=1 — six targets, all
+                        with recessed panels; glass tiles and brass dials real
+
+CONTRAST, recomputed here from the measured plaque brass L 0.206
+  ink navy #1E2A3A on brass         3.54:1   FAIL    (brief said 3.54)
+  cream    #F4E9D4 on brass         3.41:1   FAIL    (brief said 3.41)
+  cream    S4 #F4E9D4 on felt      14.37:1   pass    (brief said 14.37)
+  cream    shipped tokenInk on felt 14.50:1  pass    <- what the game draws
+  text bar 4.5:1
+
+LIGHT ANGLE METRIC — fixed
+  Was computed from PIXEL offsets, so aspect ratio rotated the result.
+  Negative control, the same synthetic spot on both objects:
+    square  aspect 1.00   135.0 deg
+    wide    aspect 4.12   166.4 deg    <- 31.4 deg false rejection
+  Normalised to fractional coordinates the two agree to under 0.5 deg.
+  Brass baseline re-derived: operators 118 deg mean, sd 1.3 (was 117 / 1.2).
+
+SPRITE GATE — found a real gap
+  No family has -unlit art. A spent dial drops to procedural next to real glass
+  the moment an operator budget runs out. Boot never reaches that state, so
+  every earlier check stayed green over it.
