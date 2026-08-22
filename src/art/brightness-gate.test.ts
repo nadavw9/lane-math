@@ -14,6 +14,7 @@ import {
 } from "../renderer/layout.js";
 import {
   comparisonDirection,
+  INACTIVE_MIN_CONTRAST,
   MIN_CONTRAST,
   MIN_TEXT_CONTRAST,
   REQUIRED_SIZE,
@@ -146,26 +147,6 @@ const ART_FAMILIES = [
     atlas: "plaques",
     minimum: MIN_CONTRAST,
     /*
-     * MEASURED AND FAILING, DECLARED RATHER THAN SUPPRESSED.
-     *
-     * The plaque's body luminance is the lane's: median brass rgb 162,106,20 is
-     * L 0.1804 against the lane's L 0.1757, which is 1.02:1. Its extremes reach
-     * 2.92:1 at the dark bevel and 3.73:1 at the highlight, so the object is
-     * visible on screen — but by CHROMA, saturated gold against desaturated
-     * tan, and chroma is exactly what a sunlit phone and a colourblind viewer
-     * lose. This gate exists for that case.
-     *
-     * Unlike the light-angle rejection this is NOT a measurement artifact: no
-     * change of metric moves two equal luminances apart. Per §9.1's precedent
-     * the fix is the GROUND, not the threshold — the same brass measures
-     * 3.79:1 over the felt the trays already use.
-     *
-     * It does not fail the suite because the sprite path is opt-in and no
-     * player sees it. It is the reason ?sprites=1 cannot become the default,
-     * and it needs a design decision, not a tolerance.
-     */
-    blocking: true,
-    /*
      * The lane is FELT-LINED now, like every other band that holds tokens, so
      * this measures felt. It used to be bare veiled desk and the plaques
      * measured 1.02:1 against it — the plaque body and the veiled desk are the
@@ -177,25 +158,24 @@ const ART_FAMILIES = [
   {
     name: "spent brass dials",
     atlas: "operators-unlit",
-    minimum: MIN_CONTRAST,
     /*
-     * MEASURED AND FAILING, DECLARED RATHER THAN SUPPRESSED.
+     * INACTIVE COMPONENTS ARE EXEMPT — WCAG 2.2 SC 1.4.11 Non-text Contrast,
+     * whose normative text requires 3:1 for user-interface components "except
+     * for inactive components". The understanding document goes further: a
+     * greyed-out control's low contrast is itself part of communicating that it
+     * is unavailable. The requirement it does keep is a non-colour indicator,
+     * which the red strike bar the renderer draws over a spent dial supplies.
      *
-     * The unlit art was verified against the LIT set — a 65% luminance drop —
-     * and that relationship is right: spent against lit measures 2.02:1, so the
-     * state change reads. But the spent dial ALONE on the felt it sits on is
-     * 2.04:1, under the 3:1 bar, and the red strike bar the renderer draws over
-     * it adds nothing in luminance: 1.69:1 against felt, 1.20:1 against the
-     * dial. On this felt (L 0.0107) a token needs L >= 0.1322 to clear 3:1, and
-     * the spent dial is L 0.0738.
+     * So 2.04:1 is CORRECT behaviour for this family, not a tolerance and not a
+     * per-asset exception someone deletes later. What still has to hold is that
+     * a spent dial remains perceptible rather than vanishing into the felt, so
+     * the floor here is deliberately recessive instead of absent.
      *
-     * "Can you see the difference between spent and available" and "can you see
-     * a spent dial at all" are different questions, and the art was approved
-     * against the first. Fixing it is either less-dark unlit art or a lighter
-     * lining under the operators — and that felt is shared with the pool tray,
-     * so it is a design decision, not a tolerance.
+     * The active dials are measured against the full 3:1 in their own entry
+     * above; this exemption applies only to the unlit set.
      */
-    blocking: false,
+    minimum: INACTIVE_MIN_CONTRAST,
+
     zone: { ...asZone("operators / spent brass", OPERATOR_ZONE, PALETTE.operator), furniture: FELT_LINED_TRAY },
   },
 ] as const;
@@ -294,8 +274,6 @@ describe("background brightness gate", () => {
   it("accepts every real glass and brass frame on the placeholder desk", async () => {
     const rows: string[] = [];
     const failures: string[] = [];
-    /** Measured, failing, and declared — see the plaque entry in ART_FAMILIES. */
-    const declared: string[] = [];
     for (const family of ART_FAMILIES) {
       const frames = await measuredFrames(family.atlas);
       expect(frames.length, `${family.name} atlas has no frames`).toBeGreaterThan(0);
@@ -314,26 +292,23 @@ describe("background brightness gate", () => {
             `rgb ${representative.colour.r},${representative.colour.g},${representative.colour.b}`,
         );
         if (!result.passes) {
-          const line = `${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`;
-          if ((family as { blocking?: boolean }).blocking === false) declared.push(line);
-          else failures.push(line);
+          failures.push(
+            `${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`,
+          );
         }
       }
     }
     console.log(
-      `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}` +
-        (declared.length
-          ? `\n\n  DECLARED FAILURE — blocks sprites-by-default, needs a design decision:\n    ${declared.join("\n    ")}`
-          : ""),
+      `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}`,
     );
+    /*
+     * Every family is judged against its OWN minimum and every one of them
+     * binds. There is no declared-but-tolerated list any more: the lane was
+     * lined, which took the plaques from 1.02:1 to 3.79:1, and the spent dials
+     * are exempt by rule under SC 1.4.11 rather than by exception, so they are
+     * held to INACTIVE_MIN_CONTRAST instead of being waved past 3:1.
+     */
     expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
-    // Nothing is declared any more: the lane was lined and the plaques cleared
-    // the bar. If an entry is ever marked non-blocking again, this keeps the
-    // declaration honest by refusing to let it pass unnoticed.
-    // Declared failures do not fail the suite — the sprite path is opt-in, so
-    // no player sees them — but they must never vanish quietly. If this list
-    // empties, the entry that declared it needs revisiting, not ignoring.
-    expect(declared.length, "a declared failure disappeared — re-check its entry").toBeGreaterThan(0);
   }, 15_000); // Eight full-resolution frame checks can exceed Vitest's 5s default under CI contention.
 });
 

@@ -47,7 +47,12 @@ const base = readBase();
 const port = 4173;
 const query = process.env["SMOKE_QUERY"] ?? "";
 const url = `http://localhost:${port}${base}${query}`;
-const expectsSprites = new URLSearchParams(query).get("sprites") === "1";
+/*
+ * Sprites are the DEFAULT now, so the plain run is the one that must assert
+ * them; `?sprites=0` is the escape hatch and is expected to draw procedurally.
+ * Keyed off the same condition main.ts uses, so the two cannot drift.
+ */
+const expectsSprites = new URLSearchParams(query).get("sprites") !== "0";
 
 const TYPES = {
   ".html": "text/html",

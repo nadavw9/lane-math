@@ -133,6 +133,15 @@ if (screen) {
       // Exhaust an operator budget so the unavailable state is on screen
       // alongside available ones — the comparison is the point.
       api.playIntoFailure();
+      /*
+       * The front target keeps §9.4's red rim afterwards, and that is correct:
+       * playIntoFailure is the only programmatic route to a spent operator, and
+       * it necessarily leaves the level in its refused state. Neither a settle
+       * nor a legal input clears it, because the state is real rather than a
+       * decaying pulse. For the plain gold front-target rim, shoot without this
+       * screen.
+       */
+      await new Promise((r) => setTimeout(r, 1200));
     }
     if (name === "hint") {
       // A bought hint is the only way the hint line, and its mark, appear.

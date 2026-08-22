@@ -39,6 +39,7 @@ import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import {
   emptySlot,
+  ghostPlaque,
   ghostSlot,
   numberTile,
   operatorToken,
@@ -987,6 +988,27 @@ export class Renderer {
     // slot higher and falls in, so the column moves as a body.
     const advancing = this.laneAdvance ? 1 - this.laneAdvance.value : 0;
 
+    /*
+     * Cleared targets leave a ghost, so the lane does not void out.
+     * Drawn before the live plaques so a plaque advancing over a ghost covers
+     * it rather than being covered.
+     */
+    for (let k = 0; k < s.targetIndex; k++) {
+      /*
+       * Offset 0 is the FRONT, at the bottom of the lane, and the queue drains
+       * downward — so the void a cleared target leaves is at the TOP, above the
+       * last live plaque, not below the front. Ghosts therefore occupy the
+       * offsets the queue has already vacated: length-targetIndex .. length-1.
+       */
+      const slot = targetSlot(s.targets.length - s.targetIndex + k + advancing, lane, board.grid);
+      this.root.addChild(
+        this.entry(
+          this.place(ghostPlaque(slot.width, slot.height), slot.x, slot.y),
+          BOARD_BANDS.queue,
+        ),
+      );
+    }
+
     for (let i = s.targets.length - 1; i >= s.targetIndex; i--) {
       const offset = i - s.targetIndex;
       const slot = targetSlot(offset + advancing, lane, board.grid);
@@ -1008,6 +1030,16 @@ export class Renderer {
        * brightness, which is the disabled/available language the tokens already
        * speak, needs no new art, and survives both sunlight and colourblindness.
        * The gold rim stays as reinforcement rather than as the whole message.
+       *
+       * DO NOT "FIX" THE 1.45:1. Measured on the rendered board, dimmed queued
+       * is L 0.1851 against the front's L 0.2919 — a smaller number than the
+       * rim it replaced, and deliberately so. The front target's PRIMARY
+       * identifier is POSITION: it is always the plaque at the bottom of the
+       * lane, the only one adjacent to the equation row. Brightness is the
+       * second channel and the gold rim the third. WCAG 2.2 SC 1.4.11 exempts
+       * information that is available in another form, and position is that
+       * form. Raising the dim would flatten the queue's depth for a signal that
+       * is already carried three ways.
        */
       const plate = this.place(
         targetPlate(slot.width, slot.height, String(s.targets[i]), {

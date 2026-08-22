@@ -44,10 +44,20 @@ const host = document.getElementById("app")!;
 const picker = document.getElementById("levels")!;
 
 /*
- * The sprite path is opt-in with ?sprites=1 until real art lands.
- * Set BEFORE init, which is where the atlas is loaded.
+ * SPRITES ARE THE DEFAULT. `?sprites=0` is the escape hatch.
+ *
+ * Every token family is real art now — glass tiles, brass dials lit and spent,
+ * and brass plaques — and all of it clears its contrast bar: tiles 8.6:1,
+ * operators 3.9-4.2:1, plaques 3.8:1 on the lined lane, and spent dials at
+ * 2.0:1 under SC 1.4.11's inactive-component exemption.
+ *
+ * The procedural path stays exactly where it is. It is not dead code: it is
+ * what draws if an atlas fails to load, and `?sprites=0` is how it gets looked
+ * at deliberately rather than only during an incident.
+ *
+ * Set BEFORE init, which is where the atlases are loaded.
  */
-const wantSprites = new URLSearchParams(window.location.search).get("sprites") === "1";
+const wantSprites = new URLSearchParams(window.location.search).get("sprites") !== "0";
 setSpritesEnabled(wantSprites);
 
 const renderer = new Renderer();

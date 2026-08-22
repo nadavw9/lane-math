@@ -542,6 +542,34 @@ export function feltLinedTray(w: number, h: number, colour: number, alpha: numbe
  * Deliberately unfilled. A fill would make a spent slot compete with the live
  * tiles for attention, and the thing being communicated is absence.
  */
+/**
+ * A cleared target's empty slot (§9.3, applied to the lane).
+ *
+ * The lane keeps its start-of-level height on purpose — reflowing mid-level
+ * would move the board under the player's fingers — so every cleared target
+ * used to leave a hole, and by the end of a six-target level most of the lane
+ * was void. The pool already solved this: a spent tile leaves a stroke-only
+ * ghost on the hole it came from.
+ *
+ * Same treatment, hexagonal, so the lane reads as a queue that has been WORKED
+ * THROUGH rather than one that is mysteriously short. It also shows progress
+ * without a counter. The queue still advances underneath it, so §9.4's refusal
+ * signal — the front target not moving — is untouched.
+ */
+export function ghostPlaque(w: number, h: number): Container {
+  const token = new Container();
+  /*
+   * Brass, not the procedural plate's navy. The pool's ghost is drawn in its
+   * token's own material (§9.3) and this follows that: the thing that was here
+   * is a brass plaque. Navy at this alpha would also be invisible — the lane is
+   * felt-lined now, and #1E2A3A on #241812 is barely a line.
+   */
+  token.addChild(
+    hexPath(new Graphics(), w, h).stroke({ width: 2, color: 0xc9a227, alpha: 0.34 }),
+  );
+  return token;
+}
+
 export function ghostSlot(w: number, h: number): Container {
   const token = new Container();
   const r = Math.min(w, h) * 0.22;

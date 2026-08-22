@@ -140,3 +140,34 @@ ANGLE METRIC — erosion measured and REJECTED
 
 UNLIT SET
   5 objects, 114 deg mean, sd 1.5 (lit set 118 / 1.3), frames identical 353x360
+
+================================================================================
+SPRITES BY DEFAULT (2026-08-22)
+
+34-sprites-default.png  World 4 mid-level, NO query string — sprites are the
+                        default now. Three ghost plaques filling the cleared
+                        slots at the top of the lane, a spent minus dial beside
+                        available x and div, and the front target below two
+                        queued plaques.
+                        The front target carries §9.4's RED rim here, not gold:
+                        playIntoFailure is the only programmatic route to a
+                        spent operator and it leaves the level refused. That is
+                        correct state, not a stale pulse — neither a settle nor
+                        a legal input clears it. 32-front-vs-queued.png has the
+                        normal gold rim.
+
+RESOLUTIONS
+  spent dials 2.01-2.08:1  exempt by rule, WCAG 2.2 SC 1.4.11 "except for
+                           inactive components"; floor is INACTIVE_MIN_CONTRAST
+                           = 1.8:1, perceptible but recessive. Non-colour
+                           indicator supplied by the strike bar.
+  front target 1.45:1      position is the primary identifier, brightness second,
+                           gold rim third. Recorded in renderer.ts so it is not
+                           "fixed" later.
+  erosion                  reverted in §9; metric stays at zero erosion.
+
+GATE, all binding, no declared exceptions
+  glass tiles      8.61-8.69:1     minimum 3:1
+  brass operators  3.94-4.23:1     minimum 3:1
+  brass plaques    3.79-3.83:1     minimum 3:1
+  spent dials      2.01-2.08:1     minimum 1.8:1 (inactive)

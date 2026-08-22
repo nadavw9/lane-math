@@ -344,6 +344,22 @@ export interface GateResult {
 /** WCAG non-text contrast for large graphical game pieces. */
 export const MIN_CONTRAST = 3;
 
+/**
+ * The floor for INACTIVE components.
+ *
+ * WCAG 2.2 SC 1.4.11 requires 3:1 for user-interface components "except for
+ * inactive components", and its understanding document treats a greyed-out
+ * control's low contrast as part of how unavailability is communicated. A spent
+ * operator is exactly that, and it carries the non-colour indicator the SC still
+ * asks for — the strike bar drawn over it.
+ *
+ * So the requirement is not 3:1, but it is not nothing either: an inactive
+ * control still has to be PERCEPTIBLE, or the board silently loses the
+ * information that an operator was ever there. 1.8:1 is deliberately recessive
+ * and still visible; the shipped spent dials measure 2.01-2.08:1 against felt.
+ */
+export const INACTIVE_MIN_CONTRAST = 1.8;
+
 /** Numerals drawn over glass remain text even when the tile itself is graphical. */
 export const MIN_TEXT_CONTRAST = 4.5;
 
