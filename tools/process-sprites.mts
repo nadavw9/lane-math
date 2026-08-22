@@ -3,6 +3,10 @@ import { basename, join } from "node:path";
 
 import sharp from "sharp";
 
+// The audit lives in src/art so a test can reach it. It shipped a geometry bug
+// precisely because it sat in this file, which runs on import.
+import { angularStats, auditSprite, type Audit } from "../src/art/audit.js";
+
 /**
  * Sheet -> keyed, sliced, trimmed, downscaled, atlased sprites (ART_DIRECTION §9).
  *
@@ -293,151 +297,6 @@ function findRegions(rgba: Buffer, width: number, height: number, minArea: numbe
  * the same upper-left source differently (ART_DIRECTION §3).
  * ------------------------------------------------------------------ */
 
-interface Audit {
-  name: string;
-  /** Degrees, 0 = right, 90 = up. §3 wants the light upper-LEFT, so ~135. */
-  lightAngle: number;
-  /** Brightest point, normalised within the sprite's own box. */
-  specularX: number;
-  specularY: number;
-  meanHue: number;
-  meanSaturation: number;
-  coverage: number;
-  /**
-   * Content box as a fraction of the padded frame.
-   *
-   * Apparent SCALE is drift too: a dial generated half again as large as its
-   * siblings is as wrong as one lit from the right, and just as invisible until
-   * they sit side by side on a board.
-   */
-  boxWidth: number;
-  boxHeight: number;
-  boxX: number;
-  boxY: number;
-}
-
-/**
- * Measure the three things §9 names: lighting direction, specular position and
- * palette. Across forty assets this is more reliable than the eye, which is
- * exactly the claim the art direction makes.
- */
-function auditSprite(name: string, rgba: Buffer, width: number, height: number): Audit {
-  let sumX = 0;
-  let sumY = 0;
-  let weight = 0;
-  let brightest = -1;
-  let specX = 0;
-  let specY = 0;
-  let hueX = 0;
-  let hueY = 0;
-  let satSum = 0;
-  let opaque = 0;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      const a = rgba[i + 3]!;
-      if (a < 128) continue;
-      opaque++;
-
-      const r = rgba[i]!;
-      const g = rgba[i + 1]!;
-      const b = rgba[i + 2]!;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-      // Lighting direction: the centroid of the brightest material, weighted
-      // steeply so a broad warm body cannot outvote a small bright highlight.
-      const w = Math.pow(luma / 255, 6);
-      sumX += x * w;
-      sumY += y * w;
-      weight += w;
-
-      if (luma > brightest) {
-        brightest = luma;
-        specX = x;
-        specY = y;
-      }
-
-      // Hue as a vector, so the average of 350 and 10 degrees is 0 rather
-      // than 180 — brass sits near the wrap point and would otherwise average
-      // to its opposite.
-      const delta = max - min;
-      if (delta > 0) {
-        let hue: number;
-        if (max === r) hue = ((g - b) / delta) % 6;
-        else if (max === g) hue = (b - r) / delta + 2;
-        else hue = (r - g) / delta + 4;
-        hue *= 60;
-        if (hue < 0) hue += 360;
-        const radians = (hue * Math.PI) / 180;
-        hueX += Math.cos(radians);
-        hueY += Math.sin(radians);
-        satSum += max === 0 ? 0 : delta / max;
-      }
-    }
-  }
-
-  // Content bounds at full opacity: the solid object, excluding the soft
-  // contact shadow, which is what "how big does this look" means.
-  let bx0 = width, by0 = height, bx1 = 0, by1 = 0;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (rgba[(y * width + x) * 4 + 3]! < 200) continue;
-      if (x < bx0) bx0 = x;
-      if (y < by0) by0 = y;
-      if (x > bx1) bx1 = x;
-      if (y > by1) by1 = y;
-    }
-  }
-
-  const centreX = width / 2;
-  const centreY = height / 2;
-  const lightX = weight > 0 ? sumX / weight - centreX : 0;
-  // Screen y grows downward; negate so "up" is positive and the angle reads
-  // the way a person would describe it.
-  const lightY = weight > 0 ? centreY - sumY / weight : 0;
-
-  let angle = (Math.atan2(lightY, lightX) * 180) / Math.PI;
-  if (angle < 0) angle += 360;
-
-  let meanHue = (Math.atan2(hueY, hueX) * 180) / Math.PI;
-  if (meanHue < 0) meanHue += 360;
-
-  return {
-    name,
-    lightAngle: angle,
-    specularX: width > 1 ? specX / (width - 1) : 0,
-    specularY: height > 1 ? specY / (height - 1) : 0,
-    meanHue,
-    meanSaturation: opaque > 0 ? satSum / opaque : 0,
-    coverage: opaque / (width * height),
-    boxWidth: bx1 >= bx0 ? (bx1 - bx0 + 1) / width : 0,
-    boxHeight: by1 >= by0 ? (by1 - by0 + 1) / height : 0,
-    boxX: bx1 >= bx0 ? bx0 / width : 0,
-    boxY: by1 >= by0 ? by0 / height : 0,
-  };
-}
-
-/** Circular mean/deviation, so 359 and 1 are two degrees apart. */
-function angularStats(values: number[]): { mean: number; deviation: number } {
-  let x = 0;
-  let y = 0;
-  for (const value of values) {
-    x += Math.cos((value * Math.PI) / 180);
-    y += Math.sin((value * Math.PI) / 180);
-  }
-  let mean = (Math.atan2(y / values.length, x / values.length) * 180) / Math.PI;
-  if (mean < 0) mean += 360;
-
-  const spread = values.map((v) => {
-    const d = Math.abs(v - mean) % 360;
-    return d > 180 ? 360 - d : d;
-  });
-  const deviation = Math.sqrt(spread.reduce((s, d) => s + d * d, 0) / spread.length);
-  return { mean, deviation };
-}
 
 /* ------------------------------------------------------------------ *
  * main
