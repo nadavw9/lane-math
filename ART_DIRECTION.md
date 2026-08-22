@@ -117,6 +117,8 @@ States:
 
 Hexagonal engraved brass plaques. Numeral stamped in ink navy, recessed with a shadow inside the stamp. Aged, faintly scratched.
 
+The numeral does not sit directly on the brass. Measured, plaque brass is L 0.206 — a mid-tone that crowds both light and dark text, giving 3.54:1 for ink navy and 3.41:1 for cream, both below the 4.5:1 text bar. A RECESSED DARK PANEL (felt #241812) is inset into the plaque centre and the numeral is drawn in cream on that, at 14.37:1. This is also what an engraved instrument nameplate looks like.
+
 - **Queued** — flat brass, slightly darkened
 - **Front target** — lit, gold rim, a soft glow behind it
 - **Refused** (§9.4) — the brass reddens and the plaque shoves out of alignment
