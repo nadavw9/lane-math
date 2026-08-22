@@ -270,6 +270,35 @@ bundled font cannot supply.
 
 ---
 
+## Untested real path
+
+**A feature verified only through a programmatic entry point is unverified.** The
+export gesture sat under the restart button's hit area for its entire life
+because every check called `exportTelemetry()` directly or used `?telemetry=1` —
+the one route a phone actually uses was the one route never exercised. Test the
+path the user takes, not the path that is convenient to drive.
+
+It was worse than dead: the long-press landed on **restart**, so the gesture a
+playtester was told to use would have thrown their level away.
+
+**This is the third instance of one shape in this project.** Each time, a check
+exercised something ADJACENT to the real thing and passed on the adjacent thing:
+
+1. **boot smoke against a dev server** — the dev server's conveniences hid two
+   of the three silent-blank failures, because the artefact it served was not
+   the artefact that shipped
+2. **font coverage answered by a stale port** — a node process from the previous
+   day served the requests while `listen()` resolved without error, so the gate
+   measured someone else's output and reported a confident PASS
+3. **the export gesture** — driven through the debug API, never through the
+   600ms hold that is the only route on a phone
+
+The question that catches all three: *what exactly did this check touch, and is
+it the same object the user touches?* A proxy that is easier to drive is
+precisely the thing that will diverge from the real path without saying so.
+
+---
+
 ## Broken harness, not broken product
 
 **A broken harness and a broken product look identical from the output.** When a
