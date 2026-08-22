@@ -209,7 +209,9 @@ The pattern to watch for: a metric that is correct for the shape it was written 
 
 **Silhouette is a third confound, alongside material and aspect ratio.** A closed bright rim — the knurled edge of a dial — drags the measured specular centroid toward the object's centre; a long straight bevel on a wide plaque does not. Measured: masking the knurl moved all five operator dials +5.9 degrees toward the nominal 135.
 
-The metric therefore erodes the mask before locating the specular, so it reads the object's face rather than its edge treatment. Absolute cross-family angles remain advisory; WITHIN-family spread is the binding check.
+**Silhouette is a third confound, alongside material and aspect ratio, and it cannot be corrected by eroding the mask.** Measured sweep: no erosion value converges dials and plaques, the cross-family gap is smallest at zero erosion (12.1 degrees), and within-family spread degrades monotonically, breaking the 3-degree limit at 12%. A circular crop and a general erosion are different operations — the crop suits a disc, the erosion strips a flat plaque's border bevel, which is where its light reads.
+
+WITHIN-family spread is the binding check. Cross-family absolute angle is advisory only.
 
 **Atlas and compression.** Traffic Bomb's pipeline returns (GDD §11). It was excluded only because tokens were procedural.
 
