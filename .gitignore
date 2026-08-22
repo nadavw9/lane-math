@@ -8,6 +8,10 @@ dist/
 
 # Android signing secrets — never committed.
 android/keystore.properties
+# Scratch file used only to hand a new keystore password in. Ignored BEFORE it
+# is ever created, so the secret cannot be staged even by an `add -A` in the
+# window between writing it and deleting it.
+android/keystore-new.txt
 android/*.keystore
 android/*.jks
 
