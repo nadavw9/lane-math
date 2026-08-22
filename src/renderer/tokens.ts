@@ -1,7 +1,11 @@
 import { Container, Graphics, Matrix, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
-import { radical } from "./emblems.js";
+import { hintDiamond, radical } from "./emblems.js";
 import { PALETTE } from "./layout.js";
+
+/** §4 brass, the frame's two tones. */
+const BRASS = 0xc9a227;
+const BRASS_DEEP = 0x8a6d1f;
 import {
   numeralCentre,
   opacityFor,
@@ -154,6 +158,181 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
   text.position.set(w / 2, h / 2);
   panel.addChild(text);
   return panel;
+}
+
+/**
+ * THE REMAINING-USES COUNTER (GDD §6, §7.6, §8.2).
+ *
+ * Normal counts operator uses and Expert consumes them, and the board never
+ * said how many were left — so §8.2's traps, which assume the player plans
+ * around scarcity, could not be planned around at all. If you cannot see there
+ * is one divide, you cannot reserve it.
+ *
+ * A CHIP, NOT PIPS, and the reasons are measured:
+ *
+ *  - budgets never exceed 5 across the shipped ladder (1x92, 2x74, 3x45, 4x16,
+ *    5x2), so this is ALWAYS a single digit — it never needs to grow;
+ *  - dials range 55-106 design px and the binding case is 55, where five pips
+ *    around the rim would be about 4px each;
+ *  - the knurled rim is the dial's brightest, busiest feature — measured
+ *    dragging the light centroid by +5.9 degrees — so it is the worst surface
+ *    to put state on.
+ *
+ * Lower-right because §3 puts the specular upper-left: the chip sits where the
+ * dial's own shading falls away, which is where the most contrast is available
+ * and where it competes with the highlight least.
+ *
+ * Same treatment as the plaque numeral (§5): a dark inset with a cream marking
+ * cut into it, which is the language the board already speaks.
+ */
+export function operatorCount(size: number, remaining: number): Container {
+  const chip = new Container();
+  const d = size * 0.34;
+  const r = d / 2;
+  const text = label(String(remaining), d * 0.62, PALETTE.tokenInk);
+
+  const g = new Graphics();
+  g.circle(0, 0, r).fill({ color: PALETTE.felt });
+  // The cut reads by its lighting, not by an outline (§3): dark inside the top
+  // wall, a thin lit edge along the bottom where the far wall catches light.
+  g.arc(0, 0, r - 0.75, Math.PI * 1.08, Math.PI * 1.92)
+    .stroke({ width: Math.max(1, r * 0.2), color: 0x000000, alpha: 0.34 });
+  g.arc(0, 0, r - 0.75, Math.PI * 0.12, Math.PI * 0.88)
+    .stroke({ width: Math.max(1, r * 0.16), color: 0xffffff, alpha: 0.16 });
+  chip.addChild(g);
+
+  text.position.set(0, 0);
+  chip.addChild(text);
+  return chip;
+}
+
+/**
+ * A FRAMED PANEL — the modal shell for §9.4's failure options.
+ *
+ * Composition taken from Traffic Bomb's lose-frame: an ornate border floating
+ * over a dimmed board, corner details, a centre cartouche, and a clear interior
+ * for content. The MATERIAL is not taken — that frame is cracked dark stone
+ * with an orange glow, which is that game's world. This is brass and felt
+ * (ART_DIRECTION §4), the same two surfaces the trays, the lane and the plaques
+ * are already made of, so the panel reads as another object on the same desk
+ * rather than as UI arriving from somewhere else.
+ *
+ * Every §3 rule the tokens follow applies here at panel scale: one light from
+ * the upper left, so the top and left faces of the frame catch it and the
+ * bottom and right fall away; a specular on the upper-left; a contact shadow
+ * beneath, because it floats; and no outlines — the frame is separated from
+ * the board by its own lighting.
+ *
+ * Returns the interior rect so callers place content against the opening
+ * rather than against the outer edge, which is what keeps content off the
+ * border however the frame's thickness changes.
+ */
+export function framedPanel(
+  w: number,
+  h: number,
+): { panel: Container; interior: { x: number; y: number; width: number; height: number } } {
+  const panel = new Container();
+  const border = Math.max(12, Math.min(w, h) * 0.075);
+  const radius = border * 1.1;
+
+  // It floats, so it sits on something (§3).
+  const shadow = new Graphics();
+  for (let i = 3; i >= 1; i--) {
+    shadow
+      .roundRect(-i * 1.5, h * 0.02 + i * 2.5, w + i * 3, h + i * 2, radius)
+      .fill({ color: 0x2b1a10, alpha: 0.13 });
+  }
+  panel.addChild(shadow);
+
+  const g = new Graphics();
+  // Brass body, lit from the upper left: the deep tone underneath, the lit tone
+  // laid over the top-left so the frame has a direction rather than a fill.
+  g.roundRect(0, 0, w, h, radius).fill({ color: BRASS_DEEP });
+  /*
+   * Light falls off DOWN the frame, built from stacked bands rather than one.
+   *
+   * A single lit band leaves its own rounded bottom corners showing as a pale
+   * tab on the frame's left edge — a shape boundary where there should only be
+   * material getting darker. Six overlapping bands put six different curves in
+   * six different places, none of which reads as an edge, and the accumulated
+   * alpha is the gradient. Same trick as the contact shadows: no filter, no
+   * render target, just shapes.
+   */
+  for (let i = 0; i < 6; i++) {
+    g.roundRect(0, 0, w, h * (0.26 + i * 0.07), radius).fill({ color: BRASS, alpha: 0.19 });
+  }
+  // The outer top edge catches the light; the bottom falls into shadow.
+  g.moveTo(radius, 1.5)
+    .lineTo(w - radius, 1.5)
+    .stroke({ width: 3, color: 0xffe9a8, alpha: 0.45 });
+  g.moveTo(radius, h - 1.5)
+    .lineTo(w - radius, h - 1.5)
+    .stroke({ width: 3, color: 0x000000, alpha: 0.3 });
+  panel.addChild(g);
+
+  // The opening: a felt interior, cut into the brass.
+  const ix = border;
+  const iy = border;
+  const iw = w - border * 2;
+  const ih = h - border * 2;
+  const inner = new Graphics();
+  const innerR = radius * 0.7;
+  inner.roundRect(ix, iy, iw, ih, innerR).fill({ color: PALETTE.felt });
+  grainOver(inner, (gr) => gr.roundRect(ix, iy, iw, ih, innerR), 0.22);
+  // The bright rim tracing the opening, which is what makes the frame read as
+  // having thickness rather than being a printed border.
+  inner
+    .roundRect(ix - 1.5, iy - 1.5, iw + 3, ih + 3, innerR + 1.5)
+    .stroke({ width: 2.5, color: 0xffe9a8, alpha: 0.35 });
+  // Inside the opening, the top wall is turned away from the light.
+  inner
+    .moveTo(ix + innerR, iy + 2)
+    .lineTo(ix + iw - innerR, iy + 2)
+    .stroke({ width: 4, color: 0x000000, alpha: 0.34 });
+  panel.addChild(inner);
+
+  // Corner studs — the reference's pyramids, as the rivets the plaques already
+  // carry, so the vocabulary is one the board has already taught.
+  const studs = new Graphics();
+  const sr = border * 0.3;
+  for (const [sx, sy] of [
+    [border * 0.62, border * 0.62],
+    [w - border * 0.62, border * 0.62],
+    [border * 0.62, h - border * 0.62],
+    [w - border * 0.62, h - border * 0.62],
+  ] as const) {
+    studs.circle(sx, sy, sr).fill({ color: BRASS_DEEP });
+    studs.circle(sx - sr * 0.18, sy - sr * 0.18, sr * 0.78).fill({ color: 0xd8b53a });
+    studs.circle(sx - sr * 0.3, sy - sr * 0.32, sr * 0.34).fill({ color: 0xffe9a8, alpha: 0.6 });
+  }
+  panel.addChild(studs);
+
+  // The centre cartouche, carrying the gold mark the hint line already uses.
+  const cartouche = new Graphics();
+  const cw = border * 2.4;
+  const ch = border * 0.92;
+  cartouche
+    .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch, ch * 0.42)
+    .fill({ color: BRASS });
+  cartouche
+    .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch * 0.5, ch * 0.42)
+    .fill({ color: 0xffe9a8, alpha: 0.3 });
+  panel.addChild(cartouche);
+  const gem = hintDiamond(border * 0.72);
+  gem.position.set(w / 2, ch * 0.16);
+  panel.addChild(gem);
+
+  /*
+   * The specular belongs on the FRAME, not floating over the opening. Placed
+   * over the interior it read as a smudge on the felt rather than as light on
+   * metal, which is the difference between a lit object and a dirty one.
+   */
+  const hi = new Graphics();
+  hi.ellipse(border * 1.6, border * 0.5, border * 1.5, border * 0.28)
+    .fill({ color: 0xffffff, alpha: 0.16 });
+  panel.addChild(hi);
+
+  return { panel, interior: { x: ix, y: iy, width: iw, height: ih } };
 }
 
 /** Flat-top hexagon path, inset into its box. */
@@ -358,11 +537,40 @@ export function numberTile(
  * Operator token — a circle (§9.2). Different shape from numbers means the
  * player can never wonder what goes where.
  */
+/**
+ * Seat the chip on the dial's lower-right diagonal, at 0.62R.
+ *
+ * 0.62 rather than 0.70 because at 0.70 the chip's own edge lands at 0.520 of
+ * the token — outside the disc — so it hung off the silhouette and read as
+ * stuck on rather than seated in. At 0.62 the edge is at 0.480, inside.
+ *
+ * THE SIZE IS NOT REDUCED, and that is measured rather than assumed. Symbol
+ * occlusion is ~23% worst case (the minus, whose bar spans the dial) and
+ * shrinking the chip from 0.34 to 0.22 only moves it to ~19% — four points for
+ * a third of the digit. Any chip in this quadrant crosses that bar, so the
+ * trade buys nothing. The minus stays unambiguous because the five operators
+ * are shape-coded (§9.2) and none is confusable by its right-hand end.
+ */
+function seatCount(size: number, remaining: number): Container {
+  const chip = operatorCount(size, remaining);
+  const offset = size * 0.5 * 0.62 * Math.SQRT1_2;
+  chip.position.set(size / 2 + offset, size / 2 + offset);
+  return chip;
+}
+
 export function operatorToken(
   size: number,
   glyph: string,
   style: TokenStyle,
   state: TokenState = "idle",
+  /**
+   * Uses left, or undefined where the count must not show.
+   *
+   * Undefined rather than -1 or Infinity: Casual has unlimited operators (§6)
+   * and §7.6 is explicit that an unlimited count is not a smaller number, so
+   * there is nothing to draw rather than a symbol meaning "many".
+   */
+  remaining?: number | undefined,
 ): Container {
   const dialBase = {
     "+": "dial-plus",
@@ -378,6 +586,7 @@ export function operatorToken(
   const art = dialBase ? spriteBase(dialBase, state, size, size) : null;
   if (art) {
     // Operators are raised relief in their real dial artwork, not live text.
+    if (remaining !== undefined) art.container.addChild(seatCount(size, remaining));
     return art.container;
   }
 
@@ -433,6 +642,7 @@ export function operatorToken(
   const text = label(glyph, size * 0.5, style.text);
   text.position.set(radius, radius);
   token.addChild(text);
+  if (remaining !== undefined) token.addChild(seatCount(size, remaining));
   return token;
 }
 

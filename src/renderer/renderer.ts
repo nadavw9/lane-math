@@ -39,6 +39,7 @@ import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import {
   emptySlot,
+  framedPanel,
   ghostPlaque,
   ghostSlot,
   numberTile,
@@ -1208,7 +1209,18 @@ export class Renderer {
         bevel: lit ? 1 : DIM.bevel,
         elevation: lit ? 1 : DIM.elevation,
         outline: s.transformOp === op ? PALETTE.highlight : undefined,
-      }, tokenState);
+        /*
+         * GDD §7.6: the count appears with counted operators at 3-3, and NEVER
+         * in Casual. `budget[op]` is undefined exactly when the mode does not
+         * count that operator, so the absence of a number is the signal — no
+         * mode check needed here, and no infinity symbol, which §7.6 rules out
+         * because unlimited is a different game rather than a bigger number.
+         *
+         * A spent dial keeps its 0: it is the last step of the sequence the
+         * player has been watching, and it is what makes the tarnish mean
+         * something rather than just look different.
+         */
+      }, tokenState, remaining ?? undefined);
       // Spent keeps full opacity and loses its light; disabled keeps its light
       // and loses presence. Two different signals, never the same treatment.
       if (tokenState === "disabled") disc.alpha = DIM.alpha;
@@ -1695,52 +1707,97 @@ export class Renderer {
      */
     if (s.phase === "failed" && s.exit !== null && this.rejectSettled) {
       /*
-       * OVER THE EQUATION ROW, NOT OVER THE LANE.
+       * A FRAMED MODAL OVER A DIMMED BOARD (§9.0, §9.4).
        *
-       * The first placement sat inside the lane and covered the front target —
-       * the exact number the player could not make, which is §9.4's entire
-       * message. Offering a way out on top of the thing being explained is
-       * backwards. The equation row and the operator band are dead once the
-       * level is lost, so the panel takes that space and leaves the lane
-       * legible: the player can still see what beat them while deciding.
+       * It was three flat buttons wedged into the equation row, which failed
+       * the bar on depth, focal point and framing at the game's most emotional
+       * moment — a monetisation moment wearing no design at all.
+       *
+       * The board DIMS but stays visible, and the panel starts below the lane.
+       * The unreachable number is the reason the player is here; covering it
+       * or hiding it would remove the evidence for the decision being asked
+       * for. Dimming recedes the board without deleting it.
        */
       const exit = s.exit;
+
+      const veil = new Graphics()
+        .rect(0, 0, DESIGN.width, DESIGN.height)
+        .fill({ color: 0x120c08, alpha: 0.55 });
+      /*
+       * The veil SWALLOWS INPUT, which is what makes this a modal rather than a
+       * picture of one. Without it the dimmed board keeps its live controls —
+       * the status band's restart and map sit right under the panel and would
+       * still fire, so a player could act on a board they can barely see.
+       */
+      veil.eventMode = "static";
+      this.root.addChild(this.entry(veil, BOARD_BANDS.equation));
+
       const panelX = equation.x;
       const panelW = equation.width;
       const panelY = equation.y;
-      const panelH = equation.height;
+      const panelH = Math.min(196, status.y - equation.y - 4);
+      const framed = framedPanel(panelW, panelH);
+      framed.panel.position.set(panelX, panelY);
+      this.root.addChild(this.entry(framed.panel, BOARD_BANDS.equation));
 
-      const panel = new Graphics()
-        .roundRect(panelX, panelY, panelW, panelH, 10)
-        .fill({ color: PALETTE.targetPlate, alpha: 0.96 });
-      panel
-        .moveTo(panelX + 10, panelY + 2)
-        .lineTo(panelX + panelW - 10, panelY + 2)
-        .stroke({ width: 2, color: 0x000000, alpha: 0.3 });
-      panel
-        .moveTo(panelX + 10, panelY + panelH - 2)
-        .lineTo(panelX + panelW - 10, panelY + panelH - 2)
-        .stroke({ width: 1.5, color: 0xffffff, alpha: 0.14 });
-      this.root.addChild(this.entry(panel, BOARD_BANDS.equation));
+      const inner = framed.interior;
+      const innerX = panelX + inner.x;
+      const innerY = panelY + inner.y;
 
       /*
-       * No heading. §9.4 forbids announcing the failure in text, and three
-       * buttons arriving where the equation was are self-evident without a
-       * caption — a "what now?" line would only spend the row's height saying
-       * what the buttons already say.
+       * §9.4 forbids announcing the FAILURE in text, and this does not: it
+       * names the choice being offered, which is new information the board
+       * cannot show. One line, per §7.7.
        */
-      const gap = 6;
-      const buttonW = (panelW - gap * 4) / 3;
-      const buttonY = panelY + 5;
-      const seat = (index: number): number => panelX + gap + index * (buttonW + gap);
+      const heading = this.text("the lane is stuck", 15, PALETTE.tokenInk);
+      heading.anchor.set(0.5, 0);
+      heading.position.set(innerX + inner.width / 2, innerY + 10);
+      this.root.addChild(this.entry(heading, BOARD_BANDS.equation));
 
+      const buttonH = 34;
+      const gap = 7;
+      const buttonW = inner.width - 20;
+      const firstY = innerY + 36;
+      const seatY = (row: number): number => firstY + row * (buttonH + gap);
+      const buttonX = innerX + 10;
+
+      /*
+       * CONTINUE FIRST, and stated as what it costs rather than what it is.
+       * It is the offer the player is least likely to understand, and §9.4
+       * makes it deliberately informative — it leaks where the mistake was —
+       * so it earns the top slot and the gold.
+       */
+      const continueLabel = exit.canContinue
+        ? "watch an ad · rewind"
+        : exit.continuesLeft === 0
+          ? "continues used"
+          : "nothing to rewind to";
       this.root.addChild(
         this.entry(
           this.box(
-            seat(0),
-            buttonY,
+            buttonX,
+            seatY(0),
             buttonW,
-            32,
+            buttonH,
+            PALETTE.slotFilled,
+            continueLabel,
+            exit.canContinue ? PALETTE.highlight : PALETTE.tokenInk,
+            exit.canContinue ? () => this.emit({ type: "tapContinue" }) : undefined,
+            exit.canContinue ? PALETTE.highlight : undefined,
+            exit.canContinue ? "idle" : "disabled",
+          ),
+          BOARD_BANDS.equation,
+        ),
+      );
+
+      const half = (buttonW - gap) / 2;
+      this.root.addChild(
+        this.entry(
+          this.box(
+            buttonX,
+            seatY(1),
+            half,
+            buttonH,
             PALETTE.slotFilled,
             "restart",
             PALETTE.tokenInk,
@@ -1749,47 +1806,13 @@ export class Renderer {
           BOARD_BANDS.equation,
         ),
       );
-
-      /*
-       * CONTINUE IS DISABLED, NEVER HIDDEN, WHEN THERE IS NOTHING TO REWIND TO.
-       *
-       * A level lost on its first move has no winnable state behind it, and a
-       * level can only be continued twice. Hiding the button in those cases
-       * would make the panel change shape between failures and leave the
-       * player unsure whether they imagined it; disabled keeps the offer
-       * legible and says it is not available now, which is the §5 distinction
-       * between "not usable" and "gone".
-       */
-      const continueLabel = exit.canContinue
-        ? `continue  ${exit.continuesLeft}`
-        : exit.continuesLeft === 0
-          ? "continue used"
-          : "no rewind";
       this.root.addChild(
         this.entry(
           this.box(
-            seat(1),
-            buttonY,
-            buttonW,
-            32,
-            PALETTE.slotFilled,
-            continueLabel,
-            exit.canContinue ? PALETTE.highlight : PALETTE.tokenInk,
-            exit.canContinue ? () => this.emit({ type: "tapContinue" }) : undefined,
-            undefined,
-            exit.canContinue ? "idle" : "disabled",
-          ),
-          BOARD_BANDS.equation,
-        ),
-      );
-
-      this.root.addChild(
-        this.entry(
-          this.box(
-            seat(2),
-            buttonY,
-            buttonW,
-            32,
+            buttonX + half + gap,
+            seatY(1),
+            half,
+            buttonH,
             PALETTE.slotFilled,
             "map",
             PALETTE.tokenInk,
@@ -1799,20 +1822,16 @@ export class Renderer {
         ),
       );
 
-      /*
-       * What each choice COSTS, stated before it is taken.
-       *
-       * §5.2's free first failure is the one a player is most likely to be
-       * wrong about, and being wrong about it means thinking a restart cost a
-       * life when it did not.
-       */
+      // §5.2's free first failure is the thing a player is most likely to be
+      // wrong about, and being wrong about it means believing a restart cost a
+      // life when it did not.
       const cost = this.text(
-        exit.restartCostsLife ? "restart costs a life · continue is free" : "this restart is free",
+        exit.restartCostsLife ? "restart costs a life" : "this restart is free",
         11,
         PALETTE.highlightInk,
       );
       cost.anchor.set(0.5, 0);
-      cost.position.set(panelX + panelW / 2, buttonY + 37);
+      cost.position.set(innerX + inner.width / 2, seatY(2) + 2);
       this.root.addChild(this.entry(cost, BOARD_BANDS.equation));
     }
 
