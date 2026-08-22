@@ -55,7 +55,20 @@ export type TelemetryEvent =
       readonly hint_type: string;
       readonly stars_spent: number;
     }
-  | { readonly name: "life_depleted"; readonly level_id: string };
+  | { readonly name: "life_depleted"; readonly level_id: string }
+  /**
+   * GDD §9.4: a rewarded continue was taken, and where it rewound to.
+   *
+   * Worth its own event rather than folding into level_fail: a continue is a
+   * paid decision, and how often players buy their way past a given target is
+   * the signal that says whether that target is hard or unfair.
+   */
+  | {
+      readonly name: "continue_used";
+      readonly level_id: string;
+      readonly target_index: number;
+      readonly attempt_number: number;
+    };
 
 export type TelemetryEventName = TelemetryEvent["name"];
 

@@ -71,6 +71,14 @@ export interface ViewState {
   readonly budget: OperatorBudget;
   readonly phase: Phase;
   /**
+   * GDD §9.4's aftermath, present only once `phase` is "failed".
+   *
+   * The Director decides what is OFFERED, because every one of these is a
+   * rule: whether a rewind point exists, how many continues are left, and
+   * whether restarting costs a life. The renderer draws what it is handed.
+   */
+  readonly exit: FailureExit | null;
+  /**
    * Active unary operator. §3.5: unary is a MODE, not a slot step — perfect
    * squares highlight, everything else dims, tapping the operator again cancels.
    */
@@ -144,6 +152,16 @@ export interface ShopEntry {
 }
 
 /** Input the renderer emits. It never decides anything. */
+/** GDD §9.4: what the player can do once a failure has read. */
+export interface FailureExit {
+  /** False when no recorded state was winnable — Continue has nothing to give. */
+  readonly canContinue: boolean;
+  /** Continues left this attempt. §9.4 caps it at two. */
+  readonly continuesLeft: number;
+  /** §5.2: the first failure on a never-cleared level is free. */
+  readonly restartCostsLife: boolean;
+}
+
 export type InputEvent =
   | { readonly type: "tapTile"; readonly id: number }
   | { readonly type: "tapOperator"; readonly op: BinaryOp }
@@ -162,6 +180,8 @@ export type InputEvent =
   | { readonly type: "exportTelemetry" }
   /** Offer the §5.2 rewarded refill. Handled by the shell, not the Director. */
   | { readonly type: "tapWatchAd" }
+  /** §9.4's Continue. The shell shows the ad; the Director owns the rewind. */
+  | { readonly type: "tapContinue" }
   | { readonly type: "loadLevel"; readonly id: string }
   /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
   | { readonly type: "tick" }
@@ -169,6 +189,12 @@ export type InputEvent =
   | { readonly type: "dismissWarning" }
   | { readonly type: "selectMode"; readonly mode: Mode }
   | { readonly type: "toggleShop" }
+  /**
+   * GDD §9.4: rewind to the branch point after a rewarded view. The SHELL
+   * shows the ad and only sends this once the reward actually landed — the
+   * Director owns where the rewind goes, not whether it was paid for.
+   */
+  | { readonly type: "continueFromBranch" }
   | { readonly type: "buyHint"; readonly hint: string };
 
 /**

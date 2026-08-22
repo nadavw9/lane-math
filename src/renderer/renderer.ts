@@ -140,6 +140,20 @@ export class Renderer {
   }
 
   /**
+   * Has §9.4's refusal finished PLAYING?
+   *
+   * Not the same question as `rejecting`, and the difference is load-bearing.
+   * `this.reject` is cleared only on a level change or a rewind, never when the
+   * pulse ends — deliberately, because §9.6 says the refused state must keep
+   * reading after the board settles, which is why the front target stays red.
+   * So `rejecting` means "this level is in its refused state", which is true
+   * forever, and gating the options on it would have hidden them permanently.
+   */
+  private get rejectSettled(): boolean {
+    return this.reject === null || this.reject.finished;
+  }
+
+  /**
    * Band geometry for a board (§9.1: bands size to content).
    *
    * Driven by the level's STARTING counts, not by what is left: `tiles` and
@@ -1664,6 +1678,144 @@ export class Renderer {
     // refuses to advance, and the pool visibly cannot feed it. Text is a
     // fallback for when the visual fails, not the primary channel.
     //
+    /*
+     * GDD §9.4's AFTERMATH — the way out, once the rejection has read.
+     *
+     * `this.rejecting` gates it: the options do not appear during the pulse,
+     * they appear after it settles. The order matters. The board says "this
+     * number cannot be made" first, on its own terms; the offer comes second,
+     * as a response to something the player has already understood. Showing
+     * both at once would make the refusal read as the setup for a sale.
+     *
+     * §9.0 applies because this is also a monetisation moment: it lands as a
+     * seated panel of the same navy and gold as the cleared screen, arrives on
+     * the entry bands like every other surface, and its three buttons are the
+     * one button component — so the pressed state, the disabled state and the
+     * tap target are the same ones the rest of the game already has.
+     */
+    if (s.phase === "failed" && s.exit !== null && this.rejectSettled) {
+      /*
+       * OVER THE EQUATION ROW, NOT OVER THE LANE.
+       *
+       * The first placement sat inside the lane and covered the front target —
+       * the exact number the player could not make, which is §9.4's entire
+       * message. Offering a way out on top of the thing being explained is
+       * backwards. The equation row and the operator band are dead once the
+       * level is lost, so the panel takes that space and leaves the lane
+       * legible: the player can still see what beat them while deciding.
+       */
+      const exit = s.exit;
+      const panelX = equation.x;
+      const panelW = equation.width;
+      const panelY = equation.y;
+      const panelH = equation.height;
+
+      const panel = new Graphics()
+        .roundRect(panelX, panelY, panelW, panelH, 10)
+        .fill({ color: PALETTE.targetPlate, alpha: 0.96 });
+      panel
+        .moveTo(panelX + 10, panelY + 2)
+        .lineTo(panelX + panelW - 10, panelY + 2)
+        .stroke({ width: 2, color: 0x000000, alpha: 0.3 });
+      panel
+        .moveTo(panelX + 10, panelY + panelH - 2)
+        .lineTo(panelX + panelW - 10, panelY + panelH - 2)
+        .stroke({ width: 1.5, color: 0xffffff, alpha: 0.14 });
+      this.root.addChild(this.entry(panel, BOARD_BANDS.equation));
+
+      /*
+       * No heading. §9.4 forbids announcing the failure in text, and three
+       * buttons arriving where the equation was are self-evident without a
+       * caption — a "what now?" line would only spend the row's height saying
+       * what the buttons already say.
+       */
+      const gap = 6;
+      const buttonW = (panelW - gap * 4) / 3;
+      const buttonY = panelY + 5;
+      const seat = (index: number): number => panelX + gap + index * (buttonW + gap);
+
+      this.root.addChild(
+        this.entry(
+          this.box(
+            seat(0),
+            buttonY,
+            buttonW,
+            32,
+            PALETTE.slotFilled,
+            "restart",
+            PALETTE.tokenInk,
+            () => this.emit({ type: "tapRestart" }),
+          ),
+          BOARD_BANDS.equation,
+        ),
+      );
+
+      /*
+       * CONTINUE IS DISABLED, NEVER HIDDEN, WHEN THERE IS NOTHING TO REWIND TO.
+       *
+       * A level lost on its first move has no winnable state behind it, and a
+       * level can only be continued twice. Hiding the button in those cases
+       * would make the panel change shape between failures and leave the
+       * player unsure whether they imagined it; disabled keeps the offer
+       * legible and says it is not available now, which is the §5 distinction
+       * between "not usable" and "gone".
+       */
+      const continueLabel = exit.canContinue
+        ? `continue  ${exit.continuesLeft}`
+        : exit.continuesLeft === 0
+          ? "continue used"
+          : "no rewind";
+      this.root.addChild(
+        this.entry(
+          this.box(
+            seat(1),
+            buttonY,
+            buttonW,
+            32,
+            PALETTE.slotFilled,
+            continueLabel,
+            exit.canContinue ? PALETTE.highlight : PALETTE.tokenInk,
+            exit.canContinue ? () => this.emit({ type: "tapContinue" }) : undefined,
+            undefined,
+            exit.canContinue ? "idle" : "disabled",
+          ),
+          BOARD_BANDS.equation,
+        ),
+      );
+
+      this.root.addChild(
+        this.entry(
+          this.box(
+            seat(2),
+            buttonY,
+            buttonW,
+            32,
+            PALETTE.slotFilled,
+            "map",
+            PALETTE.tokenInk,
+            () => this.emit({ type: "tapMap" }),
+          ),
+          BOARD_BANDS.equation,
+        ),
+      );
+
+      /*
+       * What each choice COSTS, stated before it is taken.
+       *
+       * §5.2's free first failure is the one a player is most likely to be
+       * wrong about, and being wrong about it means thinking a restart cost a
+       * life when it did not.
+       */
+      const cost = this.text(
+        exit.restartCostsLife ? "restart costs a life · continue is free" : "this restart is free",
+        11,
+        PALETTE.highlightInk,
+      );
+      cost.anchor.set(0.5, 0);
+      cost.position.set(panelX + panelW / 2, buttonY + 37);
+      this.root.addChild(this.entry(cost, BOARD_BANDS.equation));
+    }
+
     // A win still needs an exit, so the cleared state offers one quietly.
     if (s.phase === "won") {
       // Tall enough to seat the headline AND the stars: at 60 the stars

@@ -73,14 +73,32 @@ export class Ads {
    * having tried, which is what keeps this a choice rather than a gamble.
    */
   async offerLifeForAd(economy: Economy): Promise<AdOutcome> {
+    const outcome = await this.showRewarded();
+    if (outcome === "rewarded") economy.grantAdLife();
+    return outcome;
+  }
+
+  /**
+   * Show a rewarded ad and report which of the three things happened.
+   *
+   * The REWARD IS NOT APPLIED HERE. Two callers now want a rewarded view for
+   * two different rewards — a life (§5.2) and a continue (§9.4) — and folding
+   * the grant into the ad call is what would make a third one copy this method
+   * to change one line. The caller owns what the reward means; this owns
+   * whether it was earned.
+   *
+   * All three outcomes are real states a phone produces, and each is
+   * DIFFERENT for the player: rewarded grants, dismissed changes nothing and
+   * costs nothing, unavailable means no ad was there to watch. Collapsing the
+   * last two into "failed" is what makes a player think they were cheated.
+   */
+  async showRewarded(): Promise<AdOutcome> {
     if (!this.plugin || !this.ready) return "unavailable";
 
     try {
       await this.plugin.prepareRewardVideoAd({ adId: this.rewardedId, isTesting: this.testing });
       const reward = await this.plugin.showRewardVideoAd();
       if (!reward || reward.type === undefined) return "dismissed";
-
-      economy.grantAdLife();
       return "rewarded";
     } catch {
       return "unavailable";

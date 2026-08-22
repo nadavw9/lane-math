@@ -229,6 +229,34 @@ renderer.onInput((input) => {
    * dismissed ad is indistinguishable from a bug, and a player who suspects the
    * button is broken will not press it again.
    */
+  /*
+   * GDD §9.4's Continue: the SHELL shows the ad, the Director owns the rewind.
+   *
+   * All three AdMob outcomes are handled visibly, as the out-of-lives screen
+   * does — and the honest one is the third. `unavailable` degrades to Restart
+   * with a message that says so, because a player who chose to watch an ad and
+   * got nothing must not be left staring at an unchanged board wondering
+   * whether they were charged.
+   */
+  if (input.type === "tapContinue") {
+    void (async () => {
+      renderer.setAdMessage("opening…");
+      const outcome = await ads.showRewarded();
+      if (outcome === "rewarded") {
+        renderer.setAdMessage("rewound to where it was still winnable");
+        apply(director.handle({ type: "continueFromBranch" }));
+        return;
+      }
+      renderer.setAdMessage(
+        outcome === "dismissed"
+          ? "no rewind this time, and nothing lost — restart is still free of charge"
+          : "no ad available just now — restart to try the level again",
+      );
+      send({ type: "tick" });
+    })();
+    return;
+  }
+
   if (input.type === "tapWatchAd") {
     void (async () => {
       renderer.setAdMessage("opening…");

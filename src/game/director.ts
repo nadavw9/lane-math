@@ -23,6 +23,7 @@ import { HINT_COST, HINT_LABEL, generateHint, hintContext, type HintType } from 
 import { WinnabilityService } from "./winnability-service.js";
 import type {
   Affordance,
+  FailureExit,
   Command,
   EconomyView,
   HintView,
@@ -50,6 +51,16 @@ export const SCRIPTED_TRAP_LEVEL = "1-04";
  * Input goes in, commands come out. The renderer draws commands and emits
  * input; the two never touch directly (GDD §11).
  */
+/** A committed state, kept so §9.4's Continue can hand one back. */
+interface Snapshot {
+  readonly consumed: ReadonlySet<number>;
+  readonly targetIndex: number;
+  readonly budget: OperatorBudget;
+}
+
+/** GDD §9.4: a level cannot be brute-forced entirely through ads. */
+const MAX_CONTINUES = 2;
+
 export class Director {
   private level: LadderLevel;
   private readonly mode: Mode;
@@ -78,6 +89,18 @@ export class Director {
   private scriptedRewindUsed = false;
   /** Answers winnability, off the render thread where a worker exists. */
   private readonly winnability: WinnabilityService;
+  /**
+   * One entry per committed move, taken BEFORE the move is applied (§9.4).
+   *
+   * This is what makes Continue possible: the branch point is the last state a
+   * win was still reachable from, and finding it means being able to look at
+   * the states the player passed through. Restart (§4.3) does not need this —
+   * it rewinds to the start, which is reconstructible — which is why no
+   * history existed until Continue asked for one.
+   */
+  private history: Snapshot[] = [];
+  /** GDD §9.4: at most two per attempt, so a level cannot be bought outright. */
+  private continuesUsed = 0;
 
   constructor(
     level: LadderLevel,
@@ -158,6 +181,7 @@ export class Director {
     this.consumed = new Set();
     this.targetIndex = 0;
     this.budget = { ...(this.level.modes[this.mode]?.budget ?? {}) };
+    this.history = [];
     this.slots = { leftTileId: null, op: null, rightTileId: null };
     this.phase = "playing";
     this.transformOp = null;
@@ -319,6 +343,99 @@ export class Director {
     };
   }
 
+  /**
+   * The state a Continue can hand back (§9.4).
+   *
+   * Deliberately a plain copy rather than a structural-sharing trick: a level
+   * has at most a handful of committed moves, so the cost is nothing and the
+   * restore cannot alias anything the live board still holds.
+   */
+  /**
+   * What §9.4 offers once the rejection has read.
+   *
+   * `canContinue` is computed by actually LOOKING for a branch point rather
+   * than assuming one exists. A level lost on its first move has no state to
+   * hand back, and offering a paid rewind that lands where the player already
+   * is would be the worst possible use of an ad.
+   */
+  private failureExit(): FailureExit {
+    const continuesLeft = Math.max(0, MAX_CONTINUES - this.continuesUsed);
+    return {
+      canContinue: continuesLeft > 0 && this.branchPoint() !== null,
+      continuesLeft,
+      restartCostsLife: !this.lastFailureExempt,
+    };
+  }
+
+  /**
+   * GDD §9.4: rewind to the branch point, paid for by a rewarded view.
+   *
+   * The shell has already confirmed the reward landed. This does not touch the
+   * failure count — §5.1 says failures still cost stars, so a continue buys a
+   * position, never a clean sheet, and a level cannot be bought to three stars.
+   */
+  private continueFromBranch(): Command[] {
+    if (this.phase !== "failed") return this.reject("nothing to continue from");
+    if (this.continuesUsed >= MAX_CONTINUES) return this.reject("no continues left");
+    const at = this.branchPoint();
+    if (at === null) return this.reject("no winnable state to return to");
+
+    this.continuesUsed++;
+    // Drop the history after the branch point: those moves did not happen any
+    // more, and leaving them would let a second continue rewind into a future
+    // the player is no longer in.
+    const index = this.history.indexOf(at);
+    if (index >= 0) this.history = this.history.slice(0, index);
+    this.restore(at);
+    this.run++;
+    this.message = "rewound to where the level was still winnable";
+    this.telemetry?.record({
+      name: "continue_used",
+      level_id: this.level.id,
+      target_index: this.targetIndex,
+      attempt_number: this.failures,
+    });
+    return this.render();
+  }
+
+  private snapshot(): Snapshot {
+    return {
+      consumed: new Set(this.consumed),
+      targetIndex: this.targetIndex,
+      budget: { ...this.budget },
+    };
+  }
+
+  private restore(snapshot: Snapshot): void {
+    this.consumed = new Set(snapshot.consumed);
+    this.targetIndex = snapshot.targetIndex;
+    this.budget = { ...snapshot.budget };
+    this.slots = { leftTileId: null, op: null, rightTileId: null };
+    this.transformOp = null;
+    this.phase = "playing";
+  }
+
+  /**
+   * The BRANCH POINT: the latest recorded state a win was still reachable from.
+   *
+   * Walks backwards, because the doomed move is usually the last one and
+   * walking forwards would pay for every winnable state before reaching it.
+   * Returns null when no recorded state was winnable, which happens on a level
+   * that was lost on its very first move — there Continue has nothing better to
+   * offer than Restart, and says so rather than pretending.
+   */
+  private branchPoint(): Snapshot | null {
+    const level = this.asSolverLevel();
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      const at = this.history[i]!;
+      const tiles = this.tiles.filter((t) => !at.consumed.has(t.id));
+      if (this.level.targets[at.targetIndex] === undefined) continue;
+      const state = { tiles, targetIndex: at.targetIndex, budget: at.budget };
+      if (this.winnability.isWinnable(level, at.budget, state)) return at;
+    }
+    return null;
+  }
+
   private get live(): Tile[] {
     return this.tiles.filter((t) => !this.consumed.has(t.id));
   }
@@ -370,6 +487,7 @@ export class Director {
       slots: this.slots,
       budget: this.budget,
       phase: this.phase,
+      exit: this.phase === "failed" ? this.failureExit() : null,
       transformOp: this.transformOp,
       transformableTileIds: this.transformableIds(),
       affordance: this.affordance(),
@@ -401,6 +519,7 @@ export class Director {
       }
       return this.render();
     }
+    if (input.type === "continueFromBranch") return this.continueFromBranch();
     if (input.type === "dismissWarning") {
       // §7.5 step 5: the move is rewound for free — no star, no life, no
       // failure recorded. Nothing was ever consumed, so there is nothing to
@@ -459,6 +578,9 @@ export class Director {
       case "tapMap":
       case "exportTelemetry":
       case "tapWatchAd":
+      // The shell shows the ad; it sends continueFromBranch only once the
+      // reward has actually landed, so this side has nothing to do here.
+      case "tapContinue":
         return [];
     }
   }
@@ -615,6 +737,11 @@ export class Director {
       correct: true,
       target_index: this.targetIndex,
     });
+
+    // The state as it was BEFORE this move, for §9.4's branch point. Pushed
+    // here rather than after, because the branch point is the state a player
+    // would want to be handed back — the one where the choice was still open.
+    this.history.push(this.snapshot());
 
     // Consumed BY ID, never by value (GDD §3.5).
     this.consumed.add(left.id);
