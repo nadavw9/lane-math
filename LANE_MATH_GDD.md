@@ -717,6 +717,20 @@ Do **not** announce failure with a banner, modal or status text reading "no solu
 
 An interim banner is acceptable during Phases 3–4 for debuggability and must be replaced in the Phase 5 art pass.
 
+**§9.4 governs the moment, not the aftermath.** The board announces failure by rejecting the number — no banner, no modal, no "no solution exists". Once that has read, the player needs a way out.
+
+Options appear AFTER the rejection has settled, not during it:
+
+| Option | Effect |
+|---|---|
+| **Restart** | Rewind to level start (§4.3). Costs a life unless it is the first failure on a never-cleared level (§5.2). |
+| **Continue** | Watch a rewarded ad. Rewind to the BRANCH POINT — the state just before the move that doomed the level. Costs no life. |
+| **Map** | Leave. Progress is retained. |
+
+**Continue deliberately leaks where the mistake was.** §4.3 rewinds to the start precisely because rewinding to the branch point tells the player which move was wrong. Selling that information is consistent with §5.4's hints, which sell the same thing. Failures still count against stars (§5.1), so it cannot be farmed for a 3-star clear.
+
+Limit: at most TWO continues per level attempt, so a level cannot be brute-forced entirely through ads.
+
 ### 9.5 Feel
 
 **Feel is built before art, on placeholder geometry.** It is the largest single driver of retention and cannot be bolted on at the end.
