@@ -213,6 +213,43 @@ try {
       state.atlasFailures === 0,
       `every atlas loaded${state.atlasFailures ? `: ${JSON.stringify(state.failedNames)} failed` : ""}`,
     );
+
+    /*
+     * AND THE STATES A BOOT NEVER REACHES.
+     *
+     * Booting only ever shows `idle`. A token asks for `<base>-unlit` when it
+     * is SPENT, which happens the first time a player exhausts an operator
+     * budget — so an atlas with only lit frames passes every check above and
+     * then silently drops a spent dial back to procedural mid-game, next to
+     * real art. Checking only the first frame is how a sprite gate stays green
+     * over a board that degrades as soon as it is played.
+     */
+    await page.evaluate(() => window.laneMath.playIntoFailure());
+    await page.waitForTimeout(600);
+    const played = await page.evaluate(() => ({
+      missing: window.laneMath.diagnostics().spritesMissing,
+      names: window.laneMath.sprites().missing,
+    }));
+    /*
+     * KNOWN GAP, DECLARED RATHER THAN IGNORED.
+     *
+     * No family has `-unlit` art yet: the atlases ship lit frames only. So a
+     * spent token falls back to procedural, which is correct behaviour and a
+     * real visual gap — the reason ?sprites=1 is not the default. It is listed
+     * here instead of silently tolerated so that any OTHER miss still fails,
+     * and so this line has to be deleted when the unlit art lands.
+     */
+    const knownGap = (name) => name.endsWith("-unlit");
+    const unexpected = played.names.filter((n) => !knownGap(n));
+    const expected = played.names.filter(knownGap);
+    if (expected.length) {
+      process.stdout.write(`  NOTE  spent-state art absent (expected): ${JSON.stringify(expected)}
+`);
+    }
+    check(
+      unexpected.length === 0,
+      `no unexpected sprite fell back after play${unexpected.length ? `: ${JSON.stringify(unexpected)}` : ""}`,
+    );
   }
   check(errors.length === 0, `no errors during boot${errors.length ? `:\n      ${errors.join("\n      ")}` : ""}`);
 

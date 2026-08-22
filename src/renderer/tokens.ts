@@ -153,7 +153,52 @@ export function targetPlate(w: number, h: number, value: string, style: TokenSty
   }
   token.addChild(g);
 
+  /*
+   * THE RECESSED PANEL (ART_DIRECTION §5).
+   *
+   * The numeral does not sit on the brass. Measured, plaque brass is L 0.206 —
+   * a mid-tone that crowds text from both directions: ink navy reaches only
+   * 3.54:1 against it and cream 3.41:1, both under the 4.5:1 text bar, and the
+   * near-black that would pass reads harsh on warm metal. A dark panel is inset
+   * into the plaque instead and the numeral drawn in cream on that, which
+   * measures 14.50:1 and is what an engraved instrument nameplate actually is:
+   * a darkened inset with the marking cut into it.
+   *
+   * Sized to the numeral rather than to a fraction of the plate, so a two-digit
+   * target does not crowd the cut that a one-digit target leaves half empty.
+   */
   const text = label(value, Math.min(h * 0.52, 30), style.text);
+  const inset = new Graphics();
+  const padX = text.height * 0.34;
+  const padY = text.height * 0.16;
+  const panelW = Math.min(w * 0.74, text.width + padX * 2);
+  const panelH = Math.min(h * 0.66, text.height + padY * 2);
+  const panelX = (w - panelW) / 2;
+  const panelY = (h - panelH) / 2;
+  const radius = Math.min(panelW, panelH) * 0.2;
+
+  inset.roundRect(panelX, panelY, panelW, panelH, radius).fill({ color: PALETTE.felt });
+
+  /*
+   * What makes it read as CUT rather than painted on: with one light from the
+   * upper left, the inside of the top wall is the surface turned away from it,
+   * so a cut carries a soft dark band there and a thin lit edge along the
+   * bottom where the far wall catches the light. Painted-on dark has neither.
+   */
+  const bands = Math.max(2, Math.round(panelH * 0.12));
+  for (let i = 0; i < bands; i++) {
+    inset
+      .moveTo(panelX + radius * 0.7, panelY + 0.5 + i)
+      .lineTo(panelX + panelW - radius * 0.7, panelY + 0.5 + i)
+      .stroke({ width: 1, color: 0x000000, alpha: 0.3 * (1 - i / bands) });
+  }
+  inset
+    .moveTo(panelX + radius * 0.7, panelY + panelH - 0.75)
+    .lineTo(panelX + panelW - radius * 0.7, panelY + panelH - 0.75)
+    .stroke({ width: 1.5, color: 0xffffff, alpha: 0.13 });
+
+  token.addChild(inset);
+
   text.position.set(w / 2, h / 2);
   token.addChild(text);
   return token;
