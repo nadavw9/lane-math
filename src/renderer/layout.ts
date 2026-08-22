@@ -183,7 +183,15 @@ const TARGET_GAP = 6;
 const POOL_MAX_PER_ROW = 6;
 const EQUATION_ROW_H = 60;
 const EQUATION_PAD = 10;
-const HINT_LINE_H = 16;
+/**
+ * One hint line. Exported because the renderer draws the rows and was carrying
+ * its own copy of the number — two places to change, one of which would be
+ * forgotten.
+ *
+ * 22 rather than 16: the line is led by a cut-gem mark (emblems.ts) which needs
+ * to read as a faceted stone, and facets need pixels.
+ */
+export const HINT_LINE_H = 22;
 const STATUS_H = 60;
 /** Room for the lives/stars HUD along the top of the lane. */
 const LANE_HEADER = 44;

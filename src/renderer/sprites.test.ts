@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  failedAtlases,
+  loadAtlas,
   missingSprites,
   numeralCentre,
   opacityFor,
@@ -91,6 +93,32 @@ describe("a missing texture degrades visibly, never silently", () => {
     spriteFor("cube-lit");
     spriteFor("dial-lit");
     expect(missingSprites()).toEqual(["cube-lit", "dial-lit"]);
+  });
+});
+
+describe("a failed atlas is visible even though it records no misses", () => {
+  it("names the family that did not load", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: false })) as unknown as typeof fetch;
+    try {
+      expect(await loadAtlas("tiles", "/")).toBe(false);
+      expect(failedAtlases()).toEqual(["tiles"]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("is the ONLY signal, because a disabled path records nothing", () => {
+    /*
+     * Renderer.init calls setSpritesEnabled(false) when a family fails, and
+     * spriteFor() returns early while disabled — so not one miss is recorded
+     * and missingSprites() stays empty while the whole board draws
+     * procedurally. Deleting tiles.json from a build left spritesMissing at 0.
+     * This test exists so nobody "simplifies" failedAtlases away again.
+     */
+    setSpritesEnabled(false);
+    spriteFor("cube-lit");
+    expect(missingSprites()).toEqual([]);
   });
 });
 

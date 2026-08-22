@@ -15,6 +15,19 @@
        * `swap` so a slow load shows fallback digits rather than no digits. A
        * blank board is the failure mode this project keeps having.
        */
+      /*
+       * PROVENANCE — the file is the LATIN subset of Outfit 800:
+       *   fonts.gstatic.com/s/outfit/v15/QGYyz_MVcBeNP4NjuGObqx1XmO1I4bCyO4a0Ew.woff2
+       *   unicode-range U+0000-00FF, U+2000-206F, U+2212, ...
+       *
+       * It was the LATIN-EXT subset until 2026-08-21, taken by a `| head -1`
+       * over a css2 response that returns TWO @font-face blocks. latin-ext
+       * starts at U+0100, so the file held no digits, no `=` and no
+       * punctuation, and every glyph in the game silently fell back to
+       * system-ui. Take the block whose unicode-range STARTS AT U+0000; there
+       * is no unicode-range descriptor here, so whatever is in the file is
+       * everything the game gets. `node tools/font-coverage.mjs` proves it.
+       */
       @font-face {
         font-family: "Outfit";
         src: url("./assets/fonts/outfit-800.woff2") format("woff2");

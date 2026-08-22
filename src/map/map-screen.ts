@@ -1,6 +1,7 @@
 import { Container, Text, TextStyle } from "pixi.js";
 
 import { button } from "../renderer/button.js";
+import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { BACKDROP, DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, squaredPaper, woodenTray } from "../renderer/tokens.js";
@@ -102,12 +103,14 @@ export class MapScreen {
     text: string,
     colour: number,
     onTap?: () => void,
+    emblem?: () => Container,
   ): Container {
     const control = button({
       width: w,
       height: h,
       label: text,
       labelColour: colour,
+      emblem,
       onTap,
     });
     control.position.set(x, y);
@@ -149,13 +152,13 @@ export class MapScreen {
 
     // Best-ever stars, which only a cleared plate has.
     if (level.state === "cleared") {
-      const stars = this.text(
-        `${"★".repeat(level.stars)}${"☆".repeat(Math.max(0, 3 - level.stars))}`,
-        10,
-        PALETTE.highlight,
-      );
-      stars.anchor.set(0.5);
-      stars.position.set(w / 2, h - 9);
+      // Drawn objects, not glyphs: Outfit has no star, so this used to be
+      // whatever dingbat the device shipped (see emblems.ts).
+      // 8, and sat low: at 9 the row clipped the numeral's descender, which is
+      // the kind of overlap that only shows up once real progress is on screen.
+      const size = 8;
+      const stars = emblemMeter("star", level.stars, 3, size);
+      stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
       control.addChild(stars);
     }
 
@@ -181,18 +184,22 @@ export class MapScreen {
     this.root.addChild(this.entry(title, MAP_BANDS.header));
 
     // Banked total. The map is the only place this belongs (§9.6: gold = earned).
-    const banked = this.text(`${v.starsAvailable}★`, 17, PALETTE.highlightInk);
+    // The count reads as text and the star reads as an object, so the emblem is
+    // placed after the number rather than being a character inside it.
+    const bankedStar = 15;
+    const banked = this.text(`${v.starsAvailable}`, 17, PALETTE.highlightInk);
     banked.anchor.set(1, 0);
-    banked.position.set(DESIGN.width - PAD - 10, PAD + 9);
+    banked.position.set(DESIGN.width - PAD - 10 - bankedStar - 4, PAD + 9);
     this.root.addChild(this.entry(banked, MAP_BANDS.header));
+    const bankedEmblem = star(bankedStar);
+    bankedEmblem.position.set(DESIGN.width - PAD - 10 - bankedStar / 2, PAD + 9 + bankedStar * 0.62);
+    this.root.addChild(this.entry(bankedEmblem, MAP_BANDS.header));
 
     // §7.6: lives are ABSENT before 2-8, not greyed out.
     if (v.showLives) {
-      const lives = this.text(
-        `${"♥".repeat(v.lives)}${"·".repeat(Math.max(0, v.maxLives - v.lives))}`,
-        14,
-        v.lives === 0 ? PALETTE.failed : PALETTE.highlightInk,
-      );
+      // §8: a brass pocket-watch, not a heart. Lives refill on a timer, so the
+      // object that stands for one is a clock.
+      const lives = emblemMeter("life", v.lives, v.maxLives, 14);
       lives.position.set(PAD + 10, PAD + 33);
       this.root.addChild(lives);
     }
@@ -244,21 +251,34 @@ export class MapScreen {
      * that is the real answer. This is a composed placeholder, not the design.
      */
     const cleared = v.levels.filter((l) => l.state === "cleared").length;
-    const progress = this.text(
-      `${cleared} of ${v.levels.length} cleared · ${v.totalStars}★ earned`,
-      12,
-      PALETTE.text,
-    );
-    progress.anchor.set(0.5, 0);
-    progress.position.set(DESIGN.width / 2, y + 44);
+    // Text, emblem, text — measured and centred as one run, because the star is
+    // an object now and cannot be a character in the middle of a string.
+    const progress = new Container();
+    const size = 11;
+    const head = this.text(`${cleared} of ${v.levels.length} cleared · ${v.totalStars}`, 12, PALETTE.text);
+    const mark = star(size);
+    const tail = this.text("earned", 12, PALETTE.text);
+    const gap = 4;
+    head.position.set(0, 0);
+    mark.position.set(head.width + gap + size / 2, head.height / 2);
+    tail.position.set(head.width + gap + size + gap, 0);
+    progress.addChild(head, mark, tail);
+    progress.position.set(DESIGN.width / 2 - (head.width + tail.width + size + gap * 2) / 2, y + 44);
     progress.alpha = 0.75;
     this.root.addChild(this.entry(progress, MAP_BANDS.footer));
 
     // --- footer: shop and modes, each absent before its unlock (§7.6) ---
     let footerX = PAD;
     if (v.showShop) {
-      this.chip(footerX, y, 104, 30, `hints ${v.starsAvailable}★`, PALETTE.highlight, () =>
-        this.events?.onOpenShop(),
+      this.chip(
+        footerX,
+        y,
+        104,
+        30,
+        `hints ${v.starsAvailable}`,
+        PALETTE.highlight,
+        () => this.events?.onOpenShop(),
+        () => star(11),
       );
       footerX += 112;
     }

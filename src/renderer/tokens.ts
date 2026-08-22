@@ -1,5 +1,6 @@
 import { Container, Graphics, Matrix, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
+import { radical } from "./emblems.js";
 import { PALETTE } from "./layout.js";
 import {
   numeralCentre,
@@ -289,7 +290,8 @@ export function operatorToken(
     "*": "dial-times",
     "÷": "dial-divide",
     "/": "dial-divide",
-    "√": "dial-sqrt",
+    // Keyed on the ASCII identity, because the character itself is never typed.
+    sqrt: "dial-sqrt",
   }[glyph];
   const art = dialBase ? spriteBase(dialBase, state, size, size) : null;
   if (art) {
@@ -336,6 +338,15 @@ export function operatorToken(
     g.circle(radius, radius, radius).stroke({ width: 3, color: style.outline });
   }
   token.addChild(g);
+
+  // `√` is not in Outfit at any subset, so typing it would fall back to a
+  // system font while the other four dials render in the game's own. Drawn.
+  if (glyph === "sqrt") {
+    const mark = radical(size * 0.5, style.text);
+    mark.position.set(radius, radius);
+    token.addChild(mark);
+    return token;
+  }
 
   const text = label(glyph, size * 0.5, style.text);
   text.position.set(radius, radius);

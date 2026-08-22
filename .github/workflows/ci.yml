@@ -82,6 +82,30 @@ jobs:
           SMOKE_BASE: /lane-math/
         run: node tools/smoke.mjs
 
+      # SPRITES MUST NOT SILENTLY FALL BACK. Every token can draw itself
+      # procedurally, so a broken atlas renders flat rectangles instead of amber
+      # glass — no throw, no log, and it reads as a deliberate art style to
+      # anyone who did not write it. With ?sprites=1 the fallback is a failure.
+      - name: Boot smoke — real sprite atlas
+        env:
+          SMOKE_BASE: /lane-math/
+          SMOKE_QUERY: "?sprites=1"
+        run: node tools/smoke.mjs
+
+      # FONT COVERAGE — the other gate that only the artefact can answer.
+      # The bundled Outfit file was the latin-ext subset (unicode-range starts
+      # at U+0100), so it contained no digits, no `=` and no punctuation, and
+      # every glyph in the game silently fell back to system-ui for weeks. A
+      # missing glyph 404s nothing and logs nothing; it is only visible in
+      # pixels, which is exactly what this measures.
+      - name: Font coverage — every glyph the UI draws
+        env:
+          # The artefact is built for the Pages base, so the server has to mount
+          # there. Without this every asset 404s and the inventory is empty —
+          # which is how this step failed on its first CI run.
+          SMOKE_BASE: /lane-math/
+        run: node tools/font-coverage.mjs
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

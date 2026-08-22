@@ -172,6 +172,10 @@ try {
       levelId: api?.state ? (api.state()?.levelId ?? null) : null,
       spritesEnabled: api?.diagnostics ? api.diagnostics().spritesEnabled : 0,
       spritesLoaded: api?.diagnostics ? api.diagnostics().spritesLoaded : 0,
+      spritesMissing: api?.diagnostics ? api.diagnostics().spritesMissing : -1,
+      atlasFailures: api?.diagnostics ? api.diagnostics().spriteAtlasFailures : -1,
+      missingNames: api?.sprites ? api.sprites().missing : [],
+      failedNames: api?.sprites ? api.sprites().failed : [],
     };
   });
 
@@ -181,6 +185,34 @@ try {
   check(state.levelId !== null, `a level is open (${state.levelId})`);
   if (expectsSprites) {
     check(state.spritesEnabled === 1 && state.spritesLoaded === 8, `real WebP sprites loaded (${state.spritesLoaded}/8)`);
+    /*
+     * A MISSING ATLAS MUST FAIL, NOT FALL BACK.
+     *
+     * Every token can draw itself procedurally, which is the right behaviour
+     * for a player and the wrong behaviour for a build: a broken atlas renders
+     * flat rounded rectangles instead of amber glass, throws nothing, logs
+     * nothing, and looks like a deliberate art style to anyone who did not
+     * write it. That is the same silent-degradation class as the three
+     * silent-blank boot failures above — it just degrades to the wrong picture
+     * instead of to no picture.
+     *
+     * So with ?sprites=1 the fallback is a FAILURE, and the names of whatever
+     * the game asked for and did not get are printed.
+     */
+    check(
+      state.spritesMissing === 0,
+      `no sprite fell back to procedural${state.spritesMissing ? `: ${JSON.stringify(state.missingNames)}` : ""}`,
+    );
+    /*
+     * AND the atlas actually loaded. The check above is necessary but NOT
+     * sufficient, proven by deleting tiles.json: the sprite path switches
+     * itself off, spriteFor() returns early without recording anything, and
+     * spritesMissing sits at 0 while the whole board draws procedurally.
+     */
+    check(
+      state.atlasFailures === 0,
+      `every atlas loaded${state.atlasFailures ? `: ${JSON.stringify(state.failedNames)} failed` : ""}`,
+    );
   }
   check(errors.length === 0, `no errors during boot${errors.length ? `:\n      ${errors.join("\n      ")}` : ""}`);
 

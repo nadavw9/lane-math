@@ -44,6 +44,18 @@ let enabled = false;
 const entries = new Map<string, SpriteEntry>();
 const missing = new Set<string>();
 
+/**
+ * Families asked for that did not load.
+ *
+ * SEPARATE FROM `missing`, and it has to be. A failed atlas load disables the
+ * whole sprite path (Renderer.init), and `spriteFor` returns early while
+ * disabled — so not one miss is ever recorded and `missingSprites()` stays
+ * empty. The single most important failure, the atlas not loading at all, is
+ * the one that set cannot see. Verified: deleting tiles.json left
+ * `spritesMissing` at 0 while the board rendered entirely procedurally.
+ */
+const failed = new Set<string>();
+
 export function setSpritesEnabled(on: boolean): void {
   enabled = on;
 }
@@ -66,6 +78,11 @@ export function loadedSprites(): string[] {
   return [...entries.keys()].sort();
 }
 
+/** Atlas families that were requested and did not load. */
+export function failedAtlases(): string[] {
+  return [...failed].sort();
+}
+
 /** Look up a sprite, recording the miss if there is not one. */
 export function spriteFor(name: string): SpriteEntry | null {
   if (!enabled) return null;
@@ -84,17 +101,21 @@ export function spriteFor(name: string): SpriteEntry | null {
  * keep drawing, which is the state the game shipped in.
  */
 export async function loadAtlas(family: string, base = "/"): Promise<boolean> {
+  const fail = (): false => {
+    failed.add(family);
+    return false;
+  };
   try {
     // Pixi sees a `frames` field and may claim atlas metadata as a spritesheet
     // before this loader can read its explicit WebP image field. Fetching the
     // small manifest as JSON keeps ownership here and leaves Pixi to load the
     // texture, which is the part it is designed to cache and decode.
     const response = await fetch(`${base}assets/sprites/${family}.json`);
-    if (!response.ok) return false;
+    if (!response.ok) return fail();
     const data = (await response.json()) as AtlasData;
     const image = data?.image ?? `${family}.png`;
     const sheet = await Assets.load<Texture>(`${base}assets/sprites/${image}`);
-    if (!data?.frames || !sheet) return false;
+    if (!data?.frames || !sheet) return fail();
 
     for (const [name, frame] of Object.entries(data.frames)) {
       entries.set(name, {
@@ -105,9 +126,10 @@ export async function loadAtlas(family: string, base = "/"): Promise<boolean> {
         frame,
       });
     }
+    failed.delete(family);
     return true;
   } catch {
-    return false;
+    return fail();
   }
 }
 
@@ -119,6 +141,7 @@ export function registerForTest(name: string, frame: Frame, texture: Texture): v
 export function resetSprites(): void {
   entries.clear();
   missing.clear();
+  failed.clear();
   enabled = false;
 }
 
