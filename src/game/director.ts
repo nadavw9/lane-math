@@ -360,10 +360,23 @@ export class Director {
    */
   private failureExit(): FailureExit {
     const continuesLeft = Math.max(0, MAX_CONTINUES - this.continuesUsed);
+    /*
+     * A life is only at stake where lives EXIST.
+     *
+     * `!lastFailureExempt` alone was wrong: §5.2's exemption is
+     * `livesActive && !cleared && !firstFailureUsed`, so on a level where the
+     * lives system is not active at all — World 1, and anything before 2-8
+     * (§7.2, §7.6) — nothing is exempt because there is nothing to exempt, and
+     * the panel would have told a World 1 player that starting over costs them
+     * a life they do not have. The exemption being false has two very different
+     * causes and only one of them means "this will cost you".
+     */
+    const livesActive =
+      this.economy !== null && livesActiveFor(this.level.id, this.economy.config);
     return {
       canContinue: continuesLeft > 0 && this.branchPoint() !== null,
       continuesLeft,
-      restartCostsLife: !this.lastFailureExempt,
+      restartCostsLife: livesActive && !this.lastFailureExempt,
     };
   }
 

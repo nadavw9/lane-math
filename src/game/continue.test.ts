@@ -146,6 +146,23 @@ describe("§9.4 continue", () => {
     if (spent.phase === "failed") expect(spent.exit?.continuesLeft).toBe(0);
   });
 
+  it("charges a life only where lives exist and §5.2 has been used", () => {
+    /*
+     * The free-case headline fires on `restartCostsLife === false`, so what
+     * that flag means is copy, not just state. §5.2's exemption is
+     * `livesActive && !cleared && !firstFailureUsed`, and the flag was
+     * originally just `!exempt` — which claims a life cost on any level where
+     * lives are NOT ACTIVE at all, because nothing can be exempt there. World 1
+     * would have told the player a life was gone that never existed.
+     */
+    const { director, level } = fresh();
+    const failed = playIntoFailure(director, level);
+    expect(failed.phase).toBe("failed");
+    // 1-03 is World 1, where §7.2 keeps lives off entirely.
+    expect(failed.economy?.livesActive ?? false).toBe(false);
+    expect(failed.exit?.restartCostsLife).toBe(false);
+  });
+
   it("refuses to continue from a board that has not failed", () => {
     const { director } = fresh();
     director.handle({ type: "tick" });

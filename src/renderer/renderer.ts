@@ -1749,7 +1749,26 @@ export class Renderer {
        * names the choice being offered, which is new information the board
        * cannot show. One line, per §7.7.
        */
-      const heading = this.text("the lane is stuck", 15, PALETTE.tokenInk);
+      /*
+       * THE HEADLINE CARRIES THE STAKES, not the mechanism.
+       *
+       * It read "the lane is stuck", which tells the player the one thing they
+       * already know — it is why the panel appeared. What they do not know is
+       * what starting over costs, and that line was sitting in 11px orange
+       * BELOW the buttons. The hierarchy was inverted; this is the fix.
+       *
+       * The free variant fires on §5.2 exactly: first failure on a level never
+       * cleared, persisted per level, so it is not "first this session" and not
+       * "first since the last clear" — once a level is cleared the exemption is
+       * gone for good.
+       */
+      const heading = this.text(
+        exit.restartCostsLife
+          ? "starting over costs a life — going back does not"
+          : "this restart is free — and going back is too",
+        15,
+        PALETTE.tokenInk,
+      );
       heading.anchor.set(0.5, 0);
       heading.position.set(innerX + inner.width / 2, innerY + 10);
       this.root.addChild(this.entry(heading, BOARD_BANDS.equation));
@@ -1768,7 +1787,7 @@ export class Renderer {
        * so it earns the top slot and the gold.
        */
       const continueLabel = exit.canContinue
-        ? "watch an ad · rewind"
+        ? "watch an ad · back to where it still worked"
         : exit.continuesLeft === 0
           ? "continues used"
           : "nothing to rewind to";
@@ -1822,17 +1841,6 @@ export class Renderer {
         ),
       );
 
-      // §5.2's free first failure is the thing a player is most likely to be
-      // wrong about, and being wrong about it means believing a restart cost a
-      // life when it did not.
-      const cost = this.text(
-        exit.restartCostsLife ? "restart costs a life" : "this restart is free",
-        11,
-        PALETTE.highlightInk,
-      );
-      cost.anchor.set(0.5, 0);
-      cost.position.set(innerX + inner.width / 2, seatY(2) + 2);
-      this.root.addChild(this.entry(cost, BOARD_BANDS.equation));
     }
 
     // A win still needs an exit, so the cleared state offers one quietly.
