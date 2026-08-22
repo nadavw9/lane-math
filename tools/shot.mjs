@@ -7,8 +7,13 @@ import { chromium } from "playwright";
 /**
  * SCREENSHOT THE BUILT ARTEFACT, at phone aspect and real DPR.
  *
- *   node tools/shot.mjs out.png                     # procedural tokens
- *   SHOT_QUERY=?sprites=1 node tools/shot.mjs a.png # the real atlas
+ *   node tools/shot.mjs 01-board.png                     # procedural tokens
+ *   SHOT_QUERY=?sprites=1 node tools/shot.mjs 01-board.png # the real atlas
+ *
+ * A bare filename lands in docs/review/, which is the ONE review folder for
+ * this repo and is wiped and replaced per batch. Screenshots do not go in the
+ * .claude projects directory — that is shared across every project on this
+ * machine and had collected 371 stray PNGs before anyone noticed.
  *
  * THE QUERY MATTERS. The sprite path is opt-in behind ?sprites=1 (main.ts), and
  * without it the game draws its procedural fallback — flat rounded rectangles
@@ -17,7 +22,8 @@ import { chromium } from "playwright";
  * exact confusion is why the query is a named parameter here and echoed in the
  * output rather than buried in a URL.
  */
-const out = process.argv[2] ?? "shot.png";
+const raw = process.argv[2] ?? "shot.png";
+const out = raw.includes("/") || raw.includes("\\") ? raw : `docs/review/${raw}`;
 const port = Number(process.env["SHOT_PORT"] ?? 4177);
 
 function readBase() {
