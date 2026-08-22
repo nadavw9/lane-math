@@ -405,7 +405,7 @@ Nothing appears on screen before it is needed. Every system is a reward for prog
 | 2-1 | `×` | — |
 | **2-8** | **Lives** | **After** the player can reliably win. Granted at full 5, explained in one screen. |
 | 3-1 | `÷` | — |
-| 3-3 | Counted operators | — |
+| **3-3** | **Counted operators, and the count on the dial** | The remaining-uses counter appears with the rule it expresses. Before 3-3 there is nothing to count. **Never in Casual**, where operators are unlimited — an unlimited count is not a smaller number, it is a different game, and drawing an infinity symbol would teach a scarcity that is not there. |
 | **3-6** | **Hint shop** | Only once the player has enough stars to actually afford something. A shop full of unaffordable items teaches "this is not for me." |
 | 3-10 | **Difficulty mode selector** | Choosing a mode before understanding the game is a decision made on zero information. |
 | 4-1 | `√` | — |
