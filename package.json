@@ -25,7 +25,8 @@
     "atlas:all": "npm run atlas:operators && npm run atlas:operators-unlit && npm run atlas:tiles && npm run atlas:plaques",
     "atlas:verify": "node tools/verify-atlases.mjs",
     "atlas:operators-unlit": "vite-node tools/process-sprites.mts -- --family operators-unlit --expect 5 --source assets/raw --size 360 --names dial-plus-unlit,dial-minus-unlit,dial-times-unlit,dial-divide-unlit,dial-sqrt-unlit --atlas operators-unlit",
-    "verify:telemetry": "node tools/verify-telemetry.mjs"
+    "verify:telemetry": "node tools/verify-telemetry.mjs",
+    "verify:viewports": "node tools/verify-viewports.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

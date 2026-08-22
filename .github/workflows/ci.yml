@@ -100,6 +100,17 @@ jobs:
           SMOKE_QUERY: "?sprites=0"
         run: node tools/smoke.mjs
 
+      # THE BOARD MUST FIT ON A REAL PHONE, not just on the design viewport.
+      # It shipped with #app hard-coded to 393x852, so the frame ignored the
+      # screen: on a device with browser chrome the pool fell off the bottom and
+      # the commit button was clipped at the right. Measured at the design size
+      # in a browser it STILL overflowed by 139x302px — one viewport is how a
+      # layout ships broken on every other one.
+      - name: Viewport fit — 16:9 through 21:9
+        env:
+          SMOKE_BASE: /lane-math/
+        run: node tools/verify-viewports.mjs
+
       # FONT COVERAGE — the other gate that only the artefact can answer.
       # The bundled Outfit file was the latin-ext subset (unicode-range starts
       # at U+0100), so it contained no digits, no `=` and no punctuation, and

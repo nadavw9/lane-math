@@ -206,3 +206,23 @@ FAILURE MODAL COPY (2026-08-22)
   primary button            "watch an ad · back to where it still worked"
   The duplicate cost line below the buttons is removed — saying it twice WAS
   the hierarchy inversion.
+
+================================================================================
+VIEWPORT FIT — the board did not fit a real phone (2026-08-22)
+
+42-smallest-viewport.png  360x640, the smallest supported size, 4-01. Whole
+                          board visible: six targets, the "=" button complete,
+                          three dials with counts, all 14 tiles, status band.
+
+MEASURED OVERFLOW, before -> after (canvas past the visual viewport, px)
+  360x640  small 16:9              172 x 306   ->   0 x 0
+  393x852  design                  139 x 302   ->   0 x 0
+  412x915  large                   120 x 267   ->   0 x 0
+  412x960  21:9                    120 x 280   ->   0 x 0
+  393x720  design, chrome shown    139 x 255   ->   0 x 0
+
+  Note the design viewport was ALSO broken, by 139x302px. One viewport was
+  never the problem; the harness never measured overflow at any of them.
+
+WORST CASE, 4-01 casual with one hint row: content spans y 16..888 = 872px of
+the 900px surface. At 360x640 it scales to 11..631 within 640 — inside.

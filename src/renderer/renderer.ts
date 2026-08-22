@@ -235,14 +235,50 @@ export class Renderer {
     // are reported — falls off the bottom of a short window and the player
     // cannot see why the level stopped.
     const fit = (): void => {
-      // Fit the phone frame this canvas sits in, not the browser window.
+      /*
+       * visualViewport, NOT innerHeight.
+       *
+       * innerHeight includes the strip hidden behind mobile browser chrome, so
+       * it reports a taller window than the player can actually see and the
+       * board scales to a height that is partly off-screen. visualViewport
+       * reports what is visible right now, and it CHANGES as the address bar
+       * slides away — which is why both of its events are handled below and not
+       * just window resize.
+       */
+      const vv = window.visualViewport;
+      const availableW = vv ? vv.width : window.innerWidth;
+      const availableH = vv ? vv.height : window.innerHeight;
+
+      /*
+       * The safe-area insets are applied to the body as padding, so the host's
+       * own box is already inset-corrected — but only along axes where the body
+       * actually got the space. Taking the smaller of the two keeps the board
+       * clear of a notch and a gesture bar without trusting either measurement
+       * alone.
+       */
       const box = host.getBoundingClientRect();
-      const scale = Math.min(box.height / DESIGN.height, box.width / DESIGN.width);
-      this.app.canvas.style.width = `${Math.round(DESIGN.width * scale)}px`;
-      this.app.canvas.style.height = `${Math.round(DESIGN.height * scale)}px`;
+      const width = Math.min(availableW, box.width || availableW);
+      const height = Math.min(availableH, box.height || availableH);
+
+      // The design surface scales UNIFORMLY. §9.1 spans 16:9 to 21:9 and the
+      // board is laid out for one aspect, so the spare axis is letterboxed
+      // rather than stretched — a stretched board would put the tap targets
+      // somewhere other than where they are drawn.
+      const scale = Math.min(height / DESIGN.height, width / DESIGN.width);
+      this.app.canvas.style.width = `${Math.floor(DESIGN.width * scale)}px`;
+      this.app.canvas.style.height = `${Math.floor(DESIGN.height * scale)}px`;
     };
+
     fit();
     window.addEventListener("resize", fit);
+    window.addEventListener("orientationchange", fit);
+    /*
+     * Chrome hiding and revealing does not always fire a window resize, and on
+     * iOS it fires `scroll` on the visual viewport instead. Both, or the board
+     * stays sized for the layout the page had when it loaded.
+     */
+    window.visualViewport?.addEventListener("resize", fit);
+    window.visualViewport?.addEventListener("scroll", fit);
   }
 
   onInput(handler: (input: InputEvent) => void): void {

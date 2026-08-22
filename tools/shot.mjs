@@ -96,7 +96,18 @@ const seed = process.env["SHOT_SAVE"] ?? "";
 const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
-const page = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3 });
+/*
+ * SHOT_VIEWPORT=360x640 to photograph a size other than the design one. The
+ * layout shipped broken on every real phone because it was only ever seen at
+ * 393x852, so being able to shoot the small end cheaply matters.
+ */
+const [vpW, vpH] = (process.env["SHOT_VIEWPORT"] ?? "393x852").split("x").map(Number);
+const page = await browser.newPage({
+  viewport: { width: vpW, height: vpH },
+  deviceScaleFactor: 3,
+  isMobile: true,
+  hasTouch: true,
+});
 const level = process.env["SHOT_LEVEL"] ?? "";
 if (seed) {
   await page.addInitScript((save) => {
