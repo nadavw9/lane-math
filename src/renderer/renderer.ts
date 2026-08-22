@@ -200,7 +200,7 @@ export class Renderer {
      */
     if (spritesEnabled()) {
       const loaded = await Promise.all(
-        ["tiles", "operators"].map((family) => loadAtlas(family, import.meta.env.BASE_URL)),
+        ["tiles", "operators", "plaques"].map((family) => loadAtlas(family, import.meta.env.BASE_URL)),
       );
       if (!loaded.every(Boolean)) setSpritesEnabled(false);
     }
@@ -995,7 +995,9 @@ export class Renderer {
               ? PALETTE.failed
               : PALETTE.highlight
             : undefined,
-        }),
+        // Two plaque castings, picked from the target's position in the queue
+        // so a column does not repeat one of them down its length.
+        }, i),
         slot.x + shove.dx,
         slot.y + shove.dy,
         ),

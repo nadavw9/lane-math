@@ -55,6 +55,13 @@ jobs:
       - name: Full suite
         run: npx vitest run
 
+      # ATLASES MUST REGENERATE TO THE SAME BYTES. The operators atlas could
+      # not be rebuilt for months because nobody recorded the flags, and the
+      # tool's defaults produce a different frame size. An asset whose build
+      # command is unknown cannot be maintained.
+      - name: Atlas reproducibility
+        run: npm run atlas:verify
+
       # BASE MATTERS: Pages serves from /lane-math/, so the assets have to be
       # built against that prefix. Capacitor and local dev stay at "/", which is
       # why this is a flag here rather than a setting in vite.config.

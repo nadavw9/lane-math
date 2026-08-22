@@ -97,62 +97,15 @@ export function label(value: string, size: number, fill: number): Text {
   return text;
 }
 
-/** Flat-top hexagon path, inset into its box. */
-function hexPath(g: Graphics, w: number, h: number): Graphics {
-  const notch = Math.min(w * 0.16, h * 0.5);
-  return g.poly([
-    notch, 0,
-    w - notch, 0,
-    w, h / 2,
-    w - notch, h,
-    notch, h,
-    0, h / 2,
-  ]);
-}
-
-export interface TokenStyle {
-  readonly fill: number;
-  readonly text: number;
-  /** Bevel highlight/shadow strength. 0 flattens the token (recessed plates). */
-  readonly bevel: number;
-  readonly outline?: number | undefined;
-  /**
-   * How far off the surface the token is sitting, 1 = resting (§9.5).
-   *
-   * Scales the existing drop shadow rather than changing any colour or shape,
-   * so it is feel and not art: a lifted tile throws a longer, softer shadow
-   * exactly as it would on a table, and that shadow is most of what makes the
-   * lift read as height rather than as the tile simply getting bigger.
-   */
-  readonly elevation?: number | undefined;
-}
-
 /**
- * Target plate — hexagonal, cool, flat, recessed (§9.2).
+ * The recessed panel and its numeral, drawn over whatever the plate is.
  *
- * Recessed rather than raised on purpose: targets are the thing you spend
- * tiles ON, so they must not read as pickable.
+ * Shared by the sprite and procedural paths so the cut is identical either way
+ * — the panel is the thing that makes the numeral legible (§5), and it must not
+ * differ depending on whether art happens to be loaded.
  */
-export function targetPlate(w: number, h: number, value: string, style: TokenStyle): Container {
-  const token = new Container();
-  const g = new Graphics();
-
-  hexPath(g, w, h).fill(style.fill);
-  // The same substance as the tiles (§9.6) — one grain across every token type.
-  grainOver(g, (gr) => hexPath(gr, w, h), 0.13);
-
-  // Recess: dark along the top edge, light along the bottom. The plates are
-  // spent ON rather than picked up, so they sit deeper in the page than a tile.
-  hexPath(g, w, h).stroke({ width: 2, color: 0x000000, alpha: 0.35, alignment: 1 });
-  g.moveTo(w * 0.16, h - 1)
-    .lineTo(w * 0.84, h - 1)
-    .stroke({ width: 2, color: 0xffffff, alpha: 0.1 });
-
-  if (style.outline !== undefined) {
-    hexPath(g, w, h).stroke({ width: 3, color: style.outline });
-  }
-  token.addChild(g);
-
+function recessedPanel(w: number, h: number, value: string, style: TokenStyle): Container {
+  const panel = new Container();
   /*
    * THE RECESSED PANEL (ART_DIRECTION §5).
    *
@@ -197,12 +150,96 @@ export function targetPlate(w: number, h: number, value: string, style: TokenSty
     .lineTo(panelX + panelW - radius * 0.7, panelY + panelH - 0.75)
     .stroke({ width: 1.5, color: 0xffffff, alpha: 0.13 });
 
-  token.addChild(inset);
-
+  panel.addChild(inset);
   text.position.set(w / 2, h / 2);
-  token.addChild(text);
+  panel.addChild(text);
+  return panel;
+}
+
+/** Flat-top hexagon path, inset into its box. */
+function hexPath(g: Graphics, w: number, h: number): Graphics {
+  const notch = Math.min(w * 0.16, h * 0.5);
+  return g.poly([
+    notch, 0,
+    w - notch, 0,
+    w, h / 2,
+    w - notch, h,
+    notch, h,
+    0, h / 2,
+  ]);
+}
+
+export interface TokenStyle {
+  readonly fill: number;
+  readonly text: number;
+  /** Bevel highlight/shadow strength. 0 flattens the token (recessed plates). */
+  readonly bevel: number;
+  readonly outline?: number | undefined;
+  /**
+   * How far off the surface the token is sitting, 1 = resting (§9.5).
+   *
+   * Scales the existing drop shadow rather than changing any colour or shape,
+   * so it is feel and not art: a lifted tile throws a longer, softer shadow
+   * exactly as it would on a table, and that shadow is most of what makes the
+   * lift read as height rather than as the tile simply getting bigger.
+   */
+  readonly elevation?: number | undefined;
+}
+
+/**
+ * Target plate — hexagonal, cool, flat, recessed (§9.2).
+ *
+ * Recessed rather than raised on purpose: targets are the thing you spend
+ * tiles ON, so they must not read as pickable.
+ */
+export function targetPlate(
+  w: number,
+  h: number,
+  value: string,
+  style: TokenStyle,
+  variant = 0,
+): Container {
+  /*
+   * The engraved brass plaque (ART_DIRECTION §5), when there is art for it.
+   *
+   * Two base variants, chosen from the target's own index so a column of
+   * plaques does not repeat one casting. The FRONT-TARGET state is not a
+   * separate sprite: §8 lists a lit plaque as its own asset and it has not been
+   * delivered, and the gold rim and glow that state needs are drawn here
+   * anyway, over whichever base is showing.
+   */
+  const art = spriteBase("plaque", "idle", w, h, Math.abs(variant) % 2);
+  if (art) {
+    if (style.outline !== undefined) {
+      art.container.addChild(hexPath(new Graphics(), w, h).stroke({ width: 3, color: style.outline }));
+    }
+    art.container.addChild(recessedPanel(w, h, value, style));
+    return art.container;
+  }
+
+  const token = new Container();
+  const g = new Graphics();
+
+  hexPath(g, w, h).fill(style.fill);
+  // The same substance as the tiles (§9.6) — one grain across every token type.
+  grainOver(g, (gr) => hexPath(gr, w, h), 0.13);
+
+  // Recess: dark along the top edge, light along the bottom. The plates are
+  // spent ON rather than picked up, so they sit deeper in the page than a tile.
+  hexPath(g, w, h).stroke({ width: 2, color: 0x000000, alpha: 0.35, alignment: 1 });
+  g.moveTo(w * 0.16, h - 1)
+    .lineTo(w * 0.84, h - 1)
+    .stroke({ width: 2, color: 0xffffff, alpha: 0.1 });
+
+  if (style.outline !== undefined) {
+    hexPath(g, w, h).stroke({ width: 3, color: style.outline });
+  }
+  token.addChild(g);
+
+  token.addChild(recessedPanel(w, h, value, style));
   return token;
 }
+
 
 /**
  * Pool number tile — rounded square, warm, bevelled, tactile (§9.2).

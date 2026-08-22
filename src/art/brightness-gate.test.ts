@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 import {
+  BACKDROP,
   CONTENT_RANGE,
   DESIGN,
   PALETTE,
@@ -95,6 +96,8 @@ function asZone(name: string, rect: Rect, token: number): ZoneSpec {
 
 const POOL_ZONE = union(EXTREMES.map((b) => b.pool));
 const OPERATOR_ZONE = union(EXTREMES.map((b) => b.operators));
+/** Target plaques sit in the lane, which is the desk itself, not a tray. */
+const LANE_ZONE = union(EXTREMES.map((b) => b.lane));
 
 /** Wood is composited over the room, then the opaque felt is the token surface. */
 const FELT_LINED_TRAY = [
@@ -131,6 +134,55 @@ const ART_FAMILIES = [
     atlas: "operators",
     minimum: MIN_CONTRAST,
     zone: { ...asZone("operators / real brass", OPERATOR_ZONE, PALETTE.operator), furniture: FELT_LINED_TRAY },
+  },
+  /*
+   * Plaques are gated on BOTH grounds, because they are the one family that
+   * meets more than one. They sit in the lane, which is the desk surface, and
+   * the same casting has to hold up if a plaque is ever shown over felt. The
+   * desk is the harder of the two — it is far lighter than the felt lining, so
+   * a warm brass object has less separation from it.
+   */
+  {
+    name: "brass plaques on the lane",
+    atlas: "plaques",
+    minimum: MIN_CONTRAST,
+    /*
+     * MEASURED AND FAILING, DECLARED RATHER THAN SUPPRESSED.
+     *
+     * The plaque's body luminance is the lane's: median brass rgb 162,106,20 is
+     * L 0.1804 against the lane's L 0.1757, which is 1.02:1. Its extremes reach
+     * 2.92:1 at the dark bevel and 3.73:1 at the highlight, so the object is
+     * visible on screen — but by CHROMA, saturated gold against desaturated
+     * tan, and chroma is exactly what a sunlit phone and a colourblind viewer
+     * lose. This gate exists for that case.
+     *
+     * Unlike the light-angle rejection this is NOT a measurement artifact: no
+     * change of metric moves two equal luminances apart. Per §9.1's precedent
+     * the fix is the GROUND, not the threshold — the same brass measures
+     * 3.79:1 over the felt the trays already use.
+     *
+     * It does not fail the suite because the sprite path is opt-in and no
+     * player sees it. It is the reason ?sprites=1 cannot become the default,
+     * and it needs a design decision, not a tolerance.
+     */
+    blocking: false,
+    /*
+     * The lane's ground is squared paper over the room — BACKDROP, white at
+     * alpha 0.2 — not the bare desk. Gating brass against #704A32 would be
+     * measuring a surface the game never draws under a plaque, and the whole
+     * point of this file is to judge the ground a token actually meets.
+     */
+    zone: {
+      ...asZone("lane / real brass", LANE_ZONE, PALETTE.targetPlate),
+      furniture: [{ colour: BACKDROP.colour, alpha: BACKDROP.alpha }],
+    },
+  },
+  {
+    name: "brass plaques on felt",
+    atlas: "plaques",
+    minimum: MIN_CONTRAST,
+    zone: { ...asZone("lane / real brass over felt", LANE_ZONE, PALETTE.targetPlate), furniture: FELT_LINED_TRAY },
+    blocking: true,
   },
 ] as const;
 
@@ -228,6 +280,8 @@ describe("background brightness gate", () => {
   it("accepts every real glass and brass frame on the placeholder desk", async () => {
     const rows: string[] = [];
     const failures: string[] = [];
+    /** Measured, failing, and declared — see the plaque entry in ART_FAMILIES. */
+    const declared: string[] = [];
     for (const family of ART_FAMILIES) {
       const frames = await measuredFrames(family.atlas);
       expect(frames.length, `${family.name} atlas has no frames`).toBeGreaterThan(0);
@@ -246,16 +300,22 @@ describe("background brightness gate", () => {
             `rgb ${representative.colour.r},${representative.colour.g},${representative.colour.b}`,
         );
         if (!result.passes) {
-          failures.push(
-            `${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`,
-          );
+          const line = `${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`;
+          if ((family as { blocking?: boolean }).blocking === false) declared.push(line);
+          else failures.push(line);
         }
       }
     }
     console.log(
-      `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}`,
+      `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}` +
+        (declared.length
+          ? `\n\n  DECLARED FAILURE — blocks sprites-by-default, needs a design decision:\n    ${declared.join("\n    ")}`
+          : ""),
     );
     expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
+    // The declaration must not silently empty itself: if the plaque ever passes
+    // on the lane, this line is what forces the entry to be reconsidered.
+    expect(declared.length, "declared plaque failures vanished — re-check the entry").toBeGreaterThan(0);
   }, 15_000); // Eight full-resolution frame checks can exceed Vitest's 5s default under CI contention.
 });
 

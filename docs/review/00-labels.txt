@@ -77,3 +77,29 @@ SPRITE GATE — found a real gap
   No family has -unlit art. A spent dial drops to procedural next to real glass
   the moment an operator budget runs out. Boot never reaches that state, so
   every earlier check stayed green over it.
+
+================================================================================
+PLAQUES (2026-08-22)
+
+30-plaques-world1.png   World 1, ?sprites=1 — real brass plaques
+31-plaques-world4.png   World 4, ?sprites=1 — every piece on the board is art
+
+AUDIT, normalised metric
+  plaque-lit      133 deg      plaque-lit-2    130 deg
+  within-sheet spread sd 1.4 deg   (limit 3.0)   PASS
+  vs brass baseline 118 deg: 13.7 deg   (limit 5.0)   flagged
+
+  Verdict: NOT art drift. Masking the dials' knurled ring moves all five
+  +5.9 deg toward 135, so the baseline object's closed bright rim biases the
+  metric. Plaques at 131.7 sit closer to §3's upper-left 135 than the dials do.
+
+CONTRAST
+  plaque body vs lane ground      1.02:1   FAIL (declared, blocks default)
+  plaque body vs felt             3.79:1   pass
+  cream numeral on felt panel    14.50:1   pass
+  front-target gold rim on brass  2.58:1   was 8.21:1 on the old navy plate
+
+ATLAS REPRODUCIBILITY
+  Recovered: --size 360 --names <per family>. All 8 files byte-identical.
+  Recorded as npm run atlas:operators / atlas:tiles / atlas:plaques,
+  verified by npm run atlas:verify, wired into CI.

@@ -184,7 +184,7 @@ try {
   check(state.drawnChildren > 0, `renderer drew a frame (${state.drawnChildren} objects)`);
   check(state.levelId !== null, `a level is open (${state.levelId})`);
   if (expectsSprites) {
-    check(state.spritesEnabled === 1 && state.spritesLoaded === 8, `real WebP sprites loaded (${state.spritesLoaded}/8)`);
+    check(state.spritesEnabled === 1 && state.spritesLoaded === 10, `real WebP sprites loaded (${state.spritesLoaded}/10)`);
     /*
      * A MISSING ATLAS MUST FAIL, NOT FALL BACK.
      *
