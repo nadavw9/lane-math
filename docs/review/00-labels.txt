@@ -1,118 +1,41 @@
-Lane Math — level strip, Pixi measurement, remote and CI. Device checklist ready.
+Lane Math — font subset, sprite gate, and drawn emblems
+Reviewed 2026-08-21
 
-===============================================================================
-1. LEVEL METADATA STRIPPED
+FONT SUBSET BUG (commit button drew "-" instead of "=")
+01-before-font-fix.png            board as shipped; bundled font was the LATIN-EXT
+                                  subset (U+0100+), so every glyph in the game was
+                                  really system-ui, not Outfit
+02-before-commit-button-zoom.png  commit button at 4x — a single solid bar
+03-after-font-fix.png             latin subset bundled; every numeral is now Outfit
+04-after-commit-button-zoom.png   commit button at 4x — a correct two-bar "="
 
-   authored 560,077 bytes  ->  runtime 13,176 bytes   (97.6% stripped)
+SPRITES — NOT A BUG
+05-world1-sprites-on.png          World 1 with ?sprites=1: amber glass tiles and
+                                  brass dials. 01/03 above were taken WITHOUT the
+                                  flag, so they show the procedural fallback.
+                                  spritesEnabled=1 loaded=8 missing=0
 
-   Whole web bundle:   1.2774 MB -> 0.9972 MB
-   JS raw:               958,905 -> 646,222
-   JS gzipped:           215,014 -> 191,446
+EMBLEMS — star, pocket-watch and hint diamond drawn as Graphics
+06-map-emblems.png                first pass, fresh save (no progress to show)
+07-map-emblems-seeded.png         seeded save: 26 cleared, 3/5 lives, 52 stars
+08-zoom-watches.png               v1 watches — cream dial dominated the case;
+                                  five in a row read as fried eggs
+09-zoom-plate-stars-v1.png*       v1 plate stars overlapped the numeral
+10-zoom-hints-chip.png            hints chip with the star as an object
+11..13                            v2: watch without the cream dial, stars at 8px
+14-map-emblems-v3.png             v3 map
+15-zoom-watches-v3.png            v3 watches — case + crown only below 20px;
+                                  the movement is drawn only where it resolves
+16-zoom-plate-stars-v3.png        v3 plate stars, clear of the numeral
+17-map-footer.png                 footer line missing — shutter fired mid-entrance
+19-map-footer-final.png           "26 of 40 cleared · 52 [star] earned"
+18-map-final.png                  final map
+20-board-hud.png                  board: watch meter + 3/5, star counter, hint line
+21-zoom-hint-mark.png             diamond at corner radius 0.26 — reads as a dot
+23-board-hud-v2.png               final board
+24-zoom-hint-mark-v2.png          diamond at 0.13 — reads as a diamond
 
-   The repo keeps the full files as the source of truth; tools/build-levels.mts
-   derives src/generated/levels.json at prebuild.
+Crops are nearest-neighbour upscales of the 1179x2556 (393x852 @3x) captures,
+so no resampling is mistaken for a glyph or an edge.
 
-   THE FIELD LIST LIVES IN ONE PLACE and is checked from three directions,
-   because the dangerous failure is quiet — a field added to the loader that the
-   build does not emit would crash at runtime, on a device, in a level nobody
-   tested:
-     - a conditional type fails COMPILATION if LadderLevel gains a field that
-       RUNTIME_LEVEL_FIELDS does not have
-     - a test asserts the shipped key set matches exactly, in both directions,
-       per level and per mode, and that `metrics` is absent
-     - a test compares shipped playable content against the authored files, so a
-       recuration without a rebuild cannot ship a board that no longer exists
-   Wired into CI as its own named step.
-
-===============================================================================
-2. PIXI PRODUCTION BUILD — THE PREMISE WAS WRONG, AND IT WAS MY ERROR
-
-   There is no production Pixi build to select. Pixi 8.19 publishes ONE
-   artefact: exports for "." are a single lib/index.mjs with no production or
-   development condition. And the deprecation helper is not gated at all —
-   NODE_ENV appears nowhere in pixi.js/lib. So those strings are unconditional
-   code that ships in every Pixi 8 build, not evidence of a dev bundle.
-
-   Last session I inferred a dev build from those strings. That inference was
-   wrong and I should not have offered it as a finding.
-
-   WHAT TREE-SHAKING IS ACTUALLY WORTH, measured by splitting Pixi into
-   per-feature chunks:
-
-     pixi-rendering        233,223 raw   63,752 gz   <- irreducible core
-     pixi-scene-graphics    65,899       20,392      used
-     pixi-scene-container   37,385       10,208      used
-     pixi-scene-text        35,213       11,932      used
-     pixi-events            29,328        7,449      used
-     pixi-assets            26,351        9,243      used
-     pixi-utils             24,075        9,863      used
-     pixi-filters           21,791        6,187      NOT USED
-     pixi-scene-text-bitmap 17,769        6,408      NOT USED
-     pixi-maths             14,861        5,103      used
-     pixi-color             13,830        4,854      used
-     pixi-accessibility      9,072        2,826      NOT USED
-     pixi-spritesheet        4,637        1,886      NOT USED (9.2 is procedural)
-     pixi-dom                3,412        1,252      NOT USED
-     pixi-scene-mesh         1,810          751      NOT USED
-
-     CEILING: 58,491 raw / 19,310 gz — about 9% of Pixi, 3% of the bundle.
-
-   Getting it means abandoning the `pixi.js` barrel for subpath imports plus
-   hand-registering the init side effects the barrel currently pulls in. That
-   trade is ~19KB gzipped against a class of failure where a missing init makes
-   a render path silently degrade rather than throw — which no test here would
-   catch. NOT DONE, per your rule: measured, reported, not acted on. Say the
-   word and it is a contained change.
-
-   For scale: the level strip saved 339KB raw for no runtime risk at all.
-
-===============================================================================
-3. REMOTE AND CI — GREEN ON THE FIRST RUN
-
-   github.com/nadavw9/lane-math already existed and was empty and public, so I
-   added the remote rather than creating it. Pushed feat/solver, 40 commits.
-
-   Run 32344495822 — conclusion SUCCESS, every gate:
-     Typecheck                                          pass
-     Brightness gate (9.1)                              pass
-     Retry path (9.5)                                   pass
-     Flight bound (CLAUDE.md 8)                         pass
-     Shipped levels (10)                                pass
-     Full suite (275 tests)                             pass
-     Build                                              pass
-     deploy                                             skipped (master-only)
-
-   Nothing needed fixing. One non-blocking annotation: GitHub is forcing
-   actions/checkout@v4 and setup-node@v4 onto Node 24 because Node 20 is
-   deprecated on runners. It does not affect the result; worth bumping when
-   those actions cut a v5.
-
-   NOTE ON DEPLOY: the Pages job is master-only by design and this branch is
-   feat/solver, so it correctly skipped. Nothing has deployed. Merging to master
-   is your call, not something I will do unasked.
-
-===============================================================================
-4. DEVICE CHECKLIST — docs/device-checklist.md, ready to run in one pass
-
-   Seven items, each with the exact commands and an explicit pass condition, so
-   it runs start to finish once adb sees the phone. No AVD needed; it targets
-   the signed APK already built.
-
-   The two most likely failures, called out in the document:
-     - SAFE AREA AT THE BOTTOM. The column anchors 12px from the bottom, which
-       is where the gesture bar lives, and the status band there carries
-       restart, the mode selector and the map button — interactive, not
-       decorative. The fix if it fails is a safe-area inset, NOT nudging the
-       12px, which is derived and would put a magic number back.
-     - BRIGHTNESS UNDER SUNLIGHT. Measured margins are 3.46-4.05:1 against a
-       3:1 floor, tuned on a desktop monitor. Thin headroom for a phone panel.
-       If it fails the fix is the background, not the threshold (9.1).
-
-   Also covered: install, portrait lock through a forced rotation, tap latency
-   against the 0.5ms harness baseline WITH a diagnostics check that flights
-   stays at 1 under real thermal conditions, all three AdMob outcomes including
-   aeroplane-mode no-fill, and a screenshot per world.
-
-Tests 275 passing. Web build 0.9972 MB. Signed APK 3.75 MB (unchanged — the
-level strip lands in the web assets, which are a small part of an APK dominated
-by Play Services Ads in classes.dex).
+* 09 and 13 are the same crop at v1 and v3.
