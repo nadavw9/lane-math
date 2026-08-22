@@ -281,7 +281,11 @@ path the user takes, not the path that is convenient to drive.
 It was worse than dead: the long-press landed on **restart**, so the gesture a
 playtester was told to use would have thrown their level away.
 
-**This is the third instance of one shape in this project.** Each time, a check
+**A harness that observes only what it renders cannot see what it clipped.**
+Screenshots were cropped to the viewport, so 139x302 of overflow was invisible
+in every review image this project produced.
+
+**This is the fourth instance of one shape in this project.** Each time, a check
 exercised something ADJACENT to the real thing and passed on the adjacent thing:
 
 1. **boot smoke against a dev server** — the dev server's conveniences hid two
@@ -292,10 +296,14 @@ exercised something ADJACENT to the real thing and passed on the adjacent thing:
    measured someone else's output and reported a confident PASS
 3. **the export gesture** — driven through the debug API, never through the
    600ms hold that is the only route on a phone
+4. **viewport overflow hidden by the screenshot's own frame** — the board
+   overflowed by 139x302px at the design viewport and every review image looked
+   correct, because the screenshot was cropped to the same viewport the layout
+   was busy escaping
 
-The question that catches all three: *what exactly did this check touch, and is
-it the same object the user touches?* A proxy that is easier to drive is
-precisely the thing that will diverge from the real path without saying so.
+**The question that catches all four: what exactly did this check touch, and is
+it the same object the user touches? A check that constructs its own subject is
+testing itself.**
 
 ---
 
