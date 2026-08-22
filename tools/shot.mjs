@@ -34,9 +34,14 @@ function readBase() {
   return tail ? `/${tail}/` : "/";
 }
 
+/**
+ * SHOT_URL photographs a LIVE site instead of dist/, so a deploy can be
+ * confirmed by what it actually serves rather than by a green job.
+ */
+const liveUrl = process.env["SHOT_URL"] ?? "";
 const base = readBase();
 const query = process.env["SHOT_QUERY"] ?? "";
-const url = `http://localhost:${port}${base}${query}`;
+const url = liveUrl ? `${liveUrl}${query}` : `http://localhost:${port}${base}${query}`;
 
 const TYPES = {
   ".html": "text/html",
@@ -63,6 +68,7 @@ const server = createServer((request, response) => {
 
 // A stale server on this port would be photographed instead of dist/, and a
 // second listen() can resolve without error on Windows while it keeps serving.
+if (!liveUrl) {
 try {
   await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(1500) });
   process.stdout.write(`something already answers on port ${port} — refusing to shoot its output\n`);
@@ -75,6 +81,7 @@ await new Promise((resolve, reject) => {
   server.once("error", reject);
   server.listen(port, resolve);
 });
+}
 
 /**
  * Optional seeded save, written before the app boots.
