@@ -207,9 +207,9 @@ Generated at 4× target size and downscaled. Largest on-screen token is capped a
 
 The pattern to watch for: a metric that is correct for the shape it was written against and silently wrong for any other shape. Before trusting a rejection, check whether the number would change if the object were merely stretched or made of a different material — if it would, the metric is measuring the container, not the light.
 
-**Silhouette is a third confound, alongside material and aspect ratio.** A closed bright rim — the knurled edge of a dial — drags the measured specular centroid toward the object's centre; a long straight bevel on a wide plaque does not. Measured: masking the knurl moved all five operator dials +5.9 degrees toward the nominal 135.
+**Silhouette is a third confound, alongside material and aspect ratio.** A closed bright rim — the knurled edge of a dial — drags the measured specular centroid toward the object's centre; a long straight bevel on a wide plaque does not. Measured: masking the knurl moved all five operator dials +5.9 degrees toward the nominal 135. That measurement is the record of a FALSE LEAD, kept because it is the reason erosion looked like the answer.
 
-**Silhouette is a third confound, alongside material and aspect ratio, and it cannot be corrected by eroding the mask.** Measured sweep: no erosion value converges dials and plaques, the cross-family gap is smallest at zero erosion (12.1 degrees), and within-family spread degrades monotonically, breaking the 3-degree limit at 12%. A circular crop and a general erosion are different operations — the crop suits a disc, the erosion strips a flat plaque's border bevel, which is where its light reads.
+**It cannot be corrected by eroding the mask.** Measured sweep: no erosion value converges dials and plaques, the cross-family gap is smallest at zero erosion (12.1 degrees), and within-family spread degrades monotonically, breaking the 3-degree limit at 12%. A circular crop and a general erosion are different operations — the crop suits a disc, the erosion strips a flat plaque's border bevel, which is where its light reads.
 
 WITHIN-family spread is the binding check. Cross-family absolute angle is advisory only.
 
