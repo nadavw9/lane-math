@@ -207,6 +207,10 @@ Generated at 4× target size and downscaled. Largest on-screen token is capped a
 
 The pattern to watch for: a metric that is correct for the shape it was written against and silently wrong for any other shape. Before trusting a rejection, check whether the number would change if the object were merely stretched or made of a different material — if it would, the metric is measuring the container, not the light.
 
+**Silhouette is a third confound, alongside material and aspect ratio.** A closed bright rim — the knurled edge of a dial — drags the measured specular centroid toward the object's centre; a long straight bevel on a wide plaque does not. Measured: masking the knurl moved all five operator dials +5.9 degrees toward the nominal 135.
+
+The metric therefore erodes the mask before locating the specular, so it reads the object's face rather than its edge treatment. Absolute cross-family angles remain advisory; WITHIN-family spread is the binding check.
+
 **Atlas and compression.** Traffic Bomb's pipeline returns (GDD §11). It was excluded only because tokens were procedural.
 
 ---
