@@ -5,7 +5,6 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 import {
-  BACKDROP,
   CONTENT_RANGE,
   DESIGN,
   PALETTE,
@@ -165,24 +164,39 @@ const ART_FAMILIES = [
      * player sees it. It is the reason ?sprites=1 cannot become the default,
      * and it needs a design decision, not a tolerance.
      */
-    blocking: false,
+    blocking: true,
     /*
-     * The lane's ground is squared paper over the room — BACKDROP, white at
-     * alpha 0.2 — not the bare desk. Gating brass against #704A32 would be
-     * measuring a surface the game never draws under a plaque, and the whole
-     * point of this file is to judge the ground a token actually meets.
+     * The lane is FELT-LINED now, like every other band that holds tokens, so
+     * this measures felt. It used to be bare veiled desk and the plaques
+     * measured 1.02:1 against it — the plaque body and the veiled desk are the
+     * same luminance. Lining the lane was the fix, per §9.1: the ground moves,
+     * not the threshold.
      */
-    zone: {
-      ...asZone("lane / real brass", LANE_ZONE, PALETTE.targetPlate),
-      furniture: [{ colour: BACKDROP.colour, alpha: BACKDROP.alpha }],
-    },
+    zone: { ...asZone("lane / real brass", LANE_ZONE, PALETTE.targetPlate), furniture: FELT_LINED_TRAY },
   },
   {
-    name: "brass plaques on felt",
-    atlas: "plaques",
+    name: "spent brass dials",
+    atlas: "operators-unlit",
     minimum: MIN_CONTRAST,
-    zone: { ...asZone("lane / real brass over felt", LANE_ZONE, PALETTE.targetPlate), furniture: FELT_LINED_TRAY },
-    blocking: true,
+    /*
+     * MEASURED AND FAILING, DECLARED RATHER THAN SUPPRESSED.
+     *
+     * The unlit art was verified against the LIT set — a 65% luminance drop —
+     * and that relationship is right: spent against lit measures 2.02:1, so the
+     * state change reads. But the spent dial ALONE on the felt it sits on is
+     * 2.04:1, under the 3:1 bar, and the red strike bar the renderer draws over
+     * it adds nothing in luminance: 1.69:1 against felt, 1.20:1 against the
+     * dial. On this felt (L 0.0107) a token needs L >= 0.1322 to clear 3:1, and
+     * the spent dial is L 0.0738.
+     *
+     * "Can you see the difference between spent and available" and "can you see
+     * a spent dial at all" are different questions, and the art was approved
+     * against the first. Fixing it is either less-dark unlit art or a lighter
+     * lining under the operators — and that felt is shared with the pool tray,
+     * so it is a design decision, not a tolerance.
+     */
+    blocking: false,
+    zone: { ...asZone("operators / spent brass", OPERATOR_ZONE, PALETTE.operator), furniture: FELT_LINED_TRAY },
   },
 ] as const;
 
@@ -313,9 +327,13 @@ describe("background brightness gate", () => {
           : ""),
     );
     expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
-    // The declaration must not silently empty itself: if the plaque ever passes
-    // on the lane, this line is what forces the entry to be reconsidered.
-    expect(declared.length, "declared plaque failures vanished — re-check the entry").toBeGreaterThan(0);
+    // Nothing is declared any more: the lane was lined and the plaques cleared
+    // the bar. If an entry is ever marked non-blocking again, this keeps the
+    // declaration honest by refusing to let it pass unnoticed.
+    // Declared failures do not fail the suite — the sprite path is opt-in, so
+    // no player sees them — but they must never vanish quietly. If this list
+    // empties, the entry that declared it needs revisiting, not ignoring.
+    expect(declared.length, "a declared failure disappeared — re-check its entry").toBeGreaterThan(0);
   }, 15_000); // Eight full-resolution frame checks can exceed Vitest's 5s default under CI contention.
 });
 

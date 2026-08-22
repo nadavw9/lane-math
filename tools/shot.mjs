@@ -129,6 +129,11 @@ if (screen) {
     if (name === "shop") {
       api.send({ type: "toggleShop" });
     }
+    if (name === "spent") {
+      // Exhaust an operator budget so the unavailable state is on screen
+      // alongside available ones — the comparison is the point.
+      api.playIntoFailure();
+    }
     if (name === "hint") {
       // A bought hint is the only way the hint line, and its mark, appear.
       api.send({ type: "buyHint", hint: "narrow" });

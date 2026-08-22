@@ -79,7 +79,116 @@ export function lightAngleFrom(
   return angle;
 }
 
+/**
+ * How far in from the edge the specular search starts, as a fraction of the
+ * object's smaller dimension.
+ *
+ * ART_DIRECTION §9: silhouette is a third confound. A closed bright rim — the
+ * knurled edge of a dial — sits all the way around the object, so it
+ * contributes to the luminance centroid from every direction at once and drags
+ * it toward the centre; a long straight bevel on a wide plaque contributes from
+ * one side only and does not. The two then disagree about where the light is
+ * while being lit identically.
+ *
+ * Eroding the mask first is meant to make the measurement read the FACE, which
+ * is the surface the light direction is legible on.
+ *
+ * SET TO ZERO, BECAUSE THE SWEEP SAYS SO. The expectation was that eroding
+ * would converge the dials and the plaques. Measured across both real sheets it
+ * does the opposite, on both of the checks §9 names:
+ *
+ *   erosion   operators mean/sd    plaques mean/sd    cross-family gap
+ *      0%       117.8 / 1.3          129.8 / 1.1           12.1
+ *      4%       122.2 / 1.9          157.4 / 3.7           35.2
+ *      8%       124.7 / 2.6          157.3 / 6.1           32.6
+ *     12%       121.6 / 4.7          138.8 / 0.1           17.2
+ *     16%       119.1 / 8.8          139.9 / 0.8           20.8
+ *     25%       122.4 / 66.8         152.6 / 0.8           30.2
+ *
+ * The gap is SMALLEST with no erosion, and the operators' within-family spread
+ * — the binding check — degrades monotonically as the mask shrinks, breaking
+ * the 3-degree limit at 12%.
+ *
+ * The earlier result that suggested erosion (all five dials +5.9 degrees toward
+ * 135) came from a CENTRED CIRCULAR CROP at 0.72R, which is meaningful only for
+ * a disc. A general erosion also strips the plaque's border bevel, and that
+ * bevel is where a flat plaque's light actually reads — hence the swing to 157
+ * degrees at 4-8%. The two operations are not the same test.
+ *
+ * The machinery stays because the sweep is worth being able to re-run against
+ * new art; the value is measured, not assumed. Raising it needs a sweep that
+ * says something different.
+ */
+const FACE_EROSION = 0;
+
+/**
+ * Pixels that survive eroding the opaque mask inward by `inset`.
+ *
+ * Uses a summed-area table so the "is this whole window opaque" test is O(1)
+ * per pixel: a naive window scan is O(n * inset^2), which on a 360px sprite
+ * with a 40px inset is two hundred million operations for one frame.
+ */
+function erodedMask(
+  rgba: Buffer,
+  width: number,
+  height: number,
+  inset: number,
+): (x: number, y: number) => boolean {
+  if (inset < 1) return (x, y) => rgba[(y * width + x) * 4 + 3]! >= 200;
+
+  const stride = width + 1;
+  const sum = new Int32Array(stride * (height + 1));
+  for (let y = 0; y < height; y++) {
+    let row = 0;
+    for (let x = 0; x < width; x++) {
+      row += rgba[(y * width + x) * 4 + 3]! >= 200 ? 1 : 0;
+      sum[(y + 1) * stride + (x + 1)] = sum[y * stride + (x + 1)]! + row;
+    }
+  }
+  const area = (x0: number, y0: number, x1: number, y1: number): number =>
+    sum[(y1 + 1) * stride + (x1 + 1)]! -
+    sum[y0 * stride + (x1 + 1)]! -
+    sum[(y1 + 1) * stride + x0]! +
+    sum[y0 * stride + x0]!;
+
+  const r = Math.round(inset);
+  return (x, y) => {
+    if (x - r < 0 || y - r < 0 || x + r >= width || y + r >= height) return false;
+    const side = 2 * r + 1;
+    return area(x - r, y - r, x + r, y + r) === side * side;
+  };
+}
+
 export function auditSprite(name: string, rgba: Buffer, width: number, height: number): Audit {
+  // Content bounds at full opacity: the solid object, excluding the soft
+  // contact shadow, which is what "how big does this look" means.
+  let bx0 = width;
+  let by0 = height;
+  let bx1 = 0;
+  let by1 = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (rgba[(y * width + x) * 4 + 3]! < 200) continue;
+      if (x < bx0) bx0 = x;
+      if (y < by0) by0 = y;
+      if (x > bx1) bx1 = x;
+      if (y > by1) by1 = y;
+    }
+  }
+  const hasBox = bx1 >= bx0 && by1 >= by0;
+  const boxW = hasBox ? bx1 - bx0 + 1 : 0;
+  const boxH = hasBox ? by1 - by0 + 1 : 0;
+
+  const inset = Math.min(boxW, boxH) * FACE_EROSION;
+  let face = erodedMask(rgba, width, height, inset);
+  // A thin or small object can erode to nothing; measuring the whole silhouette
+  // is a worse answer than measuring the face, but it beats measuring nothing.
+  let faceCount = 0;
+  for (let y = by0; y <= by1 && hasBox; y++) {
+    for (let x = bx0; x <= bx1; x++) if (face(x, y)) faceCount++;
+  }
+  if (faceCount < 16) face = (x, y) => rgba[(y * width + x) * 4 + 3]! >= 200;
+
   let sumX = 0;
   let sumY = 0;
   let weight = 0;
@@ -94,8 +203,7 @@ export function auditSprite(name: string, rgba: Buffer, width: number, height: n
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
-      const a = rgba[i + 3]!;
-      if (a < 128) continue;
+      if (rgba[i + 3]! < 128) continue;
       opaque++;
 
       const r = rgba[i]!;
@@ -105,22 +213,24 @@ export function auditSprite(name: string, rgba: Buffer, width: number, height: n
       const min = Math.min(r, g, b);
       const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-      // Lighting direction: the centroid of the brightest material, weighted
-      // steeply so a broad warm body cannot outvote a small bright highlight.
-      const w = Math.pow(luma / 255, 6);
-      sumX += x * w;
-      sumY += y * w;
-      weight += w;
-
-      if (luma > brightest) {
-        brightest = luma;
-        specX = x;
-        specY = y;
+      // Lighting direction: the centroid of the brightest material on the
+      // object's FACE, weighted steeply so a broad warm body cannot outvote a
+      // small bright highlight. Edge treatment is excluded above.
+      if (face(x, y)) {
+        const w = Math.pow(luma / 255, 6);
+        sumX += x * w;
+        sumY += y * w;
+        weight += w;
+        if (luma > brightest) {
+          brightest = luma;
+          specX = x;
+          specY = y;
+        }
       }
 
       // Hue as a vector, so the average of 350 and 10 degrees is 0 rather than
       // 180 — brass sits near the wrap point and would otherwise average to its
-      // opposite.
+      // opposite. Measured over the whole object: palette is not directional.
       const delta = max - min;
       if (delta > 0) {
         let hue: number;
@@ -137,32 +247,11 @@ export function auditSprite(name: string, rgba: Buffer, width: number, height: n
     }
   }
 
-  // Content bounds at full opacity: the solid object, excluding the soft
-  // contact shadow, which is what "how big does this look" means.
-  let bx0 = width;
-  let by0 = height;
-  let bx1 = 0;
-  let by1 = 0;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (rgba[(y * width + x) * 4 + 3]! < 200) continue;
-      if (x < bx0) bx0 = x;
-      if (y < by0) by0 = y;
-      if (x > bx1) bx1 = x;
-      if (y > by1) by1 = y;
-    }
-  }
-
-  const hasBox = bx1 >= bx0 && by1 >= by0;
   const box = { x0: bx0, y0: by0, x1: bx1, y1: by1 };
-  const angle =
-    weight > 0 && hasBox ? lightAngleFrom(sumX / weight, sumY / weight, box) : 0;
+  const angle = weight > 0 && hasBox ? lightAngleFrom(sumX / weight, sumY / weight, box) : 0;
 
   let meanHue = (Math.atan2(hueY, hueX) * 180) / Math.PI;
   if (meanHue < 0) meanHue += 360;
-
-  const boxW = hasBox ? bx1 - bx0 + 1 : 0;
-  const boxH = hasBox ? by1 - by0 + 1 : 0;
 
   return {
     name,

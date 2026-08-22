@@ -44,7 +44,6 @@ import {
   operatorToken,
   UI_FONT,
   setGrainTexture,
-  squaredPaper,
   targetPlate,
   feltLinedTray,
 } from "./tokens.js";
@@ -200,7 +199,9 @@ export class Renderer {
      */
     if (spritesEnabled()) {
       const loaded = await Promise.all(
-        ["tiles", "operators", "plaques"].map((family) => loadAtlas(family, import.meta.env.BASE_URL)),
+        ["tiles", "operators", "operators-unlit", "plaques"].map((family) =>
+          loadAtlas(family, import.meta.env.BASE_URL),
+        ),
       );
       if (!loaded.every(Boolean)) setSpritesEnabled(false);
     }
@@ -953,8 +954,23 @@ export class Renderer {
     // panel would make the gate judge something the player never sees.
     // §9.6: the lane is a strip of squared paper, not a neutral panel. The veil
     // still does the separation job; the ruling sits on top of it.
-    this.entry(this.place(squaredPaper(lane.width, lane.height, BACKDROP), lane.x, lane.y),
-      BOARD_BANDS.furniture);
+    /*
+     * THE LANE IS LINED, like every other band that holds tokens.
+     *
+     * It was the one token band without a lining — the operator band has felt,
+     * the pool tray has felt, the lane was bare panel — and that is why brass
+     * plaques measured 1.02:1 against it: the plaque's body luminance (L 0.1804)
+     * and the veiled desk's (L 0.1757) are the same number. On felt the same
+     * brass measures 3.79:1. Consistency and the contrast fix are one move.
+     */
+    this.entry(
+      this.place(
+        feltLinedTray(lane.width, lane.height, PALETTE.tray, TRAY_ALPHA, PALETTE.felt),
+        lane.x,
+        lane.y,
+      ),
+      BOARD_BANDS.furniture,
+    );
 
     /*
      * Cleared targets are REMOVED and the queue slides down (§2).
@@ -980,8 +996,20 @@ export class Renderer {
       // rejects it. It never leaves its slot — not advancing IS the message.
       const shove = front && this.rejecting ? this.rejectOffset : { dx: 0, dy: 0, glow: 0 };
 
-      this.entry(
-        this.place(
+      /*
+       * BRIGHTNESS CARRIES THE FRONT TARGET, NOT THE RIM (ART_DIRECTION §5).
+       *
+       * The rim is gold and so is the plaque, so gold-on-gold measured 2.58:1
+       * against the brass body and 1.58:1 against its lit areas — on the old
+       * navy plate the same rim was 8.21:1. A hue-only signal on the single
+       * most important state on the board is not a signal.
+       *
+       * Queued plaques therefore render DIMMED and the front target at full
+       * brightness, which is the disabled/available language the tokens already
+       * speak, needs no new art, and survives both sunlight and colourblindness.
+       * The gold rim stays as reinforcement rather than as the whole message.
+       */
+      const plate = this.place(
         targetPlate(slot.width, slot.height, String(s.targets[i]), {
           fill: front
             ? this.rejecting
@@ -1000,7 +1028,11 @@ export class Renderer {
         }, i),
         slot.x + shove.dx,
         slot.y + shove.dy,
-        ),
+      );
+      if (!front) plate.alpha = DIM.alpha;
+
+      this.entry(
+        plate,
         // The FRONT target lands last: it is the focal point (§9.0).
         front ? BOARD_BANDS.front : BOARD_BANDS.queue,
       );

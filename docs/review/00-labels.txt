@@ -103,3 +103,40 @@ ATLAS REPRODUCIBILITY
   Recovered: --size 360 --names <per family>. All 8 files byte-identical.
   Recorded as npm run atlas:operators / atlas:tiles / atlas:plaques,
   verified by npm run atlas:verify, wired into CI.
+
+================================================================================
+SPENT DIALS, FRONT-TARGET BRIGHTNESS, LINED LANE (2026-08-22)
+
+32-front-vs-queued.png  World 4: queued plaques dimmed, front target at full
+                        brightness, on a felt-lined lane
+33-spent-operator.png   a spent minus dial beside available x and div dials
+
+GATE TABLE, real frames on the placeholder desk with felt
+  glass tiles     cube-lit            8.66:1   cube-lit-2  8.69:1   cube-lit-3 8.61:1
+  brass operators dial-plus-lit       4.12:1   minus 3.94  times 4.14  div 4.08  sqrt 4.23
+  brass plaques   plaque-lit          3.79:1   plaque-lit-2  3.83:1
+  spent dials     dial-plus-unlit     2.08:1   minus 2.07  times 2.07  div 2.04  sqrt 2.01
+  minimum 3:1                                  spent dials DECLARED, below bar
+
+FRONT TARGET — brightness, not rim
+  queued (dimmed)  rgb 160,109,31  L 0.1851
+  front  (full)    rgb 198,134,37  L 0.2919
+  front : queued   1.45:1, applied across the whole plate rather than a 3px rim
+
+THE LANE LINING FIXED THE PLAQUES
+  plaque vs lane   1.02:1  ->  3.79:1
+
+ANGLE METRIC — erosion measured and REJECTED
+  erosion  operators mean/sd   plaques mean/sd   gap
+     0%      117.8 / 1.3         129.8 / 1.1     12.1   <- kept
+     4%      122.2 / 1.9         157.4 / 3.7     35.2
+     8%      124.7 / 2.6         157.3 / 6.1     32.6
+    12%      121.6 / 4.7         138.8 / 0.1     17.2
+    16%      119.1 / 8.8         139.9 / 0.8     20.8
+    25%      122.4 / 66.8        152.6 / 0.8     30.2
+  No erosion converges the families; the gap is smallest at 0% and the
+  operators' within-family spread degrades monotonically, breaking the 3-degree
+  binding check at 12%.
+
+UNLIT SET
+  5 objects, 114 deg mean, sd 1.5 (lit set 118 / 1.3), frames identical 353x360

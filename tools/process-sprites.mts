@@ -309,7 +309,17 @@ if (!options.family) {
 }
 
 const sheets = readdirSync(options.source)
-  .filter((f) => f.startsWith(options.family) && /\.(png|jpe?g|webp)$/i.test(f))
+  /*
+   * ANCHORED, not a prefix match.
+   *
+   * `--family operators` used to also pull in `operators-unlit-sheet.png`,
+   * because one family's name is a prefix of another's. The slice count caught
+   * it — ten objects where five were expected — but only because --expect was
+   * set; without it the two sets would have been packed into one atlas in
+   * whatever order readdir returned. A family owns `<family>-sheet.*` and
+   * `<family>-sheet-N.*`, and nothing else.
+   */
+  .filter((f) => new RegExp(`^${options.family}-sheet(-\\d+)?\\.(png|jpe?g|webp)$`, "i").test(f))
   .sort();
 
 if (sheets.length === 0) {
