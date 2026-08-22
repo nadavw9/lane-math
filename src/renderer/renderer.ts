@@ -6,6 +6,7 @@ import {
   BACKDROP,
   DESIGN,
   DIM,
+  HINT_LINE_H,
   PALETTE,
   TRAY_ALPHA,
   type Bands,
@@ -1401,12 +1402,13 @@ export class Renderer {
     // Their own band, sized to how many are owned, so they neither overlap the
     // pool on a small board nor reserve a strip nobody is using.
     s.hints.forEach((hint, i) => {
-      const mark = hintDiamond(10);
-      mark.position.set(board.hints.x + 4 + 5, board.hints.y + i * 16 + 7);
+      const gem = 18;
+      const mark = hintDiamond(gem);
+      mark.position.set(board.hints.x + 4 + gem / 2, board.hints.y + i * HINT_LINE_H + 9);
       this.root.addChild(mark);
 
       const label = this.text(hint.text, 12, PALETTE.highlightInk);
-      label.position.set(board.hints.x + 4 + 14, board.hints.y + i * 16);
+      label.position.set(board.hints.x + 4 + gem + 6, board.hints.y + i * HINT_LINE_H + 2);
       this.root.addChild(label);
     });
 

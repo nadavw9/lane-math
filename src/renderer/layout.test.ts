@@ -145,11 +145,44 @@ describe("the stack fits and sits low (§9.1)", () => {
     }
   });
 
-  it("pins the shipped 4-01 casual worst case to both 12px anchors", () => {
+  it("pins the shipped 4-01 casual worst case, bottom-anchored at 888", () => {
+    /*
+     * Moved 2026-08-22: token 59 -> 58 and lane.y 12 -> 16, because
+     * HINT_LINE_H went 16 -> 22 so the hint mark could read as a cut gem rather
+     * than a gold dot. On the densest board those 6px come out of the pool.
+     *
+     * THE TEST USED TO CLAIM "both 12px anchors" AND THAT WAS NEVER TRUE. The
+     * bottom edge is anchored at 888 for every board, which is §9.1's "sits
+     * low" and is what the suite should defend. The top was 12 only for THIS
+     * configuration and only by luck: the stack is bottom-anchored, token size
+     * is quantised to whole pixels, and whatever does not divide evenly falls
+     * out as slack at the top. At the previously shipped HINT_LINE_H the same
+     * board with three hints already sat at 20, not 12 — so the "anchor" the
+     * name promised did not exist even before this change.
+     *
+     * Measured across 16..22, the bottom stayed 888 at every value and only the
+     * top slack moved. So the bottom is asserted as an invariant, and the top
+     * is pinned as an observation with its reason attached.
+     */
     const layout = bands({ targets: 6, tiles: 14, hints: 1, operators: 5 });
-    expect(layout.grid.size).toBe(59);
-    expect(layout.lane.y).toBe(12);
+    expect(layout.grid.size).toBe(58);
     expect(layout.status.y + layout.status.height).toBe(888);
+    // Incidental, not an anchor — see above.
+    expect(layout.lane.y).toBe(16);
+  });
+
+  it("bottom-anchors every board at 888, whatever the hint count (§9.1)", () => {
+    // The invariant the test above was mistaken for. Cheap, and it would have
+    // caught the hint-row change being judged against the wrong property.
+    for (const board of BOARDS) {
+      for (const hints of [0, 1, 3]) {
+        const layout = bands({ ...board, hints });
+        expect(
+          layout.status.y + layout.status.height,
+          `board ${board.targets}/${board.tiles} with ${hints} hints`,
+        ).toBe(888);
+      }
+    }
   });
 
   it("keeps every operator inside its band across the complete matrix", () => {

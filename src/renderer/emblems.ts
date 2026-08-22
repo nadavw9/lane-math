@@ -253,33 +253,81 @@ export function pocketWatch(size: number, state: "full" | "spent" = "full"): Con
  */
 export function hintDiamond(size: number): Container {
   const emblem = new Container();
-  const r = size / 2;
+  const w = size * 0.4;
+  const h = size * 0.5;
+
+  /*
+   * A CUT STONE, NOT A RHOMBUS.
+   *
+   * The first two versions were a rotated rounded square with one flat gold
+   * fill. It had a contact shadow and a specular on paper, but both were
+   * specified as fractions of a 10px emblem — a 0.8px highlight and a 2.5px
+   * shadow — so at the size it actually drew there was nothing to see, and it
+   * read as a flat gold lozenge. Worse, the shading was drawn INSIDE a
+   * container rotated 45 degrees, so the "lower-right" dark side rotated with
+   * it and the light was not coming from the upper left at all.
+   *
+   * A gem reads as cut because adjacent facets catch the one light source at
+   * different angles. So the stone is built from four facets meeting at a
+   * centre above the middle, and their tones are the whole effect — no facet
+   * outlines, because §3 has none and a real stone has none either: the edge IS
+   * the tonal step between two planes.
+   */
+  const cx = 0;
+  const cy = -h * 0.12;
+  const facet = (g: Graphics, ax: number, ay: number, bx: number, by: number, colour: number, alpha = 1) =>
+    g.moveTo(ax, ay).lineTo(bx, by).lineTo(cx, cy).closePath().fill({ color: colour, alpha });
 
   const shadow = new Graphics();
-  contactShadow(shadow, 0, r * 0.86, r * 0.5, r * 0.16);
+  contactShadow(shadow, 0, h * 0.94, w * 0.86, h * 0.16);
   emblem.addChild(shadow);
 
-  const face = new Container();
-  const g = new Graphics();
   /*
-   * The corner radius is the whole design here. At 0.26 of the side the four
-   * points rounded away and nine pixels of gold read as a dot, not a diamond —
-   * "rounded everything" (§3) has to stop short of erasing the silhouette it is
-   * softening. 0.13 keeps the points while still tumbling the edges.
+   * ONE SET OF VERTICES for the silhouette and for the facets.
+   *
+   * The stroked body is inset by half the pen so the round join does not grow
+   * the stone. The facets have to use the SAME inset points: drawn to the full
+   * vertices they poked out past the silhouette, which put a nub on the bottom
+   * point and bumps on both shoulders.
    */
-  const side = r * 1.24;
-  g.roundRect(-side / 2, -side / 2, side, side, side * 0.13).fill({ color: GOLD });
-  g.roundRect(-side / 2 + side * 0.12, -side / 2 + side * 0.2, side * 0.88, side * 0.8, side * 0.12).fill({
-    color: GOLD_DEEP,
-    alpha: 0.4,
-  });
-  face.addChild(g);
-  face.rotation = Math.PI / 4;
-  emblem.addChild(face);
+  const round = size * 0.1;
+  const px = w - round / 2;
+  const py = h - round / 2;
 
+  const g = new Graphics();
+  const body = (gr: Graphics): Graphics =>
+    gr.moveTo(0, -py).lineTo(px, cy).lineTo(0, py).lineTo(-px, cy).closePath();
+  body(g).fill({ color: GOLD });
+  body(g).stroke({ width: round, color: GOLD, join: "round", cap: "round" });
+  emblem.addChild(g);
+
+  // The four facets, lit from the upper left: the upper-left plane faces the
+  // source and the lower-right plane faces away from it.
+  const f = new Graphics();
+  facet(f, 0, -py, -px, cy, GOLD_LIT, 0.85);
+  facet(f, 0, -py, px, cy, GOLD, 1);
+  facet(f, -px, cy, 0, py, GOLD_DEEP, 0.35);
+  facet(f, px, cy, 0, py, GOLD_DEEP, 0.7);
+  emblem.addChild(f);
+
+  // The table: the flat top of the cut, catching the most light of any plane.
+  const table = new Graphics();
+  table
+    .moveTo(0, -h * 0.52)
+    .lineTo(w * 0.34, cy * 0.6)
+    .lineTo(0, h * 0.1)
+    .lineTo(-w * 0.34, cy * 0.6)
+    .closePath()
+    .fill({ color: GOLD_LIT, alpha: 0.45 });
+  emblem.addChild(table);
+
+  // One specular, in the upper-left facet, sized off the stone rather than off
+  // a fraction that vanishes when the emblem is small.
   const hi = new Graphics();
-  specular(hi, -r * 0.18, -r * 0.26, r * 0.16);
+  specular(hi, -w * 0.42, -h * 0.42, Math.max(1.2, size * 0.11));
   emblem.addChild(hi);
+
+  emblem.rotation = 0.03;
   return emblem;
 }
 

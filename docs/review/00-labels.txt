@@ -1,5 +1,5 @@
-Lane Math — font subset, sprite gate, and drawn emblems
-Reviewed 2026-08-21
+Lane Math — font subset, sprite gate, drawn emblems, cut-gem hint mark
+Reviewed 2026-08-22
 
 FONT SUBSET BUG (commit button drew "-" instead of "=")
 01-before-font-fix.png            board as shipped; bundled font was the LATIN-EXT
@@ -15,27 +15,28 @@ SPRITES — NOT A BUG
                                   flag, so they show the procedural fallback.
                                   spritesEnabled=1 loaded=8 missing=0
 
-EMBLEMS — star, pocket-watch and hint diamond drawn as Graphics
-06-map-emblems.png                first pass, fresh save (no progress to show)
-07-map-emblems-seeded.png         seeded save: 26 cleared, 3/5 lives, 52 stars
-08-zoom-watches.png               v1 watches — cream dial dominated the case;
-                                  five in a row read as fried eggs
-09-zoom-plate-stars-v1.png*       v1 plate stars overlapped the numeral
-10-zoom-hints-chip.png            hints chip with the star as an object
-11..13                            v2: watch without the cream dial, stars at 8px
-14-map-emblems-v3.png             v3 map
-15-zoom-watches-v3.png            v3 watches — case + crown only below 20px;
-                                  the movement is drawn only where it resolves
-16-zoom-plate-stars-v3.png        v3 plate stars, clear of the numeral
-17-map-footer.png                 footer line missing — shutter fired mid-entrance
+EMBLEMS — star, pocket-watch, hint gem drawn as Graphics (Outfit has none of them)
+06..17                            working shots across three revisions:
+                                  v1 watch had a cream dial that outshone its case
+                                  (fried eggs); v1 plate stars clipped the numeral;
+                                  17 caught the shutter firing mid-entrance
+18-map-final.png       CURRENT    map: 3 lit + 2 spent watches, per-plate star
+                                  meters, banked total, hints chip, footer line
 19-map-footer-final.png           "26 of 40 cleared · 52 [star] earned"
-18-map-final.png                  final map
-20-board-hud.png                  board: watch meter + 3/5, star counter, hint line
-21-zoom-hint-mark.png             diamond at corner radius 0.26 — reads as a dot
-23-board-hud-v2.png               final board
-24-zoom-hint-mark-v2.png          diamond at 0.13 — reads as a diamond
+20-board-hud.png       CURRENT    board: watch meter + 3/5, star counter, hint line
+21..24                            hint mark before the gem pass — a flat gold
+                                  lozenge; its shadow and highlight were specified
+                                  as fractions of a 10px emblem, so a 0.8px
+                                  highlight and a 2.5px shadow painted nothing
+25-zoom-hint-gem.png   CURRENT    the cut gem at 18px, 8x: four facets around a
+                                  centre above the middle, bright upper-left plane,
+                                  dark lower-right, one specular, contact shadow
+
+MEASURED (tools/emblem-light.mjs, over each object's own pixels)
+                        upper-left vs lower-right   specular headroom   shadow
+  pocket-watch 14px           +19.3%                 58.1 @ 5.3% area   3.2% darker
+  star         15px           +17.9%                 43.6 @ 8.5% area   3.4% darker
+  hint gem     18px           +17.7%                 58.6 @ 15.0% area  13.0% darker
 
 Crops are nearest-neighbour upscales of the 1179x2556 (393x852 @3x) captures,
-so no resampling is mistaken for a glyph or an edge.
-
-* 09 and 13 are the same crop at v1 and v3.
+so no resampling is mistaken for a facet or an edge.
