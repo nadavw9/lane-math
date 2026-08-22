@@ -200,6 +200,13 @@ Generated at 4× target size and downscaled. Largest on-screen token is capped a
 
 **Brass baseline (this tool).** `operators-sheet.png` measures 117 degrees mean light angle with a 1.2-degree spread across its five dials in `tools/process-sprites.mts`. This value belongs to that implementation's high-luminance-centroid metric, not to the art itself; re-derive the baseline whenever that metric changes.
 
+**When the metric is wrong, not the art.** Twice now the consistency audit has rejected art that was correct, and both times the fault was a geometry assumption baked into the measurement rather than anything in the image.
+
+1. **Glass judged against brass.** The same upper-left source presents at the lower right through a transparent body, so glass read as drift from the brass baseline. The fix is the rule above — compare like materials only, never brass against glass (§3).
+2. **Angle measured in pixel coordinates.** Specular angle computed from pixel offsets lets the object's aspect ratio rotate the result: a wide plaque and a square dial with the SAME specular position within their bounds report different angles. Measured in fractional coordinates within the bounding box, the aspect cancels and the two agree.
+
+The pattern to watch for: a metric that is correct for the shape it was written against and silently wrong for any other shape. Before trusting a rejection, check whether the number would change if the object were merely stretched or made of a different material — if it would, the metric is measuring the container, not the light.
+
 **Atlas and compression.** Traffic Bomb's pipeline returns (GDD §11). It was excluded only because tokens were procedural.
 
 ---
