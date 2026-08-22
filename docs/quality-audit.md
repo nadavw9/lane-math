@@ -83,3 +83,31 @@ out-of-lives panel material, the automaton, room backgrounds, and §6's Academy
 restoration as the map's real empty state.
 
 **Does not need art:** nothing outstanding from the §9.0 list.
+
+---
+
+## What blocks `?sprites=1` becoming the default (2026-08-22)
+
+Every TOKEN family on the board is now real art: glass tiles, brass dials and
+brass plaques. What remains is composition and states, not assets.
+
+**1. The front-target rim, 1.58:1.** §5 gives the front target a gold rim. On
+the old navy plate that rim measured 8.21:1; on the brass plaque it is 2.58:1
+against the body and 1.58:1 against its lit areas. This is the single most
+important state on the board — which target am I solving — and gold-on-gold
+does not carry it. Needs a different signal, not a different gold.
+
+**2. The plaque body against the lane, 1.02:1.** Brass median L 0.1804 against
+the lane ground's L 0.1757. It reads on screen by CHROMA — saturated gold on
+desaturated tan — which is what a sunlit phone and a colourblind viewer lose.
+Not a metric artifact: no change of measurement moves two equal luminances
+apart. The same brass measures 3.79:1 over felt, so per §9.1 the fix is the
+ground. Felt-lining the lane would do it, at the cost of the paper look.
+Declared in `brightness-gate.test.ts` rather than suppressed.
+
+**3. No `-unlit` art for any family.** The atlases ship lit frames only, so a
+spent dial drops to procedural next to real glass the moment a budget runs out.
+Boot never reaches that state, which is why every gate stayed green over it
+until the sprite smoke was extended past boot.
+
+The first two are design decisions. The third is a generation pass.
