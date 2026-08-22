@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } from "pixi.js";
+import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture, Rectangle } from "pixi.js";
 
 import type { BinaryOp, Mode, UnaryOp } from "../solver/index.js";
 import type { Command, InputEvent, ViewState } from "../game/types.js";
@@ -1404,12 +1404,38 @@ export class Renderer {
      * string is something a playtester needs to see anyway, so it costs no
      * extra pixels and the gesture is discoverable only if you were told.
      */
+    /*
+     * ROW y+46, NOT y+22, AND THE REASON MATTERS.
+     *
+     * At y+22 the label sat at design x 363-408, and the restart button covers
+     * x 318-408 of y 836-868 — the whole of it — and is added to root after it.
+     * So the gesture was not merely hidden, it was UNREACHABLE: a long press on
+     * the export target hit restart and threw the level away. Verified on the
+     * live build with a real touch context before this moved.
+     *
+     * y+46 sits below restart and to the right of the map button, which is the
+     * one free corner of the band.
+     */
     const build = this.text(this.buildLabel, 10, PALETTE.textDim);
     build.anchor.set(1, 0);
-    build.position.set(status.x + status.width, status.y + 22);
+    build.position.set(status.x + status.width, status.y + 46);
     build.alpha = 0.7;
     build.eventMode = "static";
     build.cursor = "pointer";
+    /*
+     * A 45x13 glyph run is a tenth of the area a finger needs. The visible text
+     * stays small — it is a build string, not a control — while the hit area is
+     * padded out to a real target, which is the whole point of a gesture that
+     * has to work on a phone held one-handed.
+     */
+    const padX = 14;
+    const padY = Math.max(0, (44 - build.height) / 2);
+    build.hitArea = new Rectangle(
+      -build.width - padX,
+      -padY,
+      build.width + padX * 2,
+      build.height + padY * 2,
+    );
 
     let held: ReturnType<typeof setTimeout> | null = null;
     const cancel = (): void => {
