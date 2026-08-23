@@ -1,0 +1,141 @@
+{
+  "id": "gen-early-2321",
+  "world": 2,
+  "pool": [
+    8,
+    3,
+    6,
+    2,
+    9,
+    4,
+    9,
+    5
+  ],
+  "targets": [
+    24,
+    12,
+    5,
+    45
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null,
+        "*": null
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          2,
+          4,
+          3,
+          1
+        ],
+        "dPath": [
+          2,
+          1,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          3
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 2,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "*": 3,
+        "-": 1
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "dPath": [
+          2,
+          1,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          3
+        ],
+        "lookaheadDistance": 1,
+        "maxTrapDepth": 1,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "expert": {
+      "budget": {
+        "*": 3,
+        "-": 1
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "dPath": [
+          2,
+          1,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          3
+        ],
+        "lookaheadDistance": 1,
+        "maxTrapDepth": 1,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 0,
+  "generator": {
+    "seed": 20260823,
+    "strategy": "directed",
+    "targetTier": "early",
+    "hash": "2.3.4.5.6.8.9.9|24.12.5.45",
+    "peakTemptation": 0.508,
+    "traps": [
+      {
+        "targetIndex": 0,
+        "fatal": "4 * 6 = 24",
+        "correct": "3 * 8 = 24",
+        "fatalNaturalness": 0.6,
+        "correctNaturalness": 0.581,
+        "temptation": 0.508,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      }
+    ],
+    "decoys": [],
+    "expertBudgetsSolvable": 1,
+    "expertBudgetsUnique": 1,
+    "transforms": 0
+  }
+}

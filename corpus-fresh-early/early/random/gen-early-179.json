@@ -1,0 +1,119 @@
+{
+  "id": "gen-early-179",
+  "world": 2,
+  "pool": [
+    9,
+    8,
+    9,
+    4,
+    1,
+    1,
+    8,
+    1,
+    9,
+    7
+  ],
+  "targets": [
+    17,
+    36,
+    2,
+    7,
+    2
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null,
+        "*": null
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 2,
+        "dStart": [
+          1,
+          1,
+          2,
+          2,
+          2
+        ],
+        "dPath": [
+          1,
+          1,
+          2,
+          2,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          1
+        ],
+        "lookaheadDistance": 1,
+        "maxTrapDepth": 1,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "+": 2,
+        "*": 1,
+        "-": 2
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 2,
+        "dStart": [
+          1,
+          1,
+          2,
+          2,
+          2
+        ],
+        "dPath": [
+          1,
+          1,
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          1
+        ],
+        "lookaheadDistance": 1,
+        "maxTrapDepth": 0,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 0,
+  "generator": {
+    "seed": 20260823,
+    "strategy": "random",
+    "targetTier": "early",
+    "hash": "1.1.1.4.7.8.8.9.9.9|17.36.2.7.2",
+    "peakTemptation": 0.608,
+    "traps": [
+      {
+        "targetIndex": 3,
+        "fatal": "1 * 7 = 7",
+        "correct": "8 - 1 = 7",
+        "fatalNaturalness": 0.643,
+        "correctNaturalness": 0.414,
+        "temptation": 0.608,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      }
+    ],
+    "decoys": [],
+    "expertBudgetsSolvable": 1,
+    "expertBudgetsUnique": 0,
+    "transforms": 0
+  }
+}

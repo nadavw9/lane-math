@@ -1,0 +1,122 @@
+{
+  "id": "gen-early-1258",
+  "world": 2,
+  "pool": [
+    8,
+    7,
+    4,
+    3,
+    8,
+    5,
+    3,
+    2
+  ],
+  "targets": [
+    15,
+    1,
+    40,
+    1
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null,
+        "*": null
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 2,
+        "dStart": [
+          2,
+          4,
+          1,
+          4
+        ],
+        "dPath": [
+          2,
+          3,
+          1,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 2,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "+": 1,
+        "-": 2,
+        "*": 1
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 2,
+        "dStart": [
+          2,
+          4,
+          1,
+          4
+        ],
+        "dPath": [
+          2,
+          3,
+          1,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 2,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 0,
+  "generator": {
+    "seed": 20260823,
+    "strategy": "random",
+    "targetTier": "early",
+    "hash": "2.3.3.4.5.7.8.8|15.1.40.1",
+    "peakTemptation": 0.529,
+    "traps": [
+      {
+        "targetIndex": 0,
+        "fatal": "3 * 5 = 15",
+        "correct": "7 + 8 = 15",
+        "fatalNaturalness": 0.643,
+        "correctNaturalness": 0.571,
+        "temptation": 0.529,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 1,
+        "fatal": "5 - 4 = 1",
+        "correct": "3 - 2 = 1",
+        "fatalNaturalness": 0.414,
+        "correctNaturalness": 0.48,
+        "temptation": 0.463,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      }
+    ],
+    "decoys": [],
+    "expertBudgetsSolvable": 1,
+    "expertBudgetsUnique": 0,
+    "transforms": 0
+  }
+}

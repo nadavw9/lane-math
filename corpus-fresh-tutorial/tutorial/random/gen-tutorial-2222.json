@@ -1,0 +1,131 @@
+{
+  "id": "gen-tutorial-2222",
+  "world": 1,
+  "pool": [
+    5,
+    2,
+    4,
+    7,
+    2,
+    3
+  ],
+  "targets": [
+    7,
+    11,
+    5
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null
+      },
+      "tier": "tutorial",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          2,
+          1,
+          2
+        ],
+        "dPath": [
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          1
+        ],
+        "lookaheadDistance": 1,
+        "maxTrapDepth": 1,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "+": 3
+      },
+      "tier": null,
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          2,
+          1,
+          1
+        ],
+        "dPath": [
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          1,
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 1,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "expert": {
+      "budget": {
+        "+": 3
+      },
+      "tier": null,
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          2,
+          1,
+          1
+        ],
+        "dPath": [
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 1,
+        "keystones": [
+          1,
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 1,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 0,
+  "generator": {
+    "seed": 20260823,
+    "strategy": "random",
+    "targetTier": "tutorial",
+    "hash": "2.2.3.4.5.7|7.11.5",
+    "peakTemptation": 0.5,
+    "traps": [
+      {
+        "targetIndex": 0,
+        "fatal": "3 + 4 = 7",
+        "correct": "2 + 5 = 7",
+        "fatalNaturalness": 0.741,
+        "correctNaturalness": 0.741,
+        "temptation": 0.5,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      }
+    ],
+    "decoys": [],
+    "expertBudgetsSolvable": 1,
+    "expertBudgetsUnique": 1,
+    "transforms": 0
+  }
+}

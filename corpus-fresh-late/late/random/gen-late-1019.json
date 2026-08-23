@@ -1,0 +1,562 @@
+{
+  "id": "gen-late-1019",
+  "world": 4,
+  "pool": [
+    8,
+    3,
+    4,
+    2,
+    3,
+    12,
+    2,
+    3,
+    3,
+    7,
+    12,
+    6,
+    7,
+    6,
+    11,
+    11
+  ],
+  "targets": [
+    24,
+    2,
+    15,
+    6,
+    21,
+    2,
+    1
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null,
+        "*": null,
+        "/": null,
+        "sqrt": null
+      },
+      "tier": "late",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 370,
+        "dStart": [
+          4,
+          7,
+          3,
+          6,
+          1,
+          7,
+          11
+        ],
+        "dPath": [
+          4,
+          5,
+          1,
+          4,
+          1,
+          1,
+          2
+        ],
+        "decisionPoints": 4,
+        "keystones": [
+          4
+        ],
+        "lookaheadDistance": 4,
+        "maxTrapDepth": 5,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "*": 3,
+        "-": 2,
+        "+": 1,
+        "/": 1
+      },
+      "tier": "late",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 10,
+        "dStart": [
+          4,
+          7,
+          3,
+          6,
+          1,
+          7,
+          11
+        ],
+        "dPath": [
+          4,
+          5,
+          1,
+          3,
+          1,
+          1,
+          1
+        ],
+        "decisionPoints": 3,
+        "keystones": [
+          4
+        ],
+        "lookaheadDistance": 4,
+        "maxTrapDepth": 5,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "expert": {
+      "budget": {
+        "+": 2,
+        "/": 2,
+        "-": 2,
+        "*": 1
+      },
+      "tier": "late",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          4,
+          7,
+          3,
+          6,
+          1,
+          7,
+          11
+        ],
+        "dPath": [
+          4,
+          6,
+          2,
+          2,
+          1,
+          1,
+          1
+        ],
+        "decisionPoints": 4,
+        "keystones": [
+          4
+        ],
+        "lookaheadDistance": 4,
+        "maxTrapDepth": 4,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 2,
+  "generator": {
+    "seed": 20260823,
+    "strategy": "random",
+    "targetTier": "late",
+    "hash": "2.2.3.3.3.3.4.6.6.7.7.8.11.11.12.12|24.2.15.6.21.2.1",
+    "peakTemptation": 0.523,
+    "traps": [
+      {
+        "targetIndex": 1,
+        "fatal": "8 - 6 = 2",
+        "correct": "6 / 3 = 2",
+        "fatalNaturalness": 0.353,
+        "correctNaturalness": 0.241,
+        "temptation": 0.594,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 0,
+        "fatal": "3 * 8 = 24",
+        "correct": "2 * 12 = 24",
+        "fatalNaturalness": 0.581,
+        "correctNaturalness": 0.529,
+        "temptation": 0.523,
+        "trapDepth": 5,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.72,
+        "temptation": 0.517,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 0,
+        "fatal": "4 * 6 = 24",
+        "correct": "3 * 8 = 24",
+        "fatalNaturalness": 0.6,
+        "correctNaturalness": 0.581,
+        "temptation": 0.508,
+        "trapDepth": 5,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 + 4 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.769,
+        "temptation": 0.5,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "3 + 3 = 6",
+        "correct": "2 + 4 = 6",
+        "fatalNaturalness": 0.769,
+        "correctNaturalness": 0.769,
+        "temptation": 0.5,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "2 * 3 = 6",
+        "correct": "2 + 4 = 6",
+        "fatalNaturalness": 0.72,
+        "correctNaturalness": 0.769,
+        "temptation": 0.483,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 5,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 - 2 = 2",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.462,
+        "temptation": 0.394,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 5,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 - 2 = 2",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.462,
+        "temptation": 0.394,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 1,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 - 2 = 2",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.462,
+        "temptation": 0.394,
+        "trapDepth": 5,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 5,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 - 2 = 2",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.462,
+        "temptation": 0.394,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 5,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 - 2 = 2",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.462,
+        "temptation": 0.394,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 2,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 + 11 = 15",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.571,
+        "temptation": 0.344,
+        "trapDepth": 4,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 2,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 + 11 = 15",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.571,
+        "temptation": 0.344,
+        "trapDepth": 4,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 2,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "4 + 11 = 15",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.571,
+        "temptation": 0.344,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 4,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "3 * 7 = 21",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.6,
+        "temptation": 0.333,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 4,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "3 * 7 = 21",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.6,
+        "temptation": 0.333,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 4,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "3 * 7 = 21",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.6,
+        "temptation": 0.333,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 4,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "3 * 7 = 21",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.6,
+        "temptation": 0.333,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 1,
+        "fatal": "8 / 4 = 2",
+        "correct": "4 - 2 = 2",
+        "fatalNaturalness": 0.219,
+        "correctNaturalness": 0.462,
+        "temptation": 0.322,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.72,
+        "temptation": 0.305,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "2 * 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.72,
+        "temptation": 0.305,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "3 + 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.769,
+        "temptation": 0.291,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "3 + 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.769,
+        "temptation": 0.291,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "3 + 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.769,
+        "temptation": 0.291,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "3 + 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.769,
+        "temptation": 0.291,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "3 + 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.769,
+        "temptation": 0.291,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "12 - 6 = 6",
+        "correct": "3 + 3 = 6",
+        "fatalNaturalness": 0.316,
+        "correctNaturalness": 0.769,
+        "temptation": 0.291,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "2 + 4 = 6",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.769,
+        "temptation": 0.281,
+        "trapDepth": 3,
+        "stealsKeystoneOperand": false
+      },
+      {
+        "targetIndex": 3,
+        "fatal": "sqrt 4 -> 2",
+        "correct": "2 + 4 = 6",
+        "fatalNaturalness": 0.3,
+        "correctNaturalness": 0.769,
+        "temptation": 0.281,
+        "trapDepth": 3,
+        "stealsKeystoneOperand": false
+      }
+    ],
+    "decoys": [
+      {
+        "value": 11,
+        "newDecompositions": 2,
+        "affectedTargets": [
+          2,
+          6
+        ]
+      },
+      {
+        "value": 11,
+        "newDecompositions": 1,
+        "affectedTargets": [
+          6
+        ]
+      }
+    ],
+    "expertBudgetsSolvable": 18,
+    "expertBudgetsUnique": 1,
+    "transforms": 0
+  }
+}

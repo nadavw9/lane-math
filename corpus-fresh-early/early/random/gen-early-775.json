@@ -1,0 +1,163 @@
+{
+  "id": "gen-early-775",
+  "world": 2,
+  "pool": [
+    8,
+    7,
+    3,
+    4,
+    5,
+    7,
+    3,
+    1
+  ],
+  "targets": [
+    1,
+    7,
+    35,
+    4
+  ],
+  "rules": {
+    "allowNegative": false,
+    "integerOnly": true
+  },
+  "modes": {
+    "casual": {
+      "budget": {
+        "+": null,
+        "-": null,
+        "*": null
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 2,
+        "dStart": [
+          3,
+          3,
+          1,
+          5
+        ],
+        "dPath": [
+          3,
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 2,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "normal": {
+      "budget": {
+        "-": 1,
+        "+": 2,
+        "*": 1
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          3,
+          3,
+          1,
+          5
+        ],
+        "dPath": [
+          3,
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 2,
+        "overlappingKeystonePairs": 0
+      }
+    },
+    "expert": {
+      "budget": {
+        "-": 1,
+        "+": 2,
+        "*": 1
+      },
+      "tier": "early",
+      "metrics": {
+        "solvable": true,
+        "solutionPaths": 1,
+        "dStart": [
+          3,
+          3,
+          1,
+          5
+        ],
+        "dPath": [
+          3,
+          2,
+          1,
+          1
+        ],
+        "decisionPoints": 2,
+        "keystones": [
+          2
+        ],
+        "lookaheadDistance": 2,
+        "maxTrapDepth": 2,
+        "overlappingKeystonePairs": 0
+      }
+    }
+  },
+  "surplus": 0,
+  "generator": {
+    "seed": 20260823,
+    "strategy": "random",
+    "targetTier": "early",
+    "hash": "1.3.3.4.5.7.7.8|1.7.35.4",
+    "peakTemptation": 0.608,
+    "traps": [
+      {
+        "targetIndex": 1,
+        "fatal": "1 * 7 = 7",
+        "correct": "8 - 1 = 7",
+        "fatalNaturalness": 0.643,
+        "correctNaturalness": 0.414,
+        "temptation": 0.608,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 0,
+        "fatal": "5 - 4 = 1",
+        "correct": "4 - 3 = 1",
+        "fatalNaturalness": 0.414,
+        "correctNaturalness": 0.444,
+        "temptation": 0.482,
+        "trapDepth": 2,
+        "stealsKeystoneOperand": true
+      },
+      {
+        "targetIndex": 1,
+        "fatal": "1 * 7 = 7",
+        "correct": "3 + 4 = 7",
+        "fatalNaturalness": 0.643,
+        "correctNaturalness": 0.741,
+        "temptation": 0.465,
+        "trapDepth": 1,
+        "stealsKeystoneOperand": true
+      }
+    ],
+    "decoys": [],
+    "expertBudgetsSolvable": 2,
+    "expertBudgetsUnique": 2,
+    "transforms": 0
+  }
+}
