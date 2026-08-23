@@ -72,28 +72,29 @@ export interface SolvedBudget {
 }
 
 /**
- * Normal: counted, with slack above T (GDD §6 — "Counted (e.g. 3x +, 1x /)").
+ * Normal: EXACT, the same contract as Expert (GDD §8.5 as amended).
  *
- * Take a real line's usage and hand out a little more than it needs. The slack
- * is what makes Normal counted rather than consumed: it leaves room to be
- * wrong once about which operator to spend where.
+ * It used to add `tier.normalSlack` random operators on top of a real line's
+ * usage — "counted, with slack". §6 moved the mode axis from budget to
+ * assistance, so Normal and Expert now solve for the same budget and differ
+ * only by the fatal-move warning and §8.7's uniqueness rule.
+ *
+ * This matters beyond the budget field. Mid and Late take Normal as their mode
+ * of record, so a slack budget here meant their metrics — decision points,
+ * trap depth, path count — were banded against a budget the game does not
+ * ship. `tier.normalSlack` is now unused by this function and left in the tier
+ * data only until the field itself is removed.
  */
 export function solveNormalBudget(
   level: Level,
-  tier: TierSpec,
+  _tier: TierSpec,
   usages: readonly OpUsage[],
-  rng: Rng,
+  _rng: Rng,
 ): SolvedBudget | null {
   if (usages.length === 0) return null;
 
-  const slack = rng.int(tier.normalSlack.min, tier.normalSlack.max);
-
-  for (const usage of rng.shuffle(usages)) {
+  for (const usage of usages) {
     const budget = toBudget(usage);
-    for (let i = 0; i < slack; i++) {
-      const op = rng.pick(tier.ops);
-      budget[op] = (budget[op] ?? 0) + 1;
-    }
     // Only solvability matters here, so stop at the first winning line and skip
     // dead-branch enumeration entirely. Exact path counts come from the
     // per-mode analyse() that runs on survivors.

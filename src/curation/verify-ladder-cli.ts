@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { analyse, countLines, scarcityOf, solve, type Level, type Mode } from "../solver/index.js";
 import { bandAgainst } from "../generator/pipeline.js";
-import { tierByName, type TierName } from "../generator/tiers.js";
+import { LAUNCH_TIERS, tierByName, type TierName } from "../generator/tiers.js";
 
 /**
  * Re-derive every ladder level from disk under the CURRENT solver and compare
@@ -30,7 +30,24 @@ const driftRows: string[] = [];
 
 for (const file of files) {
   const j = JSON.parse(readFileSync(join(dir, file), "utf8"));
-  const tier = tierByName(j.generator.targetTier as TierName);
+  /*
+   * Band by the SLOT, not by where the board was born.
+   *
+   * This read `j.generator.targetTier`, which is provenance: the tier the
+   * generator was aiming at. That agreed with the slot only because no board
+   * had ever moved between worlds. The moment two Late boards were promoted
+   * into World 4 and two World 4 boards took their place in World 3, the
+   * verifier banded four correctly-placed levels against the wrong table and
+   * reported two of them out of band.
+   *
+   * §7.2 maps worlds to tiers, and 1-01 is the one slot with its own tier
+   * (§7.4's near-forced board), so it is named rather than derived.
+   */
+  const slotTier: TierName =
+    j.id === "1-01"
+      ? "tutorial-forced"
+      : (LAUNCH_TIERS.find((t) => t.ladderWorld === j.world)?.name ?? (j.generator.targetTier as TierName));
+  const tier = tierByName(slotTier);
   const asLevel: Level = {
     id: j.id,
     pool: j.pool,

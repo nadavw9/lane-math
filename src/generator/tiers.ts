@@ -11,8 +11,8 @@
  *   | Tier     | T   | S   | Operators | Scarcity | Keystones      | Lookahead | Decision pts |
  *   | Tutorial | 3   | 0   | + -       | Free     | 1              | 1         | 0-1          |
  *   | Early    | 4-5 | 0   | + - *     | Free     | 1              | 1-2       | 1-2          |
- *   | Mid      | 5-6 | 1   | + - * /   | Counted  | 1-2            | 2-3       | 2-3          |
- *   | Late     | 6-7 | 1-2 | all + sqrt| Counted  | 1-2            | 3-4       | 3-4          |
+ *   | Mid      | 5-6 | 1-2 | + - * /   | Exact    | 1-2            | 2-3       | 2-3          |
+ *   | Late     | 6-7 | 1-2 | all + sqrt| Exact    | 1-2            | 3-4       | 3-4          |
  *   | Master ‡ | 6-7 | 2   | all       | Consumed | 2+ overlapping | 4+        | 3-4          |
  *
  * All decisionPoints figures are measured on `dPath`, never `dStart` (§8.4).
@@ -124,10 +124,14 @@ export const TIERS: readonly TierSpec[] = [
     name: "mid",
     world: 3,
     targetCount: r(5, 6),
-    surplus: r(1, 1),
+    // GDD §8.7 amended: 1-2, not a point value. §3.1's own bands are S=0
+    // (parity deduction), S=1-2 (parity broken) and S>=3 (do not ship) — it
+    // draws no line between 1 and 2, so Mid sitting at exactly 1 while Late
+    // allowed 1-2 made surplus the only thing separating them at the boundary.
+    surplus: r(1, 2),
     ops: ["+", "-", "*", "/"],
     unaryOps: [],
-    scarcity: "counted",
+    scarcity: "consumed",
     modeOfRecord: "normal",
     keystones: r(1, 2),
     requireOverlappingKeystones: false,
@@ -148,7 +152,7 @@ export const TIERS: readonly TierSpec[] = [
     surplus: r(1, 2),
     ops: ["+", "-", "*", "/"],
     unaryOps: ["sqrt"],
-    scarcity: "counted",
+    scarcity: "consumed",
     modeOfRecord: "normal",
     // GDD §8.7: widened from exactly 2. §7.2 calls World 4 "the FIRST
     // two-keystone levels", not all of them — 318 of 415 Late candidates have
