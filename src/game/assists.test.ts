@@ -182,6 +182,37 @@ describe("modes change assistance, not budget (GDD §6, amended)", () => {
     expect(state.tiles.every((t) => !t.consumed)).toBe(true);
   });
 
+  it("a routine warning names neither the target nor the tiles (§5.4)", () => {
+    /*
+     * FREE ASSISTANCE MUST NEVER EXCEED PAID.
+     *
+     * The routine warning named the starved target and shipped the ids of the
+     * tiles that reach it. The ★1 Narrow hint sells strictly less than that —
+     * "one of the last two or three targets has only one solution", no tiles —
+     * so the interruption was giving away what the shop charges for.
+     */
+    const director = new Director(load("3-05"), "normal", economyAt("3-05"));
+    const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+    const fatal = fatalMoveOn(state, load("3-05"));
+    const w = commitMove(director, fatal!).warning!;
+
+    expect(w.line).toBe("Something later needs those.");
+    expect(w.keystoneTarget).toBeNull();
+    expect(w.keystoneTargetIndex).toBeNull();
+    expect(w.keystoneTileIds).toEqual([]);
+    // And the line must not smuggle a number in some other phrasing.
+    expect(w.line).not.toMatch(/\d/);
+  });
+
+  it("1-4 DOES name and pulse — it is the teaching beat, and it fires once", () => {
+    const director = new Director(load(SCRIPTED_TRAP_LEVEL), "normal", freshEconomy());
+    stageTrapMove(director);
+    const w = stateOf(director.handle({ type: "tapCommit" })).warning!;
+    expect(w.scripted).toBe(true);
+    expect(w.keystoneTarget).not.toBeNull();
+    expect(w.keystoneTileIds.length).toBeGreaterThan(0);
+  });
+
   it("1-4 stays a BLOCK in every mode — §7.5 is a teaching beat, not an assist", () => {
     for (const mode of ["casual", "normal", "expert"] as const) {
       const director = new Director(load(SCRIPTED_TRAP_LEVEL), mode, freshEconomy());

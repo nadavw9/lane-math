@@ -1315,7 +1315,16 @@ export class Renderer {
     // Branch elimination strikes out the tiles of the fatal option; the
     // keystone warning pulses the tiles that make the starved target.
     const hinted = new Set(s.hints.flatMap((h) => h.tileIds));
-    const pulsed = new Set(s.warning?.keystoneTileIds ?? []);
+    /*
+     * ONLY §7.5's scripted trap pulses (GDD §5.4).
+     *
+     * A routine warning that lit the tiles reaching the starved target handed
+     * out more than the star-1 Narrow hint sells. The Director already
+     * withholds the ids on a routine warning, so this set is empty either way
+     * — the `scripted` test is here so the rule is visible at the point of use
+     * and cannot be reintroduced by restoring the field upstream.
+     */
+    const pulsed = new Set(s.warning?.scripted ? s.warning.keystoneTileIds : []);
 
     /*
      * Indexed by the tile's FIXED position in the level's pool (§9.3).
@@ -1729,18 +1738,16 @@ export class Renderer {
       this.root.addChild(line);
 
       /*
-       * Three registers, one each: the QUESTION (the headline), the CAUSE, the
-       * COST. The overridable panel used "X loses the level" here and "commit
-       * anyway and the level is lost" below it, which is the same sentence
-       * twice — and the second one is the one that has to land, because it is
-       * the only line attached to a button the player can press.
+       * Three registers, one each: the CAUSE (the headline), the MOVE, the COST.
+       *
+       * The routine line used to read "8 - 4 starves it", whose "it" was the
+       * target the headline named — and §5.4 now forbids naming it. What is
+       * left is the move itself, quoted back without a verdict: the headline
+       * already gave the reason and the line below gives the price, so a third
+       * restatement of "this loses" was the redundancy anyway.
        */
       const refused = this.text(
-        w.scripted
-          ? `${asBoardGlyphs(w.move)} looks right. It is not.`
-          : w.overridable
-            ? `${asBoardGlyphs(w.move)} starves it.`
-            : `${asBoardGlyphs(w.move)} loses the level.`,
+        w.scripted ? `${asBoardGlyphs(w.move)} looks right. It is not.` : asBoardGlyphs(w.move),
         13,
         PALETTE.tray,
       );

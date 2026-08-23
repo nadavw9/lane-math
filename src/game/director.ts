@@ -903,7 +903,6 @@ export class Director {
      * move would work too, but it would put the same move through the tap path
      * twice and diverge the moment either path grew a side effect.
      */
-    const keystone = this.keystoneAhead();
     const blocks = this.warningBlocks;
     if (blocks) {
       this.slots = { leftTileId: null, op: null, rightTileId: null };
@@ -911,20 +910,53 @@ export class Director {
     } else {
       this.pendingFatal = { kind: "binary", leftId: left.id, rightId: right.id, op };
     }
-    this.warning = {
-      move: `${left.value} ${op} ${right.value}`,
-      keystoneTarget: keystone?.target ?? null,
-      keystoneTargetIndex: keystone?.index ?? null,
-      keystoneTileIds: keystone?.tileIds ?? [],
-      scripted: this.scriptedTrapLevel && !this.scriptedRewindUsed,
-      overridable: !blocks,
-      line: keystone
-        ? `Wait — what makes the ${keystone.target}?`
-        : "That move loses the level.",
-    };
+    this.warning = this.warningView(`${left.value} ${op} ${right.value}`, !blocks);
     if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;
     this.message = null;
     return this.render();
+  }
+
+  /**
+   * Build the warning, and decide WHAT IT IS ALLOWED TO SAY (GDD §5.4).
+   *
+   * Free assistance must never exceed paid. The routine warning used to name
+   * the starved target — "Wait, what makes the 15?" — and ship the tile ids
+   * that make it, which the renderer pulsed. That is strictly more than the
+   * ★1 Narrow hint sells: Narrow says only that one of the last two or three
+   * targets has a single solution, and names no tiles at all. Nobody buys a
+   * hint the interruption already gave away.
+   *
+   * So the routine warning says a move is fatal and nothing else. §7.5's
+   * scripted trap at 1-04 is the exception — it names and pulses because it is
+   * a teaching beat rather than an assist, and it fires once per level.
+   *
+   * The gate is HERE rather than in the renderer on purpose: what a mode is
+   * allowed to disclose is a rule, and the Director owns the rules. Withholding
+   * the ids at the source also means no future renderer can leak them back.
+   */
+  private warningView(move: string, overridable: boolean): WarningView {
+    const scripted = this.scriptedTrapLevel && !this.scriptedRewindUsed;
+    if (!scripted) {
+      return {
+        move,
+        keystoneTarget: null,
+        keystoneTargetIndex: null,
+        keystoneTileIds: [],
+        scripted: false,
+        overridable,
+        line: "Something later needs those.",
+      };
+    }
+    const keystone = this.keystoneAhead();
+    return {
+      move,
+      keystoneTarget: keystone?.target ?? null,
+      keystoneTargetIndex: keystone?.index ?? null,
+      keystoneTileIds: keystone?.tileIds ?? [],
+      scripted: true,
+      overridable,
+      line: keystone ? `Wait — what makes the ${keystone.target}?` : "Something later needs those.",
+    };
   }
 
   /** The transform equivalent of checkFatalMove. */
@@ -948,19 +980,10 @@ export class Director {
     const budget = this.level.modes[this.mode]?.budget ?? {};
     if (this.winnability.isWinnable(this.asSolverLevel(), budget, next)) return null;
 
-    const keystone = this.keystoneAhead();
     const blocks = this.warningBlocks;
     this.transformOp = null;
     this.pendingFatal = blocks ? null : { kind: "unary", tileId: tile.id, op };
-    this.warning = {
-      move: `${op} ${tile.value} → ${to}`,
-      keystoneTarget: keystone?.target ?? null,
-      keystoneTargetIndex: keystone?.index ?? null,
-      keystoneTileIds: keystone?.tileIds ?? [],
-      scripted: this.scriptedTrapLevel && !this.scriptedRewindUsed,
-      overridable: !blocks,
-      line: keystone ? `Wait — what makes the ${keystone.target}?` : "That move loses the level.",
-    };
+    this.warning = this.warningView(`${op} ${tile.value} → ${to}`, !blocks);
     if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;
     return this.render();
   }
