@@ -521,6 +521,12 @@ Build backwards, then measure exhaustively. **Never forward-search.**
    Compute metrics (§8.4). Outside the tier band → discard, regenerate.
 ```
 
+**Exception — the trapless tutorial tier.** §7.4 gives 1-2 and 1-3 free decisions with no fatal branches, while the tutorial tier requires a live trap on every board. Both cannot hold.
+
+§7.4 is the design intent; the band drifted from it. `tutorial-trapless` therefore requires `decisionPoints >= 1` and `maxTrapDepth = 0` — a real choice with no wrong answer, which is what "free decisions appear" means. It exists to supply 1-2 and 1-3 and must never be used elsewhere.
+
+Distinct from `tutorial-forced`, which pins `decisionPoints` to 0 and supplies 1-1 only.
+
 Rejection sampling against a fitness function. Cheap, fully controllable, and structurally identical to Traffic Bomb's balance simulator — but with a **stronger guarantee**, because the solver *proves* solvability rather than estimating balance.
 
 ### 8.4 Metrics
