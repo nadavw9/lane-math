@@ -5,14 +5,31 @@ import { describe, expect, it } from "vitest";
 import { casualBudget } from "../generator/budgets.js";
 import { tierByName } from "../generator/tiers.js";
 import { solve, type Level } from "../solver/index.js";
+import { ladderScore } from "../curation/ladder-score.js";
 
 const load = (id: string) => JSON.parse(readFileSync(`levels/${id}.json`, "utf8"));
+/**
+ * A solver Level from a ladder file. `operators` is required and is the per-mode
+ * budget map — the earlier version of this cast it away, which vitest ran
+ * happily and `tsc` did not.
+ */
 const asLevel = (j: {
   id: string;
   pool: number[];
   targets: number[];
   rules: Level["rules"];
-}): Level => ({ id: j.id, pool: j.pool, targets: j.targets, rules: j.rules }) as Level;
+  modes: Record<string, { budget: Level["operators"]["casual"] }>;
+}): Level => ({
+  id: j.id,
+  pool: j.pool,
+  targets: j.targets,
+  rules: j.rules,
+  operators: {
+    casual: j.modes.casual!.budget,
+    normal: j.modes.normal!.budget,
+    expert: j.modes.expert!.budget,
+  },
+});
 
 /**
  * GDD §7.6 unlocks `√` at 4-1, and §9.0's "designed empty state" logic applies
@@ -56,12 +73,19 @@ describe("the √ unlock at 4-1 has something behind it (GDD §7.6)", () => {
   });
 
   it("4-01 is still the world's valley — no World 4 level is gentler", () => {
-    // §7.2 opens each world on its gentlest board. The root constraint must not
-    // have been paid for by making the opener the hard one.
+    /*
+     * §7.2 opens each world on its gentlest board. The root constraint must not
+     * have been paid for by making the opener the hard one.
+     *
+     * Scores are DERIVED here, not read from the file. The first version of
+     * this test read `curation.compositeScore` and failed a board that passes —
+     * those values were frozen at first placement, under the old slack Normal
+     * budget, and for four levels against a different tier than they now sit
+     * in. 4-02 stored 27 while scoring 29.92.
+     */
     const scores: number[] = [];
     for (let i = 1; i <= 10; i++) {
-      const j = load(`4-${String(i).padStart(2, "0")}`);
-      scores.push(j.curation.compositeScore as number);
+      scores.push(ladderScore(load(`4-${String(i).padStart(2, "0")}`)).total);
     }
     expect(Math.min(...scores)).toBe(scores[0]);
   });

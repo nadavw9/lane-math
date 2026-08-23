@@ -28,7 +28,14 @@
  * decision volume. The former 5+/5+ band was compound tightening — moved up in
  * the same amendment that moved dPath down by 1.70 — and collapsed yield 10-25x.
  */
-export type TierName = "tutorial" | "early" | "mid" | "late" | "master" | "tutorial-forced";
+export type TierName =
+  | "tutorial"
+  | "early"
+  | "mid"
+  | "late"
+  | "master"
+  | "tutorial-forced"
+  | "tutorial-trapless";
 
 export interface Range {
   readonly min: number;
@@ -68,6 +75,14 @@ export interface TierSpec {
    * exclusive and 1-1 needs the trap gate off.
    */
   readonly requireLiveTrap: boolean;
+  /**
+   * Reject boards that HAVE a live trap (GDD §8.3, the trapless exception).
+   *
+   * Not the same as `requireLiveTrap: false`, which only stops asking for one —
+   * a board with a trap still passes that. §7.4 needs 1-2 and 1-3 to have no
+   * fatal branch at all, which is a positive requirement and needs its own gate.
+   */
+  readonly forbidLiveTrap: boolean;
   /** In scope for the 40-level launch ladder (§7.2). Master is not. */
   readonly launch: boolean;
   /** World this tier supplies in the launch ladder, if any (§7.2). */
@@ -96,6 +111,7 @@ export const TIERS: readonly TierSpec[] = [
     targetMax: 18,
     normalSlack: r(1, 2),
     requireLiveTrap: true,
+    forbidLiveTrap: false,
     launch: true,
     ladderWorld: 1,
   },
@@ -117,6 +133,7 @@ export const TIERS: readonly TierSpec[] = [
     targetMax: 45,
     normalSlack: r(1, 2),
     requireLiveTrap: true,
+    forbidLiveTrap: false,
     launch: true,
     ladderWorld: 2,
   },
@@ -142,6 +159,7 @@ export const TIERS: readonly TierSpec[] = [
     targetMax: 60,
     normalSlack: r(1, 2),
     requireLiveTrap: true,
+    forbidLiveTrap: false,
     launch: true,
     ladderWorld: 3,
   },
@@ -167,6 +185,7 @@ export const TIERS: readonly TierSpec[] = [
     targetMax: 80,
     normalSlack: r(1, 2),
     requireLiveTrap: true,
+    forbidLiveTrap: false,
     launch: true,
     ladderWorld: 4,
   },
@@ -190,6 +209,44 @@ export const TIERS: readonly TierSpec[] = [
     targetMax: 80,
     normalSlack: r(1, 2),
     requireLiveTrap: true,
+    forbidLiveTrap: false,
+    launch: false,
+    ladderWorld: null,
+  },
+  {
+    /*
+     * Slots 1-02 and 1-03 only (GDD §8.3, §7.4).
+     *
+     * "Free decisions appear (d_i = 2), still no fatal branches. Player learns
+     * that choices exist before learning they matter." The main tutorial tier
+     * requires a live trap on EVERY board, so it can never produce this — and
+     * §7.6 does not unlock the fatal-move warning until 1-4, which means a trap
+     * here is one the player meets unguarded, before the level whose whole
+     * purpose is to teach it (§7.5).
+     *
+     * The mirror of tutorial-forced: that one pins decisionPoints to 0 for the
+     * near-forced 1-1, this one requires at least one real choice and forbids
+     * the fatal branch. `requireLiveTrap` off is what makes it possible; the
+     * pipeline additionally holds maxTrapDepth at 0.
+     */
+    name: "tutorial-trapless",
+    world: 1,
+    targetCount: r(3, 3),
+    surplus: r(0, 0),
+    ops: ["+", "-"],
+    unaryOps: [],
+    scarcity: "free",
+    modeOfRecord: "casual",
+    keystones: r(0, 1),
+    requireOverlappingKeystones: false,
+    lookahead: r(1, 2),
+    decisionPoints: r(1, 2),
+    uniqueSolution: false,
+    operandMax: 9,
+    targetMax: 18,
+    normalSlack: r(1, 2),
+    requireLiveTrap: false,
+    forbidLiveTrap: true,
     launch: false,
     ladderWorld: null,
   },
@@ -221,6 +278,7 @@ export const TIERS: readonly TierSpec[] = [
     targetMax: 18,
     normalSlack: r(1, 2),
     requireLiveTrap: false,
+    forbidLiveTrap: false,
     launch: false,
     ladderWorld: null,
   },

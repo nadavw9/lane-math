@@ -332,6 +332,39 @@ result is surprising, or contradicts a previous run, suspect the harness first.
 
 ---
 
+## Cached derived values — a number that was true once
+
+A value computed from other data and then STORED is a lie waiting to happen.
+Nothing invalidates it, so it stays confidently wrong while every input moves
+underneath it, and the check that reads it fails work that is actually correct.
+
+**Prefer derivation at read time to a CI assertion.** An assertion only tells you
+after the drift has happened, and it tells you as a failing build on unrelated
+work. Deleting the cache removes the failure mode instead of reporting it.
+
+Instances:
+
+- **`curation.compositeScore`** was written when a board was first placed and
+  never recomputed. Then Normal's budget went from counted-with-slack to exact
+  (§8.5), which moves decisionPoints, maxTrapDepth and solutionPaths — and Mid
+  and Late score against Normal; then four levels were re-slotted between worlds
+  and were being scored against a tier they no longer sat in; then the solver
+  changed. **4-02 stored 27 while actually scoring 29.92.** A valley check
+  reading the stored field failed a board that passes, and the near-miss was
+  reporting a real regression that did not exist. Now derived by
+  `curation/ladder-score.ts` and absent from the level files.
+- **`verify-ladder-cli` banded by `j.generator.targetTier`** — where the board
+  was BORN, not where it sits. Same shape: a stored value that agreed with
+  reality only until something moved. Four re-slotted levels made it report two
+  correctly-placed levels out of band.
+- **`generator.transforms` was the inverse failure**: computed and never stored
+  at all, so whether a board was built to need a root could not be audited. The
+  rule is not "store nothing" — it is that **provenance is stored and
+  derivations are derived.** A seed and a hash are facts about how a board came
+  to exist; a score is a function of data that changes.
+
+---
+
 ## Settled: do not re-investigate
 
 **PixiJS tree-shaking is not worth it.** Measured 2026-08-20 by splitting Pixi

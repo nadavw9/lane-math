@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { tierByName, type TierName } from "../generator/tiers.js";
 import { WEIGHTS } from "./score.js";
+import { ladderScore } from "./ladder-score.js";
 
 /**
  * Render the curation report from the ladder on disk.
@@ -54,7 +55,7 @@ const rows: Row[] = readdirSync(dir)
       solutionPaths: m.solutionPaths,
       totalLines: m.totalLinesExplored ?? 0,
       survivalRate: m.survivalRate ?? 0,
-      score: j.curation.compositeScore,
+      score: ladderScore(j).total,
     };
   });
 

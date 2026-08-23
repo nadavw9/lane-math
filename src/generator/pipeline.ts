@@ -447,6 +447,23 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
     });
   }
 
+  /*
+   * §8.3's trapless exception, enforced positively. `requireLiveTrap: false`
+   * only stops the pipeline ASKING for a trap; a board that has one still sails
+   * through. 1-2 and 1-3 need no fatal branch at all, so it has to be checked.
+   */
+  if (tier.forbidLiveTrap) {
+    const worst = Math.max(...analyses.map((a) => a.metrics.maxTrapDepth));
+    if (worst > 0) {
+      return done({
+        accepted: false,
+        reason: "trap-not-live",
+        detail: `trapless tier: maxTrapDepth ${worst} in some mode`,
+        inertDecoyRejections: inert,
+      });
+    }
+  }
+
   const record = analyses.find((a) => a.mode === tier.modeOfRecord)!;
   if (!record.inBand) {
     return done({
