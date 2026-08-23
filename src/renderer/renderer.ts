@@ -1701,8 +1701,19 @@ export class Renderer {
       line.position.set(DESIGN.width / 2, panelY + 34);
       this.root.addChild(line);
 
+      /*
+       * Three registers, one each: the QUESTION (the headline), the CAUSE, the
+       * COST. The overridable panel used "X loses the level" here and "commit
+       * anyway and the level is lost" below it, which is the same sentence
+       * twice — and the second one is the one that has to land, because it is
+       * the only line attached to a button the player can press.
+       */
       const refused = this.text(
-        w.scripted ? `${w.move} looks right. It is not.` : `${w.move} loses the level.`,
+        w.scripted
+          ? `${w.move} looks right. It is not.`
+          : w.overridable
+            ? `${w.move} starves it.`
+            : `${w.move} loses the level.`,
         13,
         PALETTE.textDim,
       );

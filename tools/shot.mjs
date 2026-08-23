@@ -165,6 +165,16 @@ if (screen) {
       api.showBoard();
       await api.winLevel?.();
     }
+    if (name === "warned") {
+      /*
+       * §6's Normal warning, which is a WARNING and not a block: the panel has
+       * to show both ways out. Driving it with the solver rather than forcing
+       * the state, and refusing to shoot anything else — a screenshot of a
+       * board with no warning on it would look like a passing check.
+       */
+      api.playIntoFailure?.();
+      if (!api.state()?.warning) throw new Error("no warning on screen — nothing to shoot");
+    }
     if (name === "hint") {
       // A bought hint is the only way the hint line, and its mark, appear.
       api.send({ type: "buyHint", hint: "narrow" });
