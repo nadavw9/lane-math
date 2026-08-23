@@ -414,7 +414,7 @@ Nothing appears on screen before it is needed. Every system is a reward for prog
 | **3-3** | **Counted operators, and the count on the dial** | The remaining-uses counter appears with the rule it expresses. Before 3-3 there is nothing to count. **Never in Casual**, where operators are unlimited — an unlimited count is not a smaller number, it is a different game, and drawing an infinity symbol would teach a scarcity that is not there. |
 | **3-6** | **Hint shop** | Only once the player has enough stars to actually afford something. A shop full of unaffordable items teaches "this is not for me." |
 | 3-10 | **Difficulty mode selector** | Choosing a mode before understanding the game is a decision made on zero information. |
-| 4-1 | `√` | — |
+| 4-1 | `√` | Root-requiring boards are rare — 3.7% of Late candidates against 38.3% without the uniqueness rule. The mechanic unlocks at 4-1 and recurs only where curation finds a board; it is not expected on every World 4 level. Expert uniqueness is not relaxed to make it more common, because uniqueness is what makes exact budgets coherent. |
 | 4-5 | Negative intermediates | — |
 | 4-8 | Two-keystone levels | — |
 
