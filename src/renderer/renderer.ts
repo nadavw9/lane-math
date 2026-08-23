@@ -1681,15 +1681,17 @@ export class Renderer {
       });
     }
 
-    // --- blocked fatal move (GDD §6 Casual, §7.5 the scripted trap) ---
+    // --- fatal move: BLOCKED in Casual and at 1-4, WARNED in Normal (§6) ---
     if (s.warning) {
       const w = s.warning;
       const panelY = lane.y + 40;
+      // The overridable panel carries a second line of copy and two buttons.
+      const panelH = w.overridable ? 174 : 150;
       this.root.addChild(
         new Graphics()
-          .roundRect(lane.x + 6, panelY, lane.width - 12, 150, 8)
+          .roundRect(lane.x + 6, panelY, lane.width - 12, panelH, 8)
           .fill({ color: PALETTE.card, alpha: 0.97 })
-          .roundRect(lane.x + 6, panelY, lane.width - 12, 150, 8)
+          .roundRect(lane.x + 6, panelY, lane.width - 12, panelH, 8)
           .stroke({ width: 3, color: PALETTE.highlightInk }),
       );
 
@@ -1719,18 +1721,60 @@ export class Renderer {
         this.root.addChild(free);
       }
 
-      this.root.addChild(
-        this.box(
-          DESIGN.width / 2 - 60,
-          panelY + 104,
-          120,
-          32,
-          PALETTE.slotFilled,
-          w.scripted ? "let me look" : "got it",
-          PALETTE.tokenInk,
-          () => this.emit({ type: "dismissWarning" }),
-        ),
-      );
+      if (w.overridable) {
+        /*
+         * GDD §6: Normal warns and allows the override, so the panel has to
+         * state the PRICE of taking it. Without that line "commit anyway" reads
+         * as a second confirmation of a move the game has already refused,
+         * rather than a choice with a cost — and the cost is the whole reason
+         * Normal has a failure state at all.
+         */
+        const cost = this.text("commit anyway and the level is lost", 12, PALETTE.textDim);
+        cost.anchor.set(0.5);
+        cost.position.set(DESIGN.width / 2, panelY + 86);
+        this.root.addChild(cost);
+
+        this.root.addChild(
+          this.box(
+            DESIGN.width / 2 - 128,
+            panelY + 110,
+            124,
+            34,
+            PALETTE.slotFilled,
+            "go back",
+            PALETTE.tokenInk,
+            () => this.emit({ type: "dismissWarning" }),
+          ),
+        );
+        // The destructive option is the SECOND one and does not carry the gold
+        // accent: gold means "ready, armed, earned" (§9.6) and this is none of
+        // those.
+        this.root.addChild(
+          this.box(
+            DESIGN.width / 2 + 4,
+            panelY + 110,
+            124,
+            34,
+            PALETTE.card,
+            "commit anyway",
+            PALETTE.textDim,
+            () => this.emit({ type: "commitAnyway" }),
+          ),
+        );
+      } else {
+        this.root.addChild(
+          this.box(
+            DESIGN.width / 2 - 60,
+            panelY + 104,
+            120,
+            32,
+            PALETTE.slotFilled,
+            w.scripted ? "let me look" : "got it",
+            PALETTE.tokenInk,
+            () => this.emit({ type: "dismissWarning" }),
+          ),
+        );
+      }
     }
 
     // GDD §9.4: NO failure banner. The lane rejecting the number is the

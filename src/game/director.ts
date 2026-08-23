@@ -37,6 +37,11 @@ import type {
   WarningView,
 } from "./types.js";
 
+/** A warned move, held for the override (GDD §6, Normal). */
+type PendingFatal =
+  | { readonly kind: "binary"; readonly leftId: number; readonly rightId: number; readonly op: BinaryOp }
+  | { readonly kind: "unary"; readonly tileId: number; readonly op: UnaryOp };
+
 /** GDD §7.5. The one level whose warning is on regardless of mode. */
 export const SCRIPTED_TRAP_LEVEL = "1-04";
 
@@ -99,6 +104,14 @@ export class Director {
   private shopOpen = false;
   /** GDD §7.5: 1-4's free rewind is granted once, and is not a failure. */
   private scriptedRewindUsed = false;
+  /**
+   * The warned move, held so the override can replay it. Only ever set on an
+   * overridable warning — a blocking one rewinds immediately and there is
+   * nothing to hold.
+   */
+  private pendingFatal: PendingFatal | null = null;
+  /** Set only while replaying an overridden move, to skip the check. */
+  private overriding = false;
   /** Answers winnability, off the render thread where a worker exists. */
   private readonly winnability: WinnabilityService;
   /**
@@ -225,6 +238,23 @@ export class Director {
     if (this.level.id === SCRIPTED_TRAP_LEVEL) return true;
     const unlocked = this.economy ? unlocksFor(this.economy.state).fatalWarning : ALL_UNLOCKED.fatalWarning;
     return unlocked && this.mode !== "expert";
+  }
+
+  /**
+   * Does the warning BLOCK the move, or merely warn about it? (GDD §6.)
+   *
+   * Casual blocks — the move cannot be committed, and the equation rewinds
+   * free. Normal warns and offers the override, and taking it loses the level
+   * normally. 1-4 blocks in every mode: §7.5 is a teaching beat, not an assist,
+   * and its whole shape is that the move is taken back for free.
+   *
+   * Getting this wrong in the other direction is what the amendment fixed:
+   * blocking in Normal left the mode with no reachable failure at all, so no
+   * life could be lost, no star penalty applied and §9.4's continue path never
+   * opened — in the mode every player is in until the selector unlocks at 3-10.
+   */
+  private get warningBlocks(): boolean {
+    return this.level.id === SCRIPTED_TRAP_LEVEL || this.mode === "casual";
   }
 
   private get scriptedTrapLevel(): boolean {
@@ -561,8 +591,39 @@ export class Director {
       // §7.5 step 5: the move is rewound for free — no star, no life, no
       // failure recorded. Nothing was ever consumed, so there is nothing to
       // undo beyond clearing the notice.
+      //
+      // On an overridable warning the equation was left standing so the
+      // override could replay it, so "go back" has to take it down here.
+      if (this.warning?.overridable) this.slots = { leftTileId: null, op: null, rightTileId: null };
       this.warning = null;
+      this.pendingFatal = null;
       return this.render();
+    }
+    if (input.type === "commitAnyway") {
+      /*
+       * GDD §6: Normal warns and ALLOWS THE OVERRIDE. Committing anyway fails
+       * normally — life, stars, the §9.4 modal, all of it — so this deliberately
+       * re-enters the ordinary move path rather than forcing a phase. The only
+       * difference is that `overriding` suppresses the check that would
+       * otherwise warn about the same move again, immediately.
+       */
+      const pending = this.pendingFatal;
+      if (!this.warning?.overridable || pending === null) {
+        return this.reject("nothing to commit anyway");
+      }
+      this.warning = null;
+      this.pendingFatal = null;
+      this.overriding = true;
+      try {
+        if (pending.kind === "unary") {
+          const tile = this.tile(pending.tileId);
+          if (!tile) return this.reject("nothing to commit anyway");
+          return this.applyTransform(tile, pending.op);
+        }
+        return this.commit();
+      } finally {
+        this.overriding = false;
+      }
     }
     if (input.type === "selectMode") {
       this.economy?.selectMode(input.mode);
@@ -812,7 +873,7 @@ export class Director {
    * Returns commands when the move is refused, or null to let it through.
    */
   private checkFatalMove(left: Tile, right: Tile, op: BinaryOp): Command[] | null {
-    if (!this.warningActive) return null;
+    if (this.overriding || !this.warningActive) return null;
 
     const state: State = {
       tiles: this.live,
@@ -833,16 +894,30 @@ export class Director {
     const budget = this.level.modes[this.mode]?.budget ?? {};
     if (this.winnability.isWinnable(this.asSolverLevel(), budget, next)) return null;
 
-    // Refused. Nothing is consumed and nothing is recorded — the equation
-    // simply rewinds, free (§7.5 step 5).
+    /*
+     * Blocking: nothing is consumed and nothing is recorded — the equation
+     * rewinds, free (§7.5 step 5).
+     *
+     * Warning: the equation STAYS STANDING, because the override has to be
+     * able to replay it. Clearing it here and rebuilding it from the pending
+     * move would work too, but it would put the same move through the tap path
+     * twice and diverge the moment either path grew a side effect.
+     */
     const keystone = this.keystoneAhead();
-    this.slots = { leftTileId: null, op: null, rightTileId: null };
+    const blocks = this.warningBlocks;
+    if (blocks) {
+      this.slots = { leftTileId: null, op: null, rightTileId: null };
+      this.pendingFatal = null;
+    } else {
+      this.pendingFatal = { kind: "binary", leftId: left.id, rightId: right.id, op };
+    }
     this.warning = {
       move: `${left.value} ${op} ${right.value}`,
       keystoneTarget: keystone?.target ?? null,
       keystoneTargetIndex: keystone?.index ?? null,
       keystoneTileIds: keystone?.tileIds ?? [],
       scripted: this.scriptedTrapLevel && !this.scriptedRewindUsed,
+      overridable: !blocks,
       line: keystone
         ? `Wait — what makes the ${keystone.target}?`
         : "That move loses the level.",
@@ -854,7 +929,7 @@ export class Director {
 
   /** The transform equivalent of checkFatalMove. */
   private checkFatalTransform(tile: Tile, op: UnaryOp, to: number): Command[] | null {
-    if (!this.warningActive) return null;
+    if (this.overriding || !this.warningActive) return null;
 
     const state: State = {
       tiles: this.live,
@@ -874,13 +949,16 @@ export class Director {
     if (this.winnability.isWinnable(this.asSolverLevel(), budget, next)) return null;
 
     const keystone = this.keystoneAhead();
+    const blocks = this.warningBlocks;
     this.transformOp = null;
+    this.pendingFatal = blocks ? null : { kind: "unary", tileId: tile.id, op };
     this.warning = {
       move: `${op} ${tile.value} → ${to}`,
       keystoneTarget: keystone?.target ?? null,
       keystoneTargetIndex: keystone?.index ?? null,
       keystoneTileIds: keystone?.tileIds ?? [],
       scripted: this.scriptedTrapLevel && !this.scriptedRewindUsed,
+      overridable: !blocks,
       line: keystone ? `Wait — what makes the ${keystone.target}?` : "That move loses the level.",
     };
     if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;

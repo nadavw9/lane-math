@@ -180,6 +180,34 @@ describe("canonical level — assertion (e): metrics", () => {
   });
 });
 
+describe("scarcityOf refuses to bless an over-supplied budget (GDD §8.5)", () => {
+  const T = 3;
+
+  it("a spare ROOT is not consumed, even though the binary ops sum to T", () => {
+    // The short form used to ignore the unary allowance entirely and answer
+    // "consumed" here, which is how a budget granting five unused roots would
+    // have passed the ladder gate.
+    expect(scarcityOf({ "+": 3, sqrt: 5 }, T)).toBe("counted");
+    // With no unary allowance at all, U is 0 by construction and the short
+    // form can still answer exactly.
+    expect(scarcityOf({ "+": 3 }, T)).toBe("consumed");
+  });
+
+  it("a binary slot may not pay for a unary one", () => {
+    // T = 3, U = 1. Both of these sum to 4.
+    expect(scarcityOf({ "+": 3, sqrt: 1 }, T, 1)).toBe("consumed");
+    // Four binary ops for three targets, and no root to perform the transform
+    // the line requires. The old combined-sum check called this consumed.
+    expect(scarcityOf({ "+": 4 }, T, 1)).toBe("counted");
+    // And the mirror: a root too many.
+    expect(scarcityOf({ "+": 3, sqrt: 2 }, T, 1)).toBe("counted");
+  });
+
+  it("still recognises the exact case it is supposed to accept", () => {
+    expect(scarcityOf({ "+": 1, "*": 2 }, T, 0)).toBe("consumed");
+  });
+});
+
 describe("canonical level — runs under all three operator scarcities", () => {
   it("free: solvable", () => {
     const budget = budgetFor(CANONICAL, "casual");

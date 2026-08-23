@@ -62,10 +62,25 @@ export function budgetKey(budget: OperatorBudget): string {
  * consumes an operator without clearing a target, so it adds a move without
  * adding a target. `T + U` is the relation that actually holds.
  *
- * Pass `unaryTransforms` — the `U` of the intended line — to check the rule as
- * written. Without it this can only verify the structural half (binary ops sum
- * to `T`) and will call a budget consumed even when it grants more unary uses
- * than the line performs, because the budget alone cannot reveal that.
+ * TWO HOLES, both fixed here rather than worked around at the call sites.
+ *
+ * 1. The sum `T + U` was checked against the COMBINED total, which lets a
+ *    binary slot pay for a unary one. On `T = 3, U = 1`, the budget
+ *    `{+: 4}` sums to 4 and passed — while granting a spare binary op and no
+ *    root to perform the transform with. The contract is one operator per
+ *    move of each KIND, so the check is now `binary === T` AND
+ *    `unary === U`, not one sum.
+ *
+ * 2. Called without `unaryTransforms` it ignored the unary allowance
+ *    entirely, so `{+: 3, √: 5}` on `T = 3` reported consumed. That form now
+ *    REFUSES to claim consumed whenever any unary use is granted: without the
+ *    intended line there is nothing to check `U` against, and a check that
+ *    cannot see half its contract must under-claim rather than over-claim.
+ *    A budget granting no unary use has `U = 0` by construction, which is the
+ *    case the short form can still answer exactly.
+ *
+ * This gated Expert alone until §8.5 was amended; it now gates Normal too, so
+ * a budget it wrongly blesses ships in the mode every player is in.
  */
 export function scarcityOf(
   budget: OperatorBudget,
@@ -90,7 +105,7 @@ export function scarcityOf(
   if (binary === null || unary === null) return "counted";
 
   if (unaryTransforms !== undefined) {
-    return binary + unary === targetCount + unaryTransforms ? "consumed" : "counted";
+    return binary === targetCount && unary === unaryTransforms ? "consumed" : "counted";
   }
-  return binary === targetCount ? "consumed" : "counted";
+  return binary === targetCount && unary === 0 ? "consumed" : "counted";
 }

@@ -95,6 +95,17 @@ function fatalMoveOn(state: ViewState, level: LadderLevel): Pick | null {
   return null;
 }
 
+/** Any legal move at the current target, fatal or not. */
+function anyMoveOn(state: ViewState, level: LadderLevel): Pick | null {
+  const live = state.tiles
+    .filter((t) => !t.consumed)
+    .map((t) => ({ id: t.id, value: t.value, transformed: t.transformed }));
+  const target = state.targets[state.targetIndex];
+  if (target === undefined) return null;
+  const d = enumerate(live, target, state.budget, level.rules)[0];
+  return d ? { leftId: d.leftId, rightId: d.rightId, op: d.op } : null;
+}
+
 const commitMove = (director: Director, pick: Pick): ViewState => {
   director.handle({ type: "tapTile", id: pick.leftId });
   director.handle({ type: "tapOperator", op: pick.op });
@@ -108,7 +119,78 @@ describe("modes change assistance, not budget (GDD §6, amended)", () => {
     const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
     const fatal = fatalMoveOn(state, load("3-05"));
     expect(fatal, "3-05 has a fatal move to warn about").not.toBeNull();
-    expect(commitMove(director, fatal!).warning).not.toBeNull();
+    const warned = commitMove(director, fatal!);
+    expect(warned.warning).not.toBeNull();
+    // §6: Normal's warning is a warning, not a block.
+    expect(warned.warning!.overridable).toBe(true);
+  });
+
+  it("Casual BLOCKS the same move — it cannot be committed at all", () => {
+    const director = new Director(load("3-05"), "casual", economyAt("3-05"));
+    const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+    const fatal = fatalMoveOn(state, load("3-05"));
+    const warned = commitMove(director, fatal!);
+    expect(warned.warning!.overridable).toBe(false);
+    // And the override is refused rather than silently ignored.
+    const after = director.handle({ type: "commitAnyway" });
+    expect(rejection(after)).not.toBeNull();
+    expect(stateOf(after).phase).toBe("playing");
+  });
+
+  it("committing anyway in Normal loses the level normally — life, stars, §9.4 exit", () => {
+    /*
+     * THE POINT OF THE AMENDMENT. Blocking in Normal removed the failure state
+     * outright: no failure meant no life lost, no star penalty and no §9.4
+     * continue path, in the mode every player is in until 3-10. So this asserts
+     * the ordinary failure machinery ran, not merely that the move went through.
+     */
+    const economy = economyAt("3-05");
+    const director = new Director(load("3-05"), "normal", economy, undefined);
+    let state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+    const fatal = fatalMoveOn(state, load("3-05"));
+    state = commitMove(director, fatal!);
+    expect(state.warning!.overridable).toBe(true);
+
+    state = stateOf(director.handle({ type: "commitAnyway" }));
+    expect(state.warning, "the warning is gone once overridden").toBeNull();
+    // §4.1: the move is legal, so the level is not lost until the FRONT target
+    // becomes unmakeable. What must be true here is that the move COMMITTED.
+    expect(state.targetIndex).toBe(1);
+
+    // Play on to the wall the override walked into.
+    for (let guard = 0; guard < 30 && state.phase === "playing"; guard++) {
+      const live = state.tiles.filter((t) => !t.consumed);
+      const target = state.targets[state.targetIndex];
+      if (target === undefined) break;
+      const next = fatalMoveOn(state, load("3-05")) ?? anyMoveOn(state, load("3-05"));
+      if (!next) break;
+      state = commitMove(director, next);
+      if (state.warning) state = stateOf(director.handle({ type: "commitAnyway" }));
+    }
+    expect(state.phase, "the overridden move really does lose the level").toBe("failed");
+    expect(state.failures).toBe(1);
+    expect(state.exit, "§9.4's way out is offered").not.toBeNull();
+  });
+
+  it("going back after a warning takes the equation down and commits nothing", () => {
+    const director = new Director(load("3-05"), "normal", economyAt("3-05"));
+    let state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+    const fatal = fatalMoveOn(state, load("3-05"));
+    state = commitMove(director, fatal!);
+    state = stateOf(director.handle({ type: "dismissWarning" }));
+    expect(state.warning).toBeNull();
+    expect(state.targetIndex).toBe(0);
+    expect(state.slots.leftTileId).toBeNull();
+    expect(state.tiles.every((t) => !t.consumed)).toBe(true);
+  });
+
+  it("1-4 stays a BLOCK in every mode — §7.5 is a teaching beat, not an assist", () => {
+    for (const mode of ["casual", "normal", "expert"] as const) {
+      const director = new Director(load(SCRIPTED_TRAP_LEVEL), mode, freshEconomy());
+      stageTrapMove(director);
+      const state = stateOf(director.handle({ type: "tapCommit" }));
+      expect(state.warning!.overridable, `1-04 in ${mode}`).toBe(false);
+    }
   });
 
   it("Expert does not warn on the same move", () => {

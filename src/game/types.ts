@@ -132,6 +132,16 @@ export interface WarningView {
   readonly keystoneTileIds: readonly number[];
   /** §7.5: the scripted trap at 1-4 is taught, not merely refused. */
   readonly scripted: boolean;
+  /**
+   * GDD §6: Casual BLOCKS, Normal WARNS.
+   *
+   * False means the move cannot be committed at all and the only way out is
+   * the free rewind. True means the player may commit anyway and lose the
+   * level normally — life, stars and the §9.4 modal, all of it. An
+   * unoverridable warning in Normal removed the failure state outright, and
+   * with it lives, stars and the whole continue path.
+   */
+  readonly overridable: boolean;
   readonly line: string;
 }
 
@@ -192,6 +202,8 @@ export type InputEvent =
   | { readonly type: "tick" }
   /** Acknowledge a blocked fatal move; the equation rewinds free. */
   | { readonly type: "dismissWarning" }
+  /** GDD §6: take the warned move anyway. Only legal on an overridable one. */
+  | { readonly type: "commitAnyway" }
   | { readonly type: "selectMode"; readonly mode: Mode }
   | { readonly type: "toggleShop" }
   /**
