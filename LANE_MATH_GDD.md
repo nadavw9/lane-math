@@ -577,7 +577,7 @@ The two diverge. In the canonical level `dStart = [2, 4, 1]` but `dPath = [2, 3,
 
 **Exception — tutorial slots 1-2 and 1-3.** These carry a Normal budget that admits more than one winning line, unlike every other level. It is not a preference: §7.4 requires free decisions with no fatal branches, which necessarily means multiple winning lines, and Expert uniqueness forbids exactly that. Measured — 322 of 322 trapless boards have >=2 lines under Casual, and all 4 admitting a unique exact budget lose their decision to it.
 
-§8.7's uniqueness rule names Expert. Normal inherits Expert's budget everywhere except these two slots, where teaching wins. Expert keeps its own budget at 1-2 and 1-3 and may be forced there.
+§8.7's uniqueness rule names Expert. Normal inherits Expert's budget everywhere except these two slots, where teaching wins. Expert shares Normal's budget at 1-2 and 1-3 and is non-unique there too. Measured across 2322 trapless candidates: the decision survives precisely when both branches share an operator multiset, and uniqueness requires that they do not — 0 boards satisfy both. Expert was already the least-selected mode; the teaching beat matters more than uniqueness at two tutorial slots.
 
 **Amended: Normal is exact, not slack.** Normal previously ran "counted; total > `T`, with slack". Per §6 the mode axis is assistance, not budget, so Normal and Expert now solve for the same budget and differ only by the fatal-move warning and by §8.7's uniqueness rule.
 
