@@ -285,15 +285,17 @@ Branch elimination is the most honest — it is a warning, not an answer.
 
 Player-selectable. Same 40 levels, three modes — content multiplied at no authoring cost.
 
-| Mode | Operators | Fatal-move warning | Keystones |
-|---|---|---|---|
-| **Casual** | Unlimited | **Yes** — warns before committing a level-killing move | 1 |
-| **Normal** | Counted (e.g. 3× `+`, 1× `÷`) | No | 1–2 |
-| **Expert** | Consumed — one per move, `#ops = T + U` | No | 2+, overlapping |
+| Mode | Operators | Fatal-move warning |
+|---|---|---|
+| **Casual** | Unlimited | **Yes** — warns before a level-killing move |
+| **Normal** | Exact (`#ops = T + U`) | **Yes** |
+| **Expert** | Exact (`#ops = T + U`) | No |
+
+**Modes differ by assistance, not by budget.** Counted-with-slack was removed: §3.1's argument against surplus numbers applies equally to operators — surplus is not difficulty, it is the removal of deduction. "Every operator must be used" lets the player reason backwards exactly as `S = 0` does for numbers.
+
+Measured on adoption: solution paths across the ladder fell from 1142 to 40, one per level. That is the intended shape — §1's canonical example has one path, and §8.7 names uniqueness as a difficulty axis. Casual retains many paths through unlimited operators, so the forgiving mode stays forgiving.
 
 The solver runs the same check in all three modes. **Only disclosure changes.**
-
-Counted operators are the interesting middle: *"there is only one ÷ in this level"* is a real planning pressure and reads instantly on screen.
 
 ---
 
