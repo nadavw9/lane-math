@@ -275,6 +275,8 @@ Bought with stars.
 | **Contested resource** | "The 5 is contested." Points at the scarce number, not what needs it. |
 | **Branch elimination** | Highlights an earlier target: *your instinct here is wrong.* Kills the tempting fatal option without revealing the correct one. |
 
+**Free assistance must never exceed paid.** The Normal warning says only that a move loses the level. It does not name the starved target and does not pulse the tiles that would reach it — both are what §5.4's hints sell. §7.5's scripted trap at 1-04 does name and pulse, because it is a teaching beat rather than an assist, and it fires once.
+
 Branch elimination is the most honest — it is a warning, not an answer.
 
 **Structural safeguard:** past the tutorial, levels should have **two or more keystones** (§8.2). A single-keystone level is one insight — find it and you're done — which makes it fragile to hints and fragile in general. Two keystones contesting the same number cannot be collapsed by revealing either one, because the insight is the *interaction*.
