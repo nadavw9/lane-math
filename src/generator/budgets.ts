@@ -131,13 +131,28 @@ export function solveExpertBudget(
   level: Level,
   usages: readonly OpUsage[],
   requireUnique: boolean,
+  preferUnary = false,
 ): ExpertOutcome {
   let solvableCount = 0;
   let uniqueCount = 0;
   let firstSolvable: SolvedBudget | null = null;
   let firstUnique: SolvedBudget | null = null;
 
-  for (const usage of usages) {
+  /*
+   * ORDER MATTERS, because this takes the FIRST usage that qualifies.
+   *
+   * It used to take whatever enumeration happened to produce first, with no
+   * preference at all. On the Late corpus that meant: 10 of 197 boards had a
+   * unique root-using budget available, and the search chose one 0 times — so
+   * `√` never reached a shipped Expert budget even where it could have. When
+   * the tier declares a unary operator, a budget that uses it is the one worth
+   * having, and this is the whole of the fix.
+   */
+  const ordered = preferUnary
+    ? [...usages].sort((a, b) => Number(b.unary.size > 0) - Number(a.unary.size > 0))
+    : usages;
+
+  for (const usage of ordered) {
     const budget = toBudget(usage);
     // Uniqueness is a yes/no question, so stop as soon as a second winning line
     // turns up. Enumerating the rest answers nothing and, on a T=7 board with a

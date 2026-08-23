@@ -159,9 +159,7 @@ describe("modes change assistance, not budget (GDD §6, amended)", () => {
 
     // Play on to the wall the override walked into.
     for (let guard = 0; guard < 30 && state.phase === "playing"; guard++) {
-      const live = state.tiles.filter((t) => !t.consumed);
-      const target = state.targets[state.targetIndex];
-      if (target === undefined) break;
+      if (state.targets[state.targetIndex] === undefined) break;
       const next = fatalMoveOn(state, load("3-05")) ?? anyMoveOn(state, load("3-05"));
       if (!next) break;
       state = commitMove(director, next);

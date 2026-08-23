@@ -31,11 +31,13 @@ export type RejectionReason =
   | "no-expert-budget"
   | "out-of-band"
   | "duplicate"
+  | "root-optional"
   | "unsolvable";
 
 export const REJECTION_REASONS: readonly RejectionReason[] = [
   "construction-failed",
   "no-keystone",
+  "root-optional",
   "trap-not-live",
   "trap-not-tempting",
   "inert-decoy",
@@ -110,6 +112,16 @@ export interface GeneratedLevel {
     readonly decoys: readonly DecoyInfo[];
     readonly expertBudgetsSolvable: number;
     readonly expertBudgetsUnique: number;
+    /**
+     * Unary transforms the construction requires (GDD §3.3).
+     *
+     * `construct()` has always returned this and NOTHING PERSISTED IT, so no
+     * corpus file recorded whether a board was built to need a root. Auditing
+     * the `√` disappearance had to fall back on a structural proxy — a pool
+     * tile that happens to be a perfect square — because the intent was not
+     * written down. Intent that is not recorded is not auditable.
+     */
+    readonly transforms: number;
   };
 }
 
@@ -312,6 +324,29 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
     return done({ accepted: false, reason: "unsolvable", inertDecoyRejections: inert });
   }
 
+  /*
+   * THE ROOT MUST BE REQUIRED, NOT MERELY POSSIBLE.
+   *
+   * `applySqrtSubstitution` stores an operand squared so the solution "needs" a
+   * root to unlock it — but it never checked that the root-free route was
+   * actually gone. Measured across the 197-board Late corpus: 92.4% admitted a
+   * line using a root and ZERO required one. Downstream that is fatal, because
+   * Expert's uniqueness rule then almost never lands on the root-using budget
+   * (5.1% had one available, and it was chosen 0 times), so `√` disappeared
+   * from every shipped budget outside Casual — while §7.6 unlocks it at 4-1.
+   *
+   * The check is the direct one: solve with the unary operators withheld. If
+   * the board is still winnable, the root is optional and the board is not
+   * what the tier asked for.
+   */
+  if (built.transforms > 0) {
+    const withoutRoots = { ...casual };
+    for (const op of tier.unaryOps) delete withoutRoots[op];
+    if (solve(level, withoutRoots, { collectFatalMoves: false, maxCollected: 1 }).solvable) {
+      return done({ accepted: false, reason: "root-optional", inertDecoyRejections: inert });
+    }
+  }
+
   const casualMetrics = analyse(level, casual, {
     maxCollected: ctx.maxCollected,
     reuse: casualSolve,
@@ -357,7 +392,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
   // 6. PER-MODE BUDGETS — solved for, never authored.
   const usages = distinctUsages(casualSolve.winningPaths);
   const normal = solveNormalBudget(level, tier, usages, rng);
-  const expert = solveExpertBudget(level, usages, true);
+  const expert = solveExpertBudget(level, usages, true, tier.unaryOps.length > 0);
 
   // GDD §8.5 and §10: a level admitting no valid budget for a mode is EXCLUDED
   // from that mode, not forced and not discarded — unless it is the mode this
@@ -463,6 +498,7 @@ export function attempt(ctx: AttemptContext, index: number): Outcome {
       decoys: decoyed.decoys,
       expertBudgetsSolvable: expert.solvableCount,
       expertBudgetsUnique: expert.uniqueCount,
+      transforms: built.transforms,
     },
   };
 

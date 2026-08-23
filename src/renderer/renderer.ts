@@ -68,6 +68,21 @@ const OPERATOR_LIFT_KEY = -1;
 const LABEL: Record<string, string> = { sqrt: "sqrt", sq: "x²", "*": "×", "/": "÷", "-": "−" };
 
 /**
+ * Put a Director-built expression into the glyphs the BOARD uses.
+ *
+ * The Director composes "8 - 4" from the operator's own ASCII key, which is
+ * correct — that string is data, and the mapping from `-` to U+2212 is a
+ * display decision that belongs here with the rest of them. Without this the
+ * warning panel quoted the player's move back at them with a hyphen while the
+ * dial they had just pressed showed a minus, which reads as a different move.
+ */
+const asBoardGlyphs = (expression: string): string =>
+  expression
+    .split(" ")
+    .map((token) => LABEL[token] ?? token)
+    .join(" ");
+
+/**
  * The Renderer draws commands and emits input. It holds a view model built from
  * commands and never reads Director state directly, and it decides no rules —
  * every legality question was already answered by the Director via the solver.
@@ -1684,21 +1699,33 @@ export class Renderer {
     // --- fatal move: BLOCKED in Casual and at 1-4, WARNED in Normal (§6) ---
     if (s.warning) {
       const w = s.warning;
+      /*
+       * THE SAME OBJECT AS THE OTHER TWO MODALS (§9.0).
+       *
+       * This was a cream card with a gold stroke while the failure and cleared
+       * modals are brass frame over felt — three interruptions, three different
+       * materials. ART_DIRECTION §4 lists cream as LIGHT TEXT ONLY, not a
+       * surface, so the panel was also using a colour off its own palette. It
+       * now shares `framedPanel` with the other two, which means it inherits
+       * their lighting, their corner studs and their contact shadow rather than
+       * approximating them.
+       */
+      const panelH = w.overridable ? 186 : 158;
+      const panelW = lane.width - 12;
+      const panelX = lane.x + 6;
       const panelY = lane.y + 40;
-      // The overridable panel carries a second line of copy and two buttons.
-      const panelH = w.overridable ? 174 : 150;
-      this.root.addChild(
-        new Graphics()
-          .roundRect(lane.x + 6, panelY, lane.width - 12, panelH, 8)
-          .fill({ color: PALETTE.card, alpha: 0.97 })
-          .roundRect(lane.x + 6, panelY, lane.width - 12, panelH, 8)
-          .stroke({ width: 3, color: PALETTE.highlightInk }),
-      );
+      const framed = framedPanel(panelW, panelH);
+      framed.panel.position.set(panelX, panelY);
+      this.root.addChild(framed.panel);
+
+      const inner = framed.interior;
+      const midX = panelX + inner.x + inner.width / 2;
+      const topY = panelY + inner.y;
 
       // §7.5 step 3: one line of text. Not a modal, not a chain of Next.
-      const line = this.text(w.line, 19, PALETTE.text);
+      const line = this.text(w.line, 19, PALETTE.tokenInk);
       line.anchor.set(0.5);
-      line.position.set(DESIGN.width / 2, panelY + 34);
+      line.position.set(midX, topY + 26);
       this.root.addChild(line);
 
       /*
@@ -1710,15 +1737,15 @@ export class Renderer {
        */
       const refused = this.text(
         w.scripted
-          ? `${w.move} looks right. It is not.`
+          ? `${asBoardGlyphs(w.move)} looks right. It is not.`
           : w.overridable
-            ? `${w.move} starves it.`
-            : `${w.move} loses the level.`,
+            ? `${asBoardGlyphs(w.move)} starves it.`
+            : `${asBoardGlyphs(w.move)} loses the level.`,
         13,
-        PALETTE.textDim,
+        PALETTE.tray,
       );
       refused.anchor.set(0.5);
-      refused.position.set(DESIGN.width / 2, panelY + 62);
+      refused.position.set(midX, topY + 54);
       this.root.addChild(refused);
 
       if (w.scripted) {
@@ -1728,7 +1755,7 @@ export class Renderer {
           PALETTE.highlightInk,
         );
         free.anchor.set(0.5);
-        free.position.set(DESIGN.width / 2, panelY + 84);
+        free.position.set(midX, topY + 78);
         this.root.addChild(free);
       }
 
@@ -1740,15 +1767,15 @@ export class Renderer {
          * rather than a choice with a cost — and the cost is the whole reason
          * Normal has a failure state at all.
          */
-        const cost = this.text("commit anyway and the level is lost", 12, PALETTE.textDim);
+        const cost = this.text("commit anyway and the level is lost", 12, PALETTE.tray);
         cost.anchor.set(0.5);
-        cost.position.set(DESIGN.width / 2, panelY + 86);
+        cost.position.set(midX, topY + 80);
         this.root.addChild(cost);
 
         this.root.addChild(
           this.box(
-            DESIGN.width / 2 - 128,
-            panelY + 110,
+            midX - 128,
+            topY + 104,
             124,
             34,
             PALETTE.slotFilled,
@@ -1762,21 +1789,21 @@ export class Renderer {
         // those.
         this.root.addChild(
           this.box(
-            DESIGN.width / 2 + 4,
-            panelY + 110,
+            midX + 4,
+            topY + 104,
             124,
             34,
-            PALETTE.card,
+            PALETTE.felt,
             "commit anyway",
-            PALETTE.textDim,
+            PALETTE.tray,
             () => this.emit({ type: "commitAnyway" }),
           ),
         );
       } else {
         this.root.addChild(
           this.box(
-            DESIGN.width / 2 - 60,
-            panelY + 104,
+            midX - 60,
+            topY + 98,
             120,
             32,
             PALETTE.slotFilled,
