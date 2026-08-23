@@ -287,9 +287,11 @@ Player-selectable. Same 40 levels, three modes — content multiplied at no auth
 
 | Mode | Operators | Fatal-move warning |
 |---|---|---|
-| **Casual** | Unlimited | **Yes** — warns before a level-killing move |
-| **Normal** | Exact (`#ops = T + U`) | **Yes** |
-| **Expert** | Exact (`#ops = T + U`) | No |
+| **Casual** | Unlimited | **Blocks** the move. Free rewind. |
+| **Normal** | Exact | **Warns and allows override.** Committing anyway fails normally. |
+| **Expert** | Exact | None. |
+
+**Casual blocks, Normal warns, Expert is silent.** A warning that cannot be overridden removes the failure state entirely, and with it lives, stars and the §9.4 continue path. Normal must be able to lose. §7.5's scripted trap at 1-04 remains a block in every mode — it is a teaching beat, not an assist.
 
 **Modes differ by assistance, not by budget.** Counted-with-slack was removed: §3.1's argument against surplus numbers applies equally to operators — surplus is not difficulty, it is the removal of deduction. "Every operator must be used" lets the player reason backwards exactly as `S = 0` does for numbers.
 
