@@ -182,6 +182,11 @@ export type InputEvent =
   | { readonly type: "tapWatchAd" }
   /** §9.4's Continue. The shell shows the ad; the Director owns the rewind. */
   | { readonly type: "tapContinue" }
+  /**
+   * Forward from a cleared level. The shell owns it, like tapMap: which level
+   * is open is not a rule about the game.
+   */
+  | { readonly type: "tapNextLevel" }
   | { readonly type: "loadLevel"; readonly id: string }
   /** Wall-clock tick. Lives regenerate on a timer, with no input to trigger it. */
   | { readonly type: "tick" }

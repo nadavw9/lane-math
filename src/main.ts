@@ -13,7 +13,7 @@ import { setEffectSpeed } from "./renderer/effects.js";
 import { WinnabilityService } from "./game/winnability-service.js";
 import { buildExport, deliver } from "./telemetry/export.js";
 import { ConsoleSink, LocalStorageSink, Telemetry } from "./telemetry/telemetry.js";
-import { enumerate, enumerateTransforms } from "./solver/index.js";
+import { applyMove, enumerate, enumerateTransforms } from "./solver/index.js";
 
 /**
  * Mode comes from the save and defaults to Normal (§6). The selector that lets
@@ -126,8 +126,16 @@ function send(input: InputEvent): void {
   if (input.type === "selectMode") open(currentLevel);
 }
 
+function nextLevelIdAfter(id: string): string | null {
+  const at = LEVEL_IDS.indexOf(id);
+  return at >= 0 && at + 1 < LEVEL_IDS.length ? (LEVEL_IDS[at + 1] ?? null) : null;
+}
+
 function open(level: LadderLevel): void {
   currentLevel = level;
+  // Null on the last level of the ladder, which is what the cleared panel uses
+  // to decide between a button and a sentence.
+  renderer.setNextLevel(nextLevelIdAfter(level.id));
   director = new Director(level, economy.selectedMode, economy, telemetry, winnability);
   void renderer.setWorld(level.world);
   // The board arrives (§9.0). Every open, including a replay of the same level.
@@ -216,6 +224,13 @@ renderer.onInput((input) => {
   // §7.6: the map is absent until 1-10 is cleared, so the way back is too.
   if (input.type === "tapMap") {
     showMap();
+    return;
+  }
+  if (input.type === "tapNextLevel") {
+    const next = nextLevelIdAfter(currentLevel.id);
+    const level = next === null ? null : (levels.get(next) ?? null);
+    if (level) open(level);
+    else showMap();
     return;
   }
   if (input.type === "exportTelemetry") {
@@ -310,6 +325,70 @@ picker.querySelector("button")?.classList.add("active");
  * without hand-computing a fatal line for every level. It decides nothing
  * itself: the solver says what is legal, the Director says what it costs.
  */
+/**
+ * Play a level to a WIN, choosing only moves that keep it winnable.
+ *
+ * The mirror of playIntoFailure, and it exists for the same reason: the
+ * cleared panel is a screen a review has to be able to reach, and reaching it
+ * by forcing the phase would photograph a state the game never produces. This
+ * plays the level the way a player who never errs would.
+ */
+function playIntoWin(): string {
+  /*
+   * Its OWN winnability service, computed on this thread.
+   *
+   * The shell's is worker-backed and answers from a warmed cache, returning
+   * conservatively for states it has not been asked about — so the search for
+   * a winnable-preserving move found none and the fallback took a losing one,
+   * which lost 4-10 while the same strategy computed exactly wins it in seven.
+   * A driver that is meant to play perfectly needs exact answers, and it is a
+   * dev affordance so the cost does not matter.
+   */
+  const exact = new WinnabilityService();
+  exact.reset(currentLevel.id);
+
+  for (let guard = 0; guard < 30; guard++) {
+    if (!lastState || lastState.phase !== "playing") break;
+    const live = lastState.tiles
+      .filter((t) => !t.consumed)
+      .map((t) => ({ id: t.id, value: t.value, transformed: t.transformed }));
+    const target = lastState.targets[lastState.targetIndex];
+    if (target === undefined) break;
+
+    const budget = currentLevel.modes[economy.selectedMode]?.budget ?? {};
+    const state = lastState;
+    const solverLevel = {
+      id: currentLevel.id,
+      pool: currentLevel.pool,
+      targets: currentLevel.targets,
+      operators: { casual: budget, normal: budget, expert: budget },
+      rules: currentLevel.rules,
+    };
+    const decomps = enumerate(live, target, state.budget, currentLevel.rules);
+    // The FIRST option that leaves the level winnable. Taking any legal move
+    // walks into the traps §8.2 exists to set.
+    const safe = decomps.find((option) =>
+      exact.isWinnable(
+        solverLevel,
+        budget,
+        applyMove(
+          { tiles: live, targetIndex: state.targetIndex, budget: state.budget },
+          { ...option, kind: "binary", targetIndex: state.targetIndex },
+        ),
+      ),
+    );
+    // No fallback to a losing move: if nothing preserves winnability the driver
+    // is broken and should stop saying so, not quietly play on and lose.
+    if (!safe) break;
+    const pick = safe;
+    send({ type: "tapTile", id: pick.leftId });
+    send({ type: "tapOperator", op: pick.op });
+    send({ type: "tapTile", id: pick.rightId });
+    send({ type: "tapCommit" });
+  }
+  return lastState?.phase ?? "unknown";
+}
+
 function playIntoFailure(): string {
   for (let guard = 0; guard < 30; guard++) {
     if (!lastState || lastState.phase !== "playing") break;
@@ -411,6 +490,7 @@ Object.assign(window, {
     },
     send,
     playIntoFailure,
+    winLevel: playIntoWin,
     economy: () => economy.state,
     state: () => lastState,
     setEffectSpeed,

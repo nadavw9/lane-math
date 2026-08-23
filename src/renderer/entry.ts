@@ -130,9 +130,16 @@ export const MAP_BANDS = {
 export const CLEARED_BANDS = {
   panel: 0,
   headline: 1,
-  rule: 2,
   /** Stars keep their own §9.5 stagger on top of this. */
-  stars: 3,
+  stars: 2,
+  /**
+   * The way out lands LAST, after the tally has been counted.
+   *
+   * Offering the exits while the stars are still arriving would rush the one
+   * moment the game gives back — and the failure panel earns its options the
+   * same way, by waiting for the refusal to read first.
+   */
+  actions: 3,
 } as const;
 
 /** Scale a duration by the review clock, so entry slows with everything else. */

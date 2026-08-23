@@ -92,6 +92,7 @@ export class Renderer {
   private lastPhase: string = "playing";
   /** Build id shown in the status band; long-pressing it exports the funnel. */
   private buildLabel = "";
+  private nextLevelId: string | null = null;
 
   /*
    * THE FEEL LAYER (§9.5). All time-sampled, all read during draw().
@@ -309,6 +310,17 @@ export class Renderer {
 
   setBuildLabel(label: string): void {
     this.buildLabel = label;
+  }
+
+  /**
+   * Which level follows this one, or null at the end of the ladder.
+   *
+   * Set by the shell because the Director does not know the ladder — it knows
+   * ONE level and its rules. The cleared panel needs the answer to decide
+   * whether "next level" is a button or a sentence.
+   */
+  setNextLevel(id: string | null): void {
+    this.nextLevelId = id;
   }
 
   /**
@@ -1879,92 +1891,142 @@ export class Renderer {
 
     }
 
-    // A win still needs an exit, so the cleared state offers one quietly.
+    /*
+     * THE CLEARED PANEL — the failure modal's sibling (§9.0, §9.4, §9.5).
+     *
+     * It was a flat blue rectangle with one "replay" button while the failure
+     * panel had become a framed brass object, so the two most important moments
+     * in a level were made of different materials and only one of them offered
+     * a way forward. They are the SAME OBJECT with different content now: same
+     * frame, same felt interior, same dimmed board, same entry bands, same
+     * button component.
+     *
+     * The dim earns its place here too. A win is the one moment the board
+     * should stop competing for attention, and the cleared lane behind is worth
+     * seeing receded rather than deleted.
+     */
     if (s.phase === "won") {
-      // Tall enough to seat the headline AND the stars: at 60 the stars
-      // straddled the bottom edge, which read as an overflow rather than as a
-      // tally.
-      const bannerH = 92;
-      const bannerY = lane.y + lane.height / 2 - bannerH / 2;
-      const bannerX = lane.x + 20;
-      const bannerW = lane.width - 40;
+      const veil = new Graphics()
+        .rect(0, 0, DESIGN.width, DESIGN.height)
+        .fill({ color: 0x120c08, alpha: 0.55 });
+      veil.eventMode = "static";
+      this.root.addChild(this.entry(veil, CLEARED_BANDS.panel, true));
 
-      /*
-       * §9.6: navy and gold, and made of the same material as everything else.
-       *
-       * It was a flat green rectangle — a placeholder wearing the one colour in
-       * the game that meant nothing. As a navy plate with the token lighting
-       * and the shared grain, the reward panel reads as the same kind of object
-       * as the plates the player just spent their tiles on, and gold does the
-       * work it does everywhere else.
-       */
-      const panel = new Graphics()
-        .roundRect(bannerX, bannerY, bannerW, bannerH, 10)
-        .fill({ color: PALETTE.targetPlate, alpha: 0.96 });
-      // Same lighting as the tokens: shadow along the top, rim light beneath.
-      panel
-        .moveTo(bannerX + 10, bannerY + 2)
-        .lineTo(bannerX + bannerW - 10, bannerY + 2)
-        .stroke({ width: 3, color: 0x000000, alpha: 0.3 });
-      panel
-        .moveTo(bannerX + 10, bannerY + bannerH - 2)
-        .lineTo(bannerX + bannerW - 10, bannerY + bannerH - 2)
-        .stroke({ width: 2, color: 0xffffff, alpha: 0.14 });
-      panel
-        .roundRect(bannerX, bannerY, bannerW, bannerH, 10)
-        .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.55 });
-      // THE PANEL ARRIVES FIRST. It used to pop in instantly beneath its own
-      // staggered stars, so the best motion in the game was landing inside a
-      // container that had not itself arrived.
-      this.root.addChild(this.entry(panel, CLEARED_BANDS.panel, true));
+      const panelX = equation.x;
+      const panelW = equation.width;
+      const panelH = Math.min(232, status.y - equation.y - 4);
+      const panelY = equation.y;
+      const framed = framedPanel(panelW, panelH);
+      framed.panel.position.set(panelX, panelY);
+      this.root.addChild(this.entry(framed.panel, CLEARED_BANDS.panel, true));
 
-      const headline = this.text("CLEARED", 24, PALETTE.highlight);
-      headline.anchor.set(0.5);
-      headline.position.set(DESIGN.width / 2, bannerY + 28);
+      const inner = framed.interior;
+      const innerX = panelX + inner.x;
+      const innerY = panelY + inner.y;
+
+      const headline = this.text("cleared", 22, PALETTE.highlight);
+      headline.anchor.set(0.5, 0);
+      headline.position.set(innerX + inner.width / 2, innerY + 8);
       this.root.addChild(this.entry(headline, CLEARED_BANDS.headline, true));
 
-      // A hairline under the headline, so the stars sit in a tray of their own
-      // rather than floating in the middle of the panel.
-      this.root.addChild(
-        new Graphics()
-          .moveTo(bannerX + 40, bannerY + 46)
-          .lineTo(bannerX + bannerW - 40, bannerY + 46)
-          .stroke({ width: 1, color: PALETTE.highlight, alpha: 0.3 }),
-      );
-      // The rule is drawn straight to root above; band it with the headline's
-      // successor so the sequence reads panel -> headline -> rule -> stars.
-      this.entry(this.root.children[this.root.children.length - 1]!, CLEARED_BANDS.rule, true);
-
       /*
-       * §9.5: stars arrive ONE AT A TIME, weighted.
-       *
-       * Each is staggered behind the last and settles in from slightly oversize
-       * rather than popping or spraying. Three landing at once would be a
-       * celebration; three landing in sequence is a tally being counted out,
-       * which is the register this game earns its reward in.
+       * §9.5: stars arrive ONE AT A TIME, weighted — and INSIDE the panel now,
+       * seated in it after it lands rather than floating where the old banner
+       * used to be. Three landing at once would be a celebration; three landing
+       * in sequence is a tally being counted out, which is the register this
+       * game earns its reward in.
        */
+      const starSize = 30;
+      const starsY = innerY + 48;
       this.starArrivals.forEach((arrival, i) => {
         if (!arrival.started) return;
-        const glyph = star(26);
-        const spread = 34;
-        const x = DESIGN.width / 2 + (i - (this.starArrivals.length - 1) / 2) * spread;
-        // Comes in oversize and settles down onto the banner.
+        const glyph = star(starSize);
+        const spread = starSize + 12;
+        const x = innerX + inner.width / 2 + (i - (this.starArrivals.length - 1) / 2) * spread;
         glyph.scale.set(lerp(1.9, 1, arrival.value));
         glyph.alpha = Math.min(1, arrival.raw * 3);
-        glyph.position.set(x, bannerY + 66);
+        glyph.position.set(x, starsY);
         this.root.addChild(this.entry(glyph, CLEARED_BANDS.stars, true));
       });
 
+      const buttonH = 34;
+      const gap = 7;
+      const buttonW = inner.width - 20;
+      const buttonX = innerX + 10;
+      const firstY = innerY + 80;
+      const hasNext = this.nextLevelId !== null;
+
+      /*
+       * NEXT LEVEL IS ABSENT, NOT DISABLED, at the end of the ladder.
+       *
+       * A disabled "next level" on 4-10 would be the game telling the player
+       * they have failed to reach something that does not exist. There is no
+       * next level, so there is no control for it — and the line that replaces
+       * it says what the end of the ladder is, because finishing forty levels
+       * deserves a sentence rather than a greyed-out button.
+       */
+      if (hasNext) {
+        this.root.addChild(
+          this.entry(
+            this.box(
+              buttonX,
+              firstY,
+              buttonW,
+              buttonH,
+              PALETTE.slotFilled,
+              "next level",
+              PALETTE.highlight,
+              () => this.emit({ type: "tapNextLevel" }),
+              PALETTE.highlight,
+            ),
+            CLEARED_BANDS.actions,
+            true,
+          ),
+        );
+      } else {
+        const done = this.text("that was the last one — for now", 12, PALETTE.highlight);
+        done.anchor.set(0.5, 0);
+        done.position.set(innerX + inner.width / 2, firstY + 9);
+        this.root.addChild(this.entry(done, CLEARED_BANDS.actions, true));
+      }
+
+      /*
+       * Replay is for improving a star rating (§5.1), so it sits beside map as
+       * a secondary rather than competing with going forward. It was the ONLY
+       * exit before this, which made the reward screen a dead end.
+       */
+      const half = (buttonW - gap) / 2;
+      const secondRow = firstY + buttonH + gap;
       this.root.addChild(
-        this.box(
-          DESIGN.width / 2 - 60,
-          bannerY + bannerH + 12,
-          120,
-          34,
-          PALETTE.slotFilled,
-          "replay",
-          PALETTE.tokenInk,
-          () => this.emit({ type: "tapRestart" }),
+        this.entry(
+          this.box(
+            buttonX,
+            secondRow,
+            half,
+            buttonH,
+            PALETTE.slotFilled,
+            "replay",
+            PALETTE.tokenInk,
+            () => this.emit({ type: "tapRestart" }),
+          ),
+          CLEARED_BANDS.actions,
+          true,
+        ),
+      );
+      this.root.addChild(
+        this.entry(
+          this.box(
+            buttonX + half + gap,
+            secondRow,
+            half,
+            buttonH,
+            PALETTE.slotFilled,
+            "map",
+            PALETTE.tokenInk,
+            () => this.emit({ type: "tapMap" }),
+          ),
+          CLEARED_BANDS.actions,
+          true,
         ),
       );
     }

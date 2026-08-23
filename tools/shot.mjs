@@ -154,6 +154,11 @@ if (screen) {
        */
       await new Promise((r) => setTimeout(r, 1200));
     }
+    if (name === "cleared") {
+      // Win the level through the solver, so the cleared panel is reached the
+      // way a player reaches it rather than by forcing a phase.
+      await api.winLevel?.();
+    }
     if (name === "hint") {
       // A bought hint is the only way the hint line, and its mark, appear.
       api.send({ type: "buyHint", hint: "narrow" });

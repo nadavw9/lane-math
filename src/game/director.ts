@@ -594,6 +594,7 @@ export class Director {
       // The shell shows the ad; it sends continueFromBranch only once the
       // reward has actually landed, so this side has nothing to do here.
       case "tapContinue":
+      case "tapNextLevel":
         return [];
     }
   }
