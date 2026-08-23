@@ -26,12 +26,13 @@ Generated under the current solver with:
 Ladder slots drawn from these: **1-02** (tutorial, 171 eligible of 204) and
 **2-01** (early, 98 eligible of 257).
 
-## Known gap: no Late board here can be 4-01
+## Why no Late board here could be 4-01 — resolved elsewhere
 
 §7.6 unlocks `√` at 4-1, so that slot must be a board where the root is required.
-Seven of the 126 Late boards are, and **none of them has an Expert budget** —
-§10 makes all three modes mandatory on the curated 40, so none can take a ladder
-slot. Measured over 900 fresh Late constructions:
+Seven of these 126 Late boards are, and **none has an Expert budget** — §10 makes
+all three modes mandatory on the curated 40. A second 6000-attempt run added 200
+more boards and 7 more root-requiring ones, again with none. Measured over 900
+raw constructions:
 
 ```
 ROOT-REQUIRING boards  164   admit ANY exact budget  164/164 (100.0%)
@@ -39,6 +40,15 @@ ROOT-REQUIRING boards  164   admit ANY exact budget  164/164 (100.0%)
 ROOT-FREE boards       736   admit a UNIQUE one      282/736  (38.3%)
 ```
 
-Expert's uniqueness rule (§8.5) costs a 10x collapse on root-requiring boards.
-It is not zero, so a larger run can find one; it is not a sampling artefact
-either. Unresolved — see the session notes.
+Expert's uniqueness rule (§8.5) costs a 10x collapse on root-requiring boards,
+and the pipeline's earlier gates — `no-keystone` took 55%, `out-of-band` 18% —
+removed the survivors before uniqueness was ever the binding constraint.
+
+**4-01 was therefore drawn by an inverted search**, not from these corpora: reject
+on the rare property FIRST (one cheap solve with the unary operators withheld),
+and pay for full enumeration only on the ~2% that survive. 6000 attempts gave 124
+root-required boards, 10 with a unique exact budget, and 1 in band with a live
+trap. That board is `levels/4-01.json`; `src/game/root-unlock.test.ts` pins it.
+
+The general lesson stands for future curation: **a rare structural requirement has
+to be tested before the expensive gates, not after them.**
