@@ -47,6 +47,22 @@ interface Options {
   minSource: number;
   baseline: number | undefined;
   baselineTolerance: number;
+  /**
+   * Swap the light-angle consistency check for a BODY-COLOUR one.
+   *
+   * The angle metric locates the brightest point and treats it as the specular
+   * highlight. On an object with an EMISSIVE feature it finds the emitter
+   * instead, and an emitter that moves with the pose reads as a light that
+   * moves with the pose. The automaton sheet does exactly this: one pose scores
+   * -29 degrees purely because its iris is a bright dot. Same confound as the
+   * glass caustics (ART_DIRECTION section 9).
+   *
+   * This does not turn consistency checking OFF. Body colour is a property of
+   * the material rather than of the pose, so the sheet is still held to a
+   * within-sheet limit — just on a metric the art cannot fool.
+   */
+  skipAngle: boolean;
+  bodyTolerance: number;
   inner: number;
   outer: number;
   minArea: number;
@@ -75,6 +91,8 @@ function parseArgs(argv: string[]): Options {
     minSource: Number(get("min-source", "0")),
     baseline: baseline === "" ? undefined : Number(baseline),
     baselineTolerance: Number(get("baseline-tolerance", "5")),
+    skipAngle: argv.includes("--skip-angle"),
+    bodyTolerance: Number(get("body-tolerance", "12")),
     inner: Number(get("inner", "60")),
     outer: Number(get("outer", "120")),
     minArea: Number(get("min-area", "400")),
@@ -624,12 +642,35 @@ for (const sprite of meta) {
  * is invisible in isolation and obvious once they sit side by side on a board.
  */
 const problems: string[] = [];
-if (light.deviation >= 3) {
+if (options.skipAngle) {
+  /*
+   * BODY COLOUR IN PLACE OF LIGHT ANGLE. Every sprite's material must match
+   * every other's: same brass, whatever the pose is doing. The channel spread
+   * across the sheet is the equivalent of the angle's within-sheet limit.
+   */
+  const channels = [0, 1, 2] as const;
+  const spreads = channels.map((c) => {
+    const xs = audits.map((a) => a.bodyColour[c]!);
+    return Math.max(...xs) - Math.min(...xs);
+  });
+  const worst = Math.max(...spreads);
+  process.stdout.write(
+    `  body colour spread  r${spreads[0]} g${spreads[1]} b${spreads[2]}  ` +
+      `(limit ${options.bodyTolerance})  — angle check skipped, emissive feature
+`,
+  );
+  if (worst > options.bodyTolerance) {
+    problems.push(
+      `${options.family}: body colour varies by ${worst} across the sheet ` +
+        `(limit ${options.bodyTolerance}) — the material drifts between poses`,
+    );
+  }
+} else if (light.deviation >= 3) {
   problems.push(
     `${options.family}: light spread ${light.deviation.toFixed(1)}째 exceeds the 3.0째 within-sheet limit`,
   );
 }
-if (options.baseline !== undefined) {
+if (!options.skipAngle && options.baseline !== undefined) {
   const difference = Math.abs(light.mean - options.baseline) % 360;
   const angularDifference = difference > 180 ? 360 - difference : difference;
   if (angularDifference > options.baselineTolerance) {

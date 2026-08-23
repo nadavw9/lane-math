@@ -22,11 +22,12 @@
     "atlas:operators": "vite-node tools/process-sprites.mts -- --family operators --expect 5 --source assets/raw --size 360 --names dial-plus-lit,dial-minus-lit,dial-times-lit,dial-divide-lit,dial-sqrt-lit",
     "atlas:tiles": "vite-node tools/process-sprites.mts -- --family tiles --expect 3 --source assets/raw --size 360 --names cube-lit,cube-lit-2,cube-lit-3",
     "atlas:plaques": "vite-node tools/process-sprites.mts -- --family plaques --expect 2 --source assets/raw --size 360 --names plaque-lit,plaque-lit-2",
-    "atlas:all": "npm run atlas:operators && npm run atlas:operators-unlit && npm run atlas:tiles && npm run atlas:plaques",
+    "atlas:all": "npm run atlas:operators && npm run atlas:operators-unlit && npm run atlas:tiles && npm run atlas:plaques && npm run atlas:automaton",
     "atlas:verify": "node tools/verify-atlases.mjs",
     "atlas:operators-unlit": "vite-node tools/process-sprites.mts -- --family operators-unlit --expect 5 --source assets/raw --size 360 --names dial-plus-unlit,dial-minus-unlit,dial-times-unlit,dial-divide-unlit,dial-sqrt-unlit --atlas operators-unlit",
     "verify:telemetry": "node tools/verify-telemetry.mjs",
-    "verify:viewports": "node tools/verify-viewports.mjs"
+    "verify:viewports": "node tools/verify-viewports.mjs",
+    "atlas:automaton": "vite-node tools/process-sprites.mts -- --family automaton --expect 4 --source assets/raw --size 320 --names automaton-calm,automaton-thinking,automaton-delighted,automaton-worried --atlas automaton --skip-angle"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",

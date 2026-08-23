@@ -13,6 +13,21 @@
 
 export interface Audit {
   readonly name: string;
+  /**
+   * Median RGB of the body, with the brightest decile discarded.
+   *
+   * EMISSIVE FEATURES DEFEAT SPECULAR CENTROID MEASUREMENT. `lightAngle` finds
+   * the brightest point and calls it the highlight; on a character with a
+   * glowing lens it finds the lens, which moves with the pose rather than with
+   * the light. On the automaton sheet that reads one pose at -29 degrees purely
+   * because its iris is a bright dot — the same confound as the glass caustics
+   * recorded in ART_DIRECTION section 9.
+   *
+   * Body colour has no such failure: it is a property of the MATERIAL, and the
+   * material does not move when the pose does. Discarding the top decile by
+   * luminance removes both the emissive feature and the specular hit.
+   */
+  readonly bodyColour: readonly [number, number, number];
   /** Degrees, 0 = right, 90 = up. §3 wants the light upper-LEFT, so ~135. */
   readonly lightAngle: number;
   /** Brightest point, as a fraction of the CONTENT box (not the padded frame). */
@@ -250,11 +265,44 @@ export function auditSprite(name: string, rgba: Buffer, width: number, height: n
   const box = { x0: bx0, y0: by0, x1: bx1, y1: by1 };
   const angle = weight > 0 && hasBox ? lightAngleFrom(sumX / weight, sumY / weight, box) : 0;
 
+  /*
+   * BODY COLOUR — the median of the darkest 90% of opaque pixels.
+   *
+   * A second, independent consistency metric for sheets whose objects carry an
+   * emissive feature. The top decile by luminance is dropped because that is
+   * exactly where a glowing lens and a specular hit live; what remains is the
+   * material. Median rather than mean so a residual bright cluster cannot drag
+   * it.
+   */
+  const lum: { l: number; r: number; g: number; b: number }[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (rgba[i + 3]! < 200) continue;
+      const r = rgba[i]!;
+      const g = rgba[i + 1]!;
+      const b = rgba[i + 2]!;
+      lum.push({ l: 0.2126 * r + 0.7152 * g + 0.0722 * b, r, g, b });
+    }
+  }
+  lum.sort((a, b) => a.l - b.l);
+  const kept = lum.slice(0, Math.max(1, Math.floor(lum.length * 0.9)));
+  const channel = (pick: (p: { r: number; g: number; b: number }) => number): number => {
+    const xs = kept.map(pick).sort((a, b) => a - b);
+    return xs.length === 0 ? 0 : Math.round(xs[Math.floor(xs.length / 2)]!);
+  };
+  const bodyColour: readonly [number, number, number] = [
+    channel((p) => p.r),
+    channel((p) => p.g),
+    channel((p) => p.b),
+  ];
+
   let meanHue = (Math.atan2(hueY, hueX) * 180) / Math.PI;
   if (meanHue < 0) meanHue += 360;
 
   return {
     name,
+    bodyColour,
     lightAngle: angle,
     // Normalised within the CONTENT box for the same reason as the angle: the
     // frame's padding is not part of the object.

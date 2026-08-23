@@ -23,7 +23,7 @@ import { join } from "node:path";
  * so a verification run never leaves modified assets behind.
  */
 const DIR = "public/assets/sprites";
-const FAMILIES = ["operators", "operators-unlit", "tiles", "plaques"];
+const FAMILIES = ["operators", "operators-unlit", "tiles", "plaques", "automaton"];
 
 const hash = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 16);
 

@@ -211,6 +211,12 @@ The pattern to watch for: a metric that is correct for the shape it was written 
 
 **It cannot be corrected by eroding the mask.** Measured sweep: no erosion value converges dials and plaques, the cross-family gap is smallest at zero erosion (12.1 degrees), and within-family spread degrades monotonically, breaking the 3-degree limit at 12%. A circular crop and a general erosion are different operations — the crop suits a disc, the erosion strips a flat plaque's border bevel, which is where its light reads.
 
+**Emissive features are a fourth confound, and they defeat the metric entirely.** The angle finds the brightest point and calls it the specular highlight. On an object that EMITS — the automaton's glowing lens — it finds the emitter, and an emitter that moves with the pose reads as a light that moves with the pose. Measured on the automaton sheet: light angles 66°, 60°, 93°, 58° — spread 14.0°, nearly five times the 3° limit — with the specular position wandering from 0.38,0.58 to 0.86,0.05. One pose reads -29° purely because its iris is a bright dot.
+
+Unlike the glass caustics, this is not a same-material comparison problem and cannot be fixed by choosing a better baseline. **Compare body colour instead**: it is a property of the MATERIAL, so it does not move when the pose does. Measured on the same sheet, discarding the brightest decile: spread r8 g5 b5 against a limit of 12. `--skip-angle` swaps the check rather than disabling it.
+
+Absolute body colour is NOT comparable between measurement methods — the median of the darkest 90% reads (119,71,25) to (126,77,30) on this sheet where a direct body sample reads (129,83,37) to (136,89,44), and the lit band p50–p90 reads (155,100,44) to (166,109,52). All three are correct about the same brass. Only the SPREAD is a consistency check; the absolute value belongs to whichever statistic produced it.
+
 WITHIN-family spread is the binding check. Cross-family absolute angle is advisory only.
 
 **Atlas and compression.** Traffic Bomb's pipeline returns (GDD §11). It was excluded only because tokens were procedural.

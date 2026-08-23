@@ -2,6 +2,7 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, type
 
 import type { BinaryOp, Mode, UnaryOp } from "../solver/index.js";
 import type { Command, InputEvent, ViewState } from "../game/types.js";
+import { automaton, automatonState, THINKING_AFTER_MS } from "./automaton.js";
 import {
   BACKDROP,
   DESIGN,
@@ -98,6 +99,13 @@ export class Renderer {
   private state: ViewState | null = null;
   private rejection: string | null = null;
   private emit: (input: InputEvent) => void = () => {};
+  /**
+   * Milliseconds since the player last did anything, for the automaton's
+   * thinking state (ART_DIRECTION §2). Reset by every INPUT rather than by
+   * every state change: a re-render the player did not cause — an effect
+   * settling, a tick — is not evidence that they are still with it.
+   */
+  private idleMs = 0;
 
   /** Where each live tile is drawn, so a shatter can start from the right place. */
   private readonly tileBounds = new Map<number, { x: number; y: number; w: number; h: number }>();
@@ -190,10 +198,50 @@ export class Renderer {
    * Temporary world surface until desk-in-room backgrounds replace the retired
    * paper art. The canvas's #704A32 background is intentional, not a load error.
    */
+  /**
+   * Put the world's room behind the board (§9.1, ART_DIRECTION §5).
+   *
+   * THIS WAS A STUB. It set a field, cleared the layer and returned, so the
+   * game painted flat `PALETTE.placeholderDesk` and every background the
+   * pipeline produced went unshipped. `coverfit.test.ts` describes this
+   * method's arithmetic and passed the whole time, because it reimplements the
+   * cover-fit locally rather than calling it — a test of a function that did
+   * not exist.
+   *
+   * COVER, not contain: the source is 900x2100 and the design surface 420x900,
+   * so the fit crops 40px from the top and bottom rather than letterboxing the
+   * desk. §9.1 puts the visual interest at the EDGES of the composition and
+   * pushes the centre low-detail, which is what makes a symmetric crop safe.
+   */
   async setWorld(world: number): Promise<void> {
     if (this.world === world) return;
     this.world = world;
     this.background.removeChildren();
+
+    try {
+      const url = `${import.meta.env.BASE_URL}assets/bg/world-${world}.webp`;
+      const texture = await Assets.load<Texture>(url);
+      // A later call may have won while this was loading.
+      if (this.world !== world) return;
+
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      const scale = Math.max(
+        DESIGN.width / texture.width,
+        DESIGN.height / texture.height,
+      );
+      sprite.scale.set(scale);
+      sprite.position.set(DESIGN.width / 2, DESIGN.height / 2);
+      this.background.addChild(sprite);
+    } catch {
+      /*
+       * The flat desk stays visible underneath, which is the state the game
+       * already shipped in — so a failed background is a missing room, not a
+       * blank screen. Silent by design here and NOT silent in CI: the asset
+       * gate is what catches a 404, because a fallback that looks deliberate is
+       * exactly how the sprite atlas shipped broken once already.
+       */
+    }
   }
 
   async init(host: HTMLElement): Promise<void> {
@@ -231,7 +279,7 @@ export class Renderer {
      */
     if (spritesEnabled()) {
       const loaded = await Promise.all(
-        ["tiles", "operators", "operators-unlit", "plaques"].map((family) =>
+        ["tiles", "operators", "operators-unlit", "plaques", "automaton"].map((family) =>
           loadAtlas(family, import.meta.env.BASE_URL),
         ),
       );
@@ -298,7 +346,10 @@ export class Renderer {
   }
 
   onInput(handler: (input: InputEvent) => void): void {
-    this.emit = handler;
+    this.emit = (input: InputEvent) => {
+      this.idleMs = 0;
+      handler(input);
+    };
   }
 
   /**
@@ -737,7 +788,8 @@ export class Renderer {
     const seat = 58;
     const seatX = x + 18;
     const seatY = y + 22;
-    const placeholder = spriteFor("automaton-concerned");
+    // §2's table calls this state "Concerned"; the sheet ships it as `worried`.
+    const placeholder = spriteFor("automaton-worried");
     if (placeholder) {
       const art = new Sprite(placeholder.texture);
       art.width = seat;
@@ -847,6 +899,15 @@ export class Renderer {
 
   private tick(deltaMs: number): void {
     let dirty = false;
+
+    /*
+     * The automaton starts thinking on a long pause. Only the CROSSING is a
+     * redraw — accumulating every frame and redrawing on each would repaint the
+     * whole board sixty times a second to change one sprite.
+     */
+    const wasThinking = this.idleMs >= THINKING_AFTER_MS;
+    this.idleMs += deltaMs;
+    if (!wasThinking && this.idleMs >= THINKING_AFTER_MS) dirty = true;
 
     for (let i = this.shatters.length - 1; i >= 0; i--) {
       if (!this.shatters[i]!.update(deltaMs)) this.shatters.splice(i, 1);
@@ -1026,6 +1087,19 @@ export class Renderer {
 
     const board = this.bandsFor(s);
     const { lane, equation, operators, pool, status } = board;
+
+    /*
+     * THE AUTOMATON, FIRST — so every band draws over it (ART_DIRECTION §2).
+     *
+     * Non-flow by necessity: the worst board stacks 873px into a 900px design,
+     * leaving 15px above the lane and 12px below the status row, so there is no
+     * slack to give a character. Drawing it underneath means it costs the board
+     * nothing and is partially occluded by the column, which is what an object
+     * sitting on the desk behind the work should look like.
+     */
+    const mood = automatonState(s, this.idleMs);
+    const friend = automaton(mood);
+    if (friend) this.root.addChild(friend);
 
     // --- lane: the target queue, visible from level open (GDD §4.2) ---
     // Translucent so the world background reads through. The brightness gate
