@@ -133,10 +133,6 @@ if (screen) {
   await page.evaluate(async (name) => {
     const api = window.laneMath;
     if (name === "map") api.showMap();
-    if (name === "cleared") {
-      api.showBoard();
-      api.playIntoFailure?.();
-    }
     if (name === "shop") {
       api.send({ type: "toggleShop" });
     }
@@ -155,8 +151,18 @@ if (screen) {
       await new Promise((r) => setTimeout(r, 1200));
     }
     if (name === "cleared") {
-      // Win the level through the solver, so the cleared panel is reached the
-      // way a player reaches it rather than by forcing a phase.
+      /*
+       * Win the level through the solver, so the cleared panel is reached the
+       * way a player reaches it rather than by forcing a phase.
+       *
+       * This branch used to be TWO branches: an older one that called
+       * playIntoFailure(), and this one. Both ran, so `cleared` lost the level
+       * and then asked a lost level to win — and 4-10 photographed as the
+       * FAILURE modal. I read that as the win driver diverging between node and
+       * the browser and went looking for a solver bug. The solver was fine; the
+       * harness was driving the opposite of what it claimed to.
+       */
+      api.showBoard();
       await api.winLevel?.();
     }
     if (name === "hint") {
