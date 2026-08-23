@@ -594,11 +594,13 @@ Same board, three genuinely different puzzles.
 |---|---|---|---|---|---|---|---|
 | Tutorial | 3 | 0 | `+ −` | Free | 1 | 1 | 0–1 |
 | Early | 4–5 | 0 | `+ − ×` | Free | 1 | 1–2 | 1–2 |
-| Mid | 5–6 | 1 | `+ − × ÷` | Exact | 1–2 | 2–3 | 2–3 |
+| Mid | 5–6 | 1–2 | `+ − × ÷` | Exact | 1–2 | 2–3 | 2–3 |
 | Late | 6–7 | 1–2 | all + `√` | Exact | **1–2** | 3–4 | 3–4 |
 | Master ‡ | 6–7 | 2 | all | Consumed | 2+ overlapping | 4+ | 3–4 |
 
 ‡ **Master is post-launch.** Renamed from "Expert" to kill a collision: *Expert* is a **mode** (§6), applied to any level; *Master* is a **tier**. §7.2 maps World 4 to **Late**, so the 40-level launch ladder never uses Master. Master exists for Endless, Daily and tournaments. **Do not generate Master during launch curation** — its intersection yield is ~2/1000 and it buys nothing shippable.
+
+**Mid's surplus was a point value where §3.1 supports a band.** §3.1 distinguishes `S = 0` from `S ≥ 1` and rejects `S ≥ 3`; it draws no line between 1 and 2. Mid and Late now share a surplus band and are separated by `T`, operators, keystones, lookahead and decision points.
 
 **Mid and Late read Exact, not Counted.** Their mode of record is Normal, and §8.5 as amended makes Normal exact. Every mode except Casual is now exact, so "Counted" no longer describes any budget the ladder ships.
 
