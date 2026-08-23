@@ -140,7 +140,14 @@ describe("the sound map (GDD §9.5)", () => {
 
   it("tears — and only tears — on a unary transform", () => {
     const level4 = load("4-09");
-    const director = new Director(level4, "normal");
+    /*
+     * CASUAL, and that is a finding rather than a test detail: since Normal
+     * took Expert's exact budget (§8.5 amended), no ladder level grants √ in
+     * Normal or Expert — the budget is solved from the intended line and no
+     * intended line uses one. Casual is the only mode where a transform can
+     * still happen, so it is the only mode this cue can be observed in.
+     */
+    const director = new Director(level4, "casual");
     const state = stateOf(director.handle({ type: "loadLevel", id: level4.id }));
     const armed = stateOf(director.handle({ type: "tapUnary", op: "sqrt" }));
     const target = armed.transformableTileIds[0]!;

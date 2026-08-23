@@ -60,6 +60,23 @@ for (const file of files) {
     driftRows.push(`${j.id} expert budget no longer consumed`);
   }
 
+  /*
+   * §8.5 (amended): Normal holds the same exact contract as Expert, so it needs
+   * the same gate — and it needs `U`, not the two-argument form. Without the
+   * unary count this verifies only that the binary ops sum to T and passes a
+   * budget granting more transforms than the line performs.
+   *
+   * A level failing here is excluded from Normal, and §10 makes all three modes
+   * mandatory on the curated 40 — so this is a ladder failure, not a note.
+   */
+  const normalUnary =
+    solve(asLevel, j.modes.normal.budget, { maxCollected: 1 }).winningPaths[0]?.filter(
+      (m) => m.kind === "unary",
+    ).length ?? 0;
+  if (scarcityOf(j.modes.normal.budget, j.targets.length, normalUnary) !== "consumed") {
+    driftRows.push(`${j.id} normal budget is not exact (§8.5)`);
+  }
+
   const mode = tier.modeOfRecord;
   const fresh = analyse(asLevel, j.modes[mode].budget, { maxCollected: 500000 });
   const stored = j.modes[mode].metrics;

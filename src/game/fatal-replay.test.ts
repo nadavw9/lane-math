@@ -24,7 +24,14 @@ const load = (id: string): LadderLevel =>
  * immediately after a fatal move and the test has to play on to reach the wall.
  */
 function playThroughDirector(level: LadderLevel, path: readonly Move[]): ViewState {
-  const director = new Director(level, "normal");
+  /*
+   * EXPERT, deliberately. The subject here is §4.1's failure rule, and Normal
+   * now intercepts a fatal move with the warning (§6 amended), which would make
+   * this file measure the assist layer instead. Expert holds the SAME budget as
+   * Normal (§8.5 amended), so the board is identical — only the assistance is
+   * gone, which is exactly what has to be out of the way.
+   */
+  const director = new Director(level, "expert");
   let state = stateOf(director.handle({ type: "loadLevel", id: level.id }));
 
   const play = (move: Move): void => {

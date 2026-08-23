@@ -35,6 +35,25 @@ const CANONICAL: LadderLevel = {
   surplus: 0,
 };
 
+/**
+ * The same board with NO assistance and NO scarcity.
+ *
+ * §4.1's failure rule and §4.3's restart have to be testable on their own. In
+ * Normal the fatal move is now intercepted by the warning (§6 amended) and can
+ * never be committed — `dismissWarning` rewinds it for free and there is no
+ * override — so a Normal director cannot reach a failed board at all. Expert is
+ * the one mode that does not warn, and free operators keep the failure purely
+ * structural: the front target is unreachable because the TILES are gone, not
+ * because an operator ran out.
+ */
+const CANONICAL_UNASSISTED: LadderLevel = {
+  ...CANONICAL,
+  modes: {
+    ...CANONICAL.modes,
+    expert: { budget: { "+": null, "-": null, "*": null }, tier: "tutorial" },
+  },
+};
+
 /** sqrt(16)=4, then 3+4=7. */
 const UNARY: LadderLevel = {
   id: "test-unary",
@@ -175,7 +194,7 @@ describe("winning and failing", () => {
 
   it("fails when the FRONT target becomes unreachable (GDD §4.1)", () => {
     // 3+5=8 is legal and fatal: it survives target 1 and dies at target 2.
-    const d = new Director(CANONICAL, "normal");
+    const d = new Director(CANONICAL_UNASSISTED, "expert");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
 
     s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
@@ -195,7 +214,7 @@ describe("winning and failing", () => {
   });
 
   it("restart returns to the level start and keeps the failure count", () => {
-    const d = new Director(CANONICAL, "normal");
+    const d = new Director(CANONICAL_UNASSISTED, "expert");
     let s = stateOf(d.handle({ type: "loadLevel", id: CANONICAL.id }));
     s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
     s = stateOf(d.handle({ type: "tapOperator", op: "+" }));

@@ -27,8 +27,24 @@ const LEVELS = "levels";
  * behind it. Chosen by probing the whole ladder rather than assumed: the first
  * level tried here did not dead-end at all, which is how the original version
  * of this file came to pass six vacuous tests.
+ *
+ * Re-probed when exact budgets landed on Normal (§8.5 amended). 1-03 no longer
+ * qualifies — under the exact budget it has one solution path, zero decision
+ * points and trap depth 0, so the driver simply wins it and every test here
+ * asserted against a won board. The guard test below caught that, which is the
+ * whole reason it exists.
+ *
+ * Re-probing all ten World 1 levels in Normal left exactly one candidate:
+ *
+ *   1-01, 1-03, 1-05  won outright — no trap survives the exact budget
+ *   1-02, 1-04, 1-07 through 1-10  the fatal-move warning intercepts (§6 amended)
+ *   1-06  fails, with a branch point behind it
+ *
+ * 1-06 is not a lucky pick: §7.4 keeps its warning OFF in every mode because it
+ * is the TEST half of the teaching beat, which is exactly what makes it the one
+ * World 1 board where a fatal move is allowed to land.
  */
-const TRAPPED = "1-03";
+const TRAPPED = "1-06";
 
 function load(id: string): LadderLevel {
   return JSON.parse(readFileSync(join(LEVELS, `${id}.json`), "utf8")) as LadderLevel;

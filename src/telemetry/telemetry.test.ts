@@ -148,14 +148,31 @@ describe("the funnel records every §7.8 event", () => {
     const director = new Director(level, "normal", new Economy(new MemoryStore(), c.now), telemetry);
     let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
 
+    /*
+     * Pick the operator from the LEVEL's budget rather than naming one. 1-01
+     * grants only `+` since Normal took the exact budget (§8.5 amended), and
+     * the old fixed "-" was silently rejected — no commit was recorded and the
+     * assertion below read `undefined.correct`.
+     */
+    const op = Object.keys(state.budget)[0] as "+" | "-" | "*" | "/";
     const live = state.tiles.filter((t) => !t.consumed);
-    state = stateOf(director.handle({ type: "tapTile", id: live[0]!.id }));
-    state = stateOf(director.handle({ type: "tapOperator", op: "-" }));
-    state = stateOf(director.handle({ type: "tapTile", id: live[1]!.id }));
+    const target = state.targets[state.targetIndex]!;
+    const wrong = live
+      .flatMap((a) => live.filter((b) => b.id !== a.id).map((b) => [a, b] as const))
+      .find(([a, b]) => (op === "+" ? a.value + b.value !== target : true));
+    expect(wrong, "1-01 offers an incorrect pair under its own budget").toBeDefined();
+
+    state = stateOf(director.handle({ type: "tapTile", id: wrong![0].id }));
+    state = stateOf(director.handle({ type: "tapOperator", op }));
+    state = stateOf(director.handle({ type: "tapTile", id: wrong![1].id }));
     state = stateOf(director.handle({ type: "tapCommit" }));
 
-    const commit = find(sink, "move_commit")!;
-    expect(commit.correct).toBe(false);
+    const commit = find(sink, "move_commit");
+    // The assertion this replaced could not fail: a rejected operator records
+    // no commit, so `find` returned undefined and the test threw instead of
+    // measuring anything.
+    expect(commit, "an incorrect commit was actually recorded").toBeDefined();
+    expect(commit!.correct).toBe(false);
     expect(state.phase).toBe("playing");
   });
 

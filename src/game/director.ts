@@ -41,6 +41,18 @@ import type {
 export const SCRIPTED_TRAP_LEVEL = "1-04";
 
 /**
+ * GDD §7.4. The TEST half of the teaching beat: 1-6 repeats 1-4's trap shape
+ * with the warning OFF, "player must see it themselves".
+ *
+ * This is a per-level rule and it outranks the mode default, exactly as §7.5
+ * does in the other direction. It only became load-bearing when §6 was amended
+ * to warn in Normal: the mode selector does not unlock until 3-10 (§7.6), so
+ * every player reaches 1-6 in Normal, and without this the warning would fire
+ * on the one level whose entire purpose is that it does not.
+ */
+export const TRAP_TEST_LEVEL = "1-06";
+
+/**
  * The Director owns game state and is the only thing that decides anything.
  *
  * It calls the solver for every rule that the solver already knows — which
@@ -192,15 +204,27 @@ export class Director {
   /**
    * Is the fatal-move warning active right now?
    *
-   * GDD §6: Casual warns, Normal and Expert do not. GDD §7.5: level 1-4 is the
-   * scripted trap and warns REGARDLESS of mode — it is the teaching device that
-   * converts the central mechanic from a punishment into an insight. §7.4 is
-   * equally explicit that 1-6 repeats the shape with the warning OFF, which is
-   * where the lesson is tested, so 1-6 must never opt in.
+   * GDD §6 (amended): Casual and Normal warn, Expert does not. The mode axis is
+   * ASSISTANCE, not budget — Normal and Expert now solve for the same exact
+   * budget (§8.5) and the warning is the whole difference between them, so
+   * gating it on Casual alone would leave the two modes identical.
+   *
+   * Two per-level rules outrank the mode, in opposite directions:
+   *
+   *   §7.5  1-4 is the scripted trap and warns REGARDLESS of mode.
+   *   §7.4  1-6 repeats the shape with the warning OFF, in EVERY mode.
+   *
+   * And one schedule rule outranks both the mode and Casual: §7.6 introduces
+   * the warning AT 1-4. Before then the device does not exist, so it cannot
+   * appear. That gate lived in `unlocksFor` and this getter never consulted it
+   * — invisible while only Casual warned and a new player is in Normal, and an
+   * FTUE break the moment Normal does.
    */
   private get warningActive(): boolean {
+    if (this.level.id === TRAP_TEST_LEVEL) return false;
     if (this.level.id === SCRIPTED_TRAP_LEVEL) return true;
-    return this.mode === "casual";
+    const unlocked = this.economy ? unlocksFor(this.economy.state).fatalWarning : ALL_UNLOCKED.fatalWarning;
+    return unlocked && this.mode !== "expert";
   }
 
   private get scriptedTrapLevel(): boolean {

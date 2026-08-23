@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { Economy } from "../economy/economy.js";
+import { applyMove, enumerate, isWinnable } from "../solver/index.js";
 import { MemoryStore } from "../economy/save.js";
 import { unlocksFor } from "../economy/unlocks.js";
 import { Director, SCRIPTED_TRAP_LEVEL } from "./director.js";
@@ -37,18 +38,92 @@ function stageTrapMove(director: Director): ViewState {
   return state;
 }
 
-describe("modes change disclosure only (GDD §6)", () => {
-  it("Normal does not warn — the move commits and the level is lost later", () => {
-    const level = load("3-05");
-    const director = new Director(level, "normal", freshEconomy());
-    let state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+/**
+ * Every level below 3-10 is reached in Normal, because the mode selector does
+ * not unlock until then (§7.6). So a Normal director needs an economy that has
+ * actually reached the level, or `fatalWarning` is still locked and the test
+ * measures the unlock rather than the mode.
+ */
+const economyAt = (id: string) => {
+  const economy = freshEconomy();
+  economy.recordClear(id);
+  if (!unlocksFor(economy.state).fatalWarning) throw new Error(`economyAt(${id}) did not unlock the warning`);
+  return economy;
+};
 
-    // Find a legal move that is fatal, and commit it.
-    const idOf = (v: number) => state.tiles.find((t) => t.value === v && !t.consumed)!.id;
-    const before = state.tiles.filter((t) => !t.consumed).length;
-    state = stateOf(director.handle({ type: "tapTile", id: idOf(state.tiles[0]!.value) }));
-    expect(state.warning).toBeNull();
-    expect(before).toBeGreaterThan(0);
+interface Pick {
+  readonly leftId: number;
+  readonly rightId: number;
+  readonly op: "+" | "-" | "*" | "/";
+}
+
+/**
+ * Find a legal move at the current target that LOSES the level, using the
+ * solver rather than a hand-picked tile.
+ *
+ * The test this replaces tapped `state.tiles[0]` and asserted no warning. That
+ * passes whether or not the warning works, because an arbitrary tile is
+ * usually not fatal and a single tap does not commit anything — the same
+ * vacuous-green shape continue.test.ts was rewritten to kill. Returning null
+ * here is asserted on, so a board that stops having a fatal move fails the
+ * test instead of quietly satisfying it.
+ */
+function fatalMoveOn(state: ViewState, level: LadderLevel): Pick | null {
+  const live = state.tiles
+    .filter((t) => !t.consumed)
+    .map((t) => ({ id: t.id, value: t.value, transformed: t.transformed }));
+  const target = state.targets[state.targetIndex];
+  if (target === undefined) return null;
+  // The runtime check runs in a worker (WinnabilityService); the solver behind
+  // it is synchronous, so the test asks the solver directly.
+  const solverLevel = {
+    id: level.id,
+    pool: level.pool,
+    targets: level.targets,
+    operators: { casual: state.budget, normal: state.budget, expert: state.budget },
+    rules: level.rules,
+  };
+  for (const d of enumerate(live, target, state.budget, level.rules)) {
+    const after = applyMove(
+      { tiles: live, targetIndex: state.targetIndex, budget: state.budget },
+      { ...d, kind: "binary", targetIndex: state.targetIndex },
+    );
+    if (!isWinnable(solverLevel, state.budget, after)) {
+      return { leftId: d.leftId, rightId: d.rightId, op: d.op };
+    }
+  }
+  return null;
+}
+
+const commitMove = (director: Director, pick: Pick): ViewState => {
+  director.handle({ type: "tapTile", id: pick.leftId });
+  director.handle({ type: "tapOperator", op: pick.op });
+  director.handle({ type: "tapTile", id: pick.rightId });
+  return stateOf(director.handle({ type: "tapCommit" }));
+};
+
+describe("modes change assistance, not budget (GDD §6, amended)", () => {
+  it("Normal warns on a fatal move — that is the whole difference from Expert", () => {
+    const director = new Director(load("3-05"), "normal", economyAt("3-05"));
+    const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+    const fatal = fatalMoveOn(state, load("3-05"));
+    expect(fatal, "3-05 has a fatal move to warn about").not.toBeNull();
+    expect(commitMove(director, fatal!).warning).not.toBeNull();
+  });
+
+  it("Expert does not warn on the same move", () => {
+    const director = new Director(load("3-05"), "expert", economyAt("3-05"));
+    const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+    const fatal = fatalMoveOn(state, load("3-05"));
+    expect(commitMove(director, fatal!).warning).toBeNull();
+  });
+
+  it("Normal and Expert now hold the SAME budget — assistance is the only axis", () => {
+    for (const id of ["1-01", "2-05", "3-10", "4-10"]) {
+      const level = load(id);
+      expect(level.modes.normal?.budget, `${id}`).toEqual(level.modes.expert?.budget);
+      expect(level.modes.expert?.budget, `${id} has an expert budget at all`).toBeDefined();
+    }
   });
 
   it("all three modes are offered on every ladder level (Phase 2 guarantee)", () => {
@@ -153,9 +228,25 @@ describe("the scripted trap at 1-4 (GDD §7.5)", () => {
     expect(state.warning).toBeNull();
   });
 
-  it("Normal does NOT warn on an ordinary level", () => {
-    const director = new Director(load("3-05"), "normal", freshEconomy());
-    const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+  it("1-6 keeps the warning off in EVERY mode, not just Expert", () => {
+    // §7.4's TEST beat is a per-level rule. Once Normal warns it is the only
+    // thing standing between the amendment and a destroyed teaching beat, and
+    // Normal is the mode every player is in at 1-6 (§7.6: selector at 3-10).
+    for (const mode of ["casual", "normal", "expert"] as const) {
+      const director = new Director(load("1-06"), mode, economyAt("1-06"));
+      let state = stateOf(director.handle({ type: "loadLevel", id: "1-06" }));
+      const live = state.tiles.filter((t) => !t.consumed);
+      state = stateOf(director.handle({ type: "tapTile", id: live[0]!.id }));
+      expect(state.warning, `1-06 in ${mode}`).toBeNull();
+    }
+  });
+
+  it("the warning does not exist before 1-4 introduces it (§7.6)", () => {
+    // A fresh save has not reached 1-4, so the device is not unlocked yet.
+    const director = new Director(load("1-03"), "normal", freshEconomy());
+    let state = stateOf(director.handle({ type: "loadLevel", id: "1-03" }));
+    const live = state.tiles.filter((t) => !t.consumed);
+    state = stateOf(director.handle({ type: "tapTile", id: live[0]!.id }));
     expect(state.warning).toBeNull();
   });
 });
