@@ -562,10 +562,15 @@ The two diverge. In the canonical level `dStart = [2, 4, 1]` but `dPath = [2, 3,
 | Mode | Contract |
 |---|---|
 | Casual | Unlimited |
-| Normal | Counted; total budget > `T`, with slack |
+| Normal | Consumed; **total budget exactly `T + U`** |
 | Expert | Consumed; **total budget exactly `T + U`**, one operator per move, where `U` = unary transforms in the intended line |
 
-Levels admitting no valid Expert budget are excluded from Expert, not forced.
+**Amended: Normal is exact, not slack.** Normal previously ran "counted; total > `T`, with slack". Per §6 the mode axis is assistance, not budget, so Normal and Expert now solve for the same budget and differ only by the fatal-move warning and by §8.7's uniqueness rule.
+
+Two consequences:
+
+- **A level with no valid exact budget is excluded from Normal as well as Expert.** The curated 40 require all three modes (§10), so any such level fails the ladder rather than shipping with a slack Normal.
+- **`scarcityOf` must be called with `U` at every gate that checks Normal.** Its two-argument form verifies only the structural half (binary ops sum to `T`) and will call a budget consumed while it grants more unary uses than the line performs. That was tolerable when only Expert was gated on it; with Normal on the same contract, the weak form doubles the blind spot.
 
 ### 8.6 Metrics are per-mode, not per-level
 
