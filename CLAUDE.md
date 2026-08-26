@@ -320,6 +320,17 @@ This subsumes the other harness failures: a check that constructs its own
 subject, its own server, its own entry point or its own copy of the logic is
 measuring itself. Call the real thing or the check is decorative.
 
+**A RESOURCE LIMIT IN A CHECK REPORTS AS THE THING THE CHECK MEASURES.** The
+brightness gate went from one flat surface to four full-resolution rooms and
+started failing in the suite while passing in isolation. It reported as
+`1 failed` on a contrast gate — which reads as the art regressing, and would
+have sent the next person hunting a rendering bug. It was a 15-second timeout.
+
+Before believing a gate's verdict, check that it finished. This applies to any
+check with a budget: a timeout, an out-of-memory, a truncated read, a killed
+subprocess. All of them fail in the vocabulary of the thing being measured
+rather than in their own.
+
 **A broken harness and a broken product look identical from the output.** When a
 result is surprising, or contradicts a previous run, suspect the harness first.
 
