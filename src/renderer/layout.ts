@@ -139,6 +139,19 @@ export const BACKDROP = { colour: 0xffffff, alpha: 0.2 } as const;
  */
 export const TRAY_ALPHA = 0.55;
 
+/**
+ * Opacity of the LANE's felt lining (ART_DIRECTION §5).
+ *
+ * Solved for, not chosen: the lowest value at which every brass plaque still
+ * clears 3:1 against each of the four rooms at the lane's own position, taking
+ * the strictest room. `brightness-gate.test.ts` sweeps it and fails if this
+ * constant drops below what the art supports, so the number and its
+ * justification cannot drift apart.
+ *
+ * The pool tray keeps its opaque lining. It is a physical object on the desk.
+ */
+export const LANE_FELT_ALPHA = 1;
+
 export interface Rect {
   readonly x: number;
   readonly y: number;

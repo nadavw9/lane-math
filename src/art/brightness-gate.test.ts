@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONTENT_RANGE,
   DESIGN,
+  LANE_FELT_ALPHA,
   PALETTE,
   TRAY_ALPHA,
   type Rect,
@@ -285,6 +286,68 @@ describe("background brightness gate", () => {
     expect(failures, `glass numerals below ${MIN_TEXT_CONTRAST}:1:\n${failures.join("\n")}`).toEqual([]);
   });
 
+  /**
+   * HOW TRANSPARENT CAN THE LANE BE?
+   *
+   * The lane's opaque felt lining was the screen's largest occluder — the gate
+   * returned identical numbers on all four rooms because no token ever touched
+   * one. This sweeps the lining's opacity against each room AT THE LANE'S OWN
+   * POSITION and reports the lowest value every plaque still survives, because
+   * the observatory's night sky and the classroom's morning windows are not
+   * interchangeable grounds.
+   *
+   * It uses the same zone, the same furniture stack and the same checker as the
+   * gate above. A sweep that modelled the composite itself would be measuring
+   * its own arithmetic.
+   */
+  it("solves for the lane lining opacity, and LANE_FELT_ALPHA is at or above it", async () => {
+    const frames = await measuredFrames("plaques");
+    const steps = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+    const rows: string[] = [];
+    const safest: number[] = [];
+
+    for (const room of ROOMS) {
+      const image = await loadRoom(room.world);
+      let lowestSafe: number | null = null;
+      const perStep: string[] = [];
+      for (const feltAlpha of steps) {
+        const furniture = [
+          { colour: PALETTE.tray, alpha: TRAY_ALPHA },
+          { colour: PALETTE.felt, alpha: feltAlpha },
+        ] as const;
+        let worstRatio = Infinity;
+        for (const frame of frames) {
+          const result = checkBackground(
+            room.name,
+            image,
+            [{ ...asZone("lane", LANE_ZONE, PALETTE.targetPlate), furniture, name: frame.name, token: frame.colours }],
+            MIN_CONTRAST,
+          );
+          const worst = result.zones.reduce((a, b) => (a.ratio <= b.ratio ? a : b));
+          worstRatio = Math.min(worstRatio, worst.ratio);
+        }
+        perStep.push(`${feltAlpha.toFixed(1)}:${worstRatio.toFixed(2)}`);
+        if (worstRatio >= MIN_CONTRAST && lowestSafe === null) lowestSafe = feltAlpha;
+      }
+      safest.push(lowestSafe ?? 1);
+      rows.push(`  ${room.name.padEnd(20)} lowest safe ${(lowestSafe ?? 1).toFixed(1)}   ${perStep.join("  ")}`);
+    }
+
+    const strictest = Math.max(...safest);
+    const binding = ROOMS[safest.indexOf(strictest)]!.name;
+    const report = [
+      `lane lining opacity sweep — plaque worst ratio per step (minimum ${MIN_CONTRAST}:1)`,
+      ...rows,
+      `  strictest: ${strictest.toFixed(1)}, bound by ${binding}`,
+      `  shipping LANE_FELT_ALPHA = ${LANE_FELT_ALPHA}`,
+    ];
+    console.log(report.join("\n"));
+    expect(
+      LANE_FELT_ALPHA,
+      `LANE_FELT_ALPHA ${LANE_FELT_ALPHA} is below what the art supports (${strictest}, bound by ${binding})`,
+    ).toBeGreaterThanOrEqual(strictest);
+  }, 60_000);
+
   it("accepts every real glass and brass frame on all four rooms", async () => {
     const rows: string[] = [];
     const failures: string[] = [];
@@ -330,7 +393,13 @@ describe("background brightness gate", () => {
      * held to INACTIVE_MIN_CONTRAST instead of being waved past 3:1.
      */
     expect(failures, `real sprite frames below their required contrast:\n${failures.join("\n")}`).toEqual([]);
-  }, 15_000); // Eight full-resolution frame checks can exceed Vitest's 5s default under CI contention.
+  }, 90_000); /*
+   * Raised from 15s: this went from ONE flat surface to four full-resolution
+   * rooms x three aspects x fifteen frames, and 13s alone became a timeout
+   * under full-suite contention. It failed as "1 failed" in the suite while
+   * passing in isolation — a budget, not a contrast result, and worth naming
+   * because a timeout in a gate reads exactly like the art regressing.
+   */
 });
 
 describe("contrast maths", () => {

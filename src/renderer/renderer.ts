@@ -7,6 +7,7 @@ import {
   BACKDROP,
   DESIGN,
   DIM,
+  LANE_FELT_ALPHA,
   HINT_LINE_H,
   PALETTE,
   TRAY_ALPHA,
@@ -1118,7 +1119,7 @@ export class Renderer {
      */
     this.entry(
       this.place(
-        feltLinedTray(lane.width, lane.height, PALETTE.tray, TRAY_ALPHA, PALETTE.felt),
+        feltLinedTray(lane.width, lane.height, PALETTE.tray, TRAY_ALPHA, PALETTE.felt, LANE_FELT_ALPHA),
         lane.x,
         lane.y,
       ),

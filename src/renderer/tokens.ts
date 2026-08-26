@@ -719,7 +719,26 @@ export function woodenTray(w: number, h: number, colour: number, alpha: number):
 }
 
 /** The wood frame and opaque felt surface that physically support real art. */
-export function feltLinedTray(w: number, h: number, colour: number, alpha: number, felt: number): Container {
+export function feltLinedTray(
+  w: number,
+  h: number,
+  colour: number,
+  alpha: number,
+  felt: number,
+  /**
+   * Opacity of the felt LINING. Defaults to opaque, which is what a tray on a
+   * desk should be — the pool holds physical objects and must read as one.
+   *
+   * The LANE passes a lower value. Its lining was opaque too, which made it the
+   * screen's largest occluder: the brightness gate measured every token family
+   * against felt and returned identical numbers on all four rooms, because no
+   * token in the game ever touched a room. Four paintings the player could not
+   * see. The lining is not what makes plaques legible either — they read 3.79:1
+   * against felt and 4.08:1 against bare room, so the felt was costing the art
+   * and buying nothing.
+   */
+  feltAlpha = 1,
+): Container {
   const tray = woodenTray(w, h, colour, alpha);
   const inset = 6;
   const innerW = Math.max(0, w - inset * 2);
@@ -728,7 +747,7 @@ export function feltLinedTray(w: number, h: number, colour: number, alpha: numbe
   const drawFelt = (g: Graphics): Graphics =>
     g.roundRect(inset, inset, innerW, innerH, 7);
 
-  drawFelt(lining).fill({ color: felt });
+  drawFelt(lining).fill({ color: felt, alpha: feltAlpha });
   // The shared fine grain reads as a short nap at this restrained opacity.
   grainOver(lining, drawFelt, 0.24);
 
