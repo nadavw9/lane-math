@@ -1,10 +1,10 @@
-import { Container, Text, TextStyle } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
 import { button } from "../renderer/button.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
-import { UI_FONT, woodenTray } from "../renderer/tokens.js";
+import { UI_FONT, targetPlate, woodenTray } from "../renderer/tokens.js";
 import type { MapLevel, MapView } from "./model.js";
 
 /**
@@ -38,8 +38,32 @@ export class MapScreen {
   /** The map ARRIVES (§9.0), it does not appear. */
   private entrance: Entrance | null = null;
 
+  /**
+   * The four rooms, keyed by world (ART_DIRECTION §5, §6).
+   *
+   * The map is where the rooms can actually be seen. On the board they are 6%
+   * of the screen — measured — because the board has earned its 84% and the
+   * lane's lining cannot open without dropping plaques to 1.2:1. Here there is
+   * room, so each world block sits in its own room and the player sees where
+   * they are going.
+   */
+  private rooms = new Map<number, Texture>();
+
   constructor() {
     this.root.visible = false;
+  }
+
+  /** Load the room art. Safe to call repeatedly; a failure leaves the wood. */
+  async loadRooms(base = "/"): Promise<void> {
+    for (const world of [1, 2, 3, 4]) {
+      if (this.rooms.has(world)) continue;
+      try {
+        this.rooms.set(world, await Assets.load<Texture>(`${base}assets/bg/world-${world}.webp`));
+      } catch {
+        // The wooden tray underneath is the fallback, and it is a designed
+        // surface rather than a blank — a missing room costs depth, not sense.
+      }
+    }
   }
 
   attach(events: MapEvents): void {
@@ -141,14 +165,49 @@ export class MapScreen {
       width: w,
       height: h,
       shape: "hex",
-      label: String(level.slot),
-      fontSize: 20,
-      fill: level.state === "cleared" ? PALETTE.targetFront : PALETTE.targetPlate,
-      labelColour: PALETTE.tokenInk,
-      outline: level.state === "cleared" ? PALETTE.highlight : undefined,
+      // The plate's face is the brass casting below; the button supplies the
+      // hit area and the four states, and must not paint over it.
+      label: "",
+      fill: PALETTE.targetPlate,
       state: level.state === "locked" ? "unavailable" : "idle",
       onTap: level.state === "locked" ? undefined : () => this.events?.onPlay(level.id),
     });
+
+    /*
+     * BRASS, the same casting the lane queues (ART_DIRECTION §5).
+     *
+     * The map drew its own navy hexagon, so the object standing for a level on
+     * the map and the object standing for it in play were different things.
+     * `targetPlate` is the lane's, sprite and recessed numeral included, which
+     * also answers §9.0's depth complaint without inventing a second treatment.
+     *
+     * A SEAT UNDERNEATH, because the block behind is now a room: brass on bare
+     * room measures 1.11-1.27:1. The plates carry their own ground so the room
+     * can stay visible between them rather than being veiled to death.
+     */
+    const seat = new Graphics();
+    for (let i = 3; i >= 1; i--) {
+      seat.roundRect(-i * 0.8, 2 + i * 1.2, w + i * 1.6, h + i, 8).fill({ color: 0x1a0f08, alpha: 0.12 });
+    }
+    seat.roundRect(-2, -2, w + 4, h + 4, 8).fill({ color: PALETTE.felt, alpha: 0.85 });
+    control.addChildAt(seat, 0);
+
+    const face = targetPlate(
+      w,
+      h,
+      String(level.slot),
+      {
+        fill: level.state === "cleared" ? PALETTE.targetFront : PALETTE.targetPlate,
+        text: PALETTE.tokenInk,
+        // Flat, like the lane's: a target is a thing you spend tiles ON, and
+        // the map plate stands for the same object.
+        bevel: 0,
+        outline: level.state === "cleared" ? PALETTE.highlight : undefined,
+      },
+      level.slot,
+    );
+    if (level.state === "locked") face.alpha = DIM.alpha;
+    control.addChild(face);
 
     // Best-ever stars, which only a cleared plate has.
     if (level.state === "cleared") {
@@ -223,9 +282,40 @@ export class MapScreen {
       const rows = Math.ceil(levels.length / COLS);
       const trayH = rows * (CELL * 0.66 + GAP) - GAP + 30;
 
-      const tray = woodenTray(width, trayH, PALETTE.tray, TRAY_ALPHA);
-      tray.position.set(PAD, y);
-      this.root.addChild(this.entry(tray, MAP_BANDS.header + world));
+      /*
+       * THE WORLD'S ROOM, behind its levels (§9.0 depth, focal point).
+       *
+       * Cover-fitted and masked to the block, so each world shows a different
+       * slice of its own scene rather than a tiled swatch. The wooden tray
+       * stays ON TOP of it as the frame — that is what keeps the block reading
+       * as a shelf holding plates rather than as a photograph with buttons on.
+       */
+      const block = new Container();
+      const room = this.rooms.get(world);
+      if (room) {
+        const art = new Sprite(room);
+        const cover = Math.max(width / room.width, trayH / room.height);
+        art.scale.set(cover);
+        art.anchor.set(0.5);
+        art.position.set(width / 2, trayH / 2);
+        const mask = new Graphics().roundRect(0, 0, width, trayH, 10).fill(0xffffff);
+        art.mask = mask;
+        /*
+         * A SCRIM, at the opacity the lane sweep proved necessary.
+         *
+         * Brass on bare room measures 1.11-1.27:1 — the same reason the lane
+         * cannot open. The plates carry their own seat below, so this only has
+         * to take the room far enough down that the grid reads as foreground.
+         */
+        const scrim = new Graphics()
+          .roundRect(0, 0, width, trayH, 10)
+          .fill({ color: PALETTE.felt, alpha: 0.55 });
+        block.addChild(art, mask, scrim);
+      }
+      const tray = woodenTray(width, trayH, PALETTE.tray, room ? TRAY_ALPHA * 0.45 : TRAY_ALPHA);
+      block.addChild(tray);
+      block.position.set(PAD, y);
+      this.root.addChild(this.entry(block, MAP_BANDS.header + world));
 
       const name = this.text(`WORLD ${world}`, 11, PALETTE.text, "900");
       name.position.set(PAD + 10, y + 7);
@@ -262,16 +352,23 @@ export class MapScreen {
     // an object now and cannot be a character in the middle of a string.
     const progress = new Container();
     const size = 11;
-    const head = this.text(`${cleared} of ${v.levels.length} cleared · ${v.totalStars}`, 12, PALETTE.text);
+    /*
+     * CREAM, not ink. This line was `PALETTE.text` at alpha 0.75 — the
+     * ink-on-PAPER colour — sitting on a wooden desk, which is the same error
+     * as the warning panel's cream card: a colour chosen for the ground the
+     * screen used to have. Measured against the desk it read 1.92:1; cream
+     * takes it to 6.49:1.
+     */
+    const head = this.text(`${cleared} of ${v.levels.length} cleared · ${v.totalStars}`, 12, PALETTE.tokenInk);
     const mark = star(size);
-    const tail = this.text("earned", 12, PALETTE.text);
+    const tail = this.text("earned", 12, PALETTE.tokenInk);
     const gap = 4;
     head.position.set(0, 0);
     mark.position.set(head.width + gap + size / 2, head.height / 2);
     tail.position.set(head.width + gap + size + gap, 0);
     progress.addChild(head, mark, tail);
     progress.position.set(DESIGN.width / 2 - (head.width + tail.width + size + gap * 2) / 2, y + 44);
-    progress.alpha = 0.75;
+    progress.alpha = 0.9;
     this.root.addChild(this.entry(progress, MAP_BANDS.footer));
 
     // --- footer: shop and modes, each absent before its unlock (§7.6) ---

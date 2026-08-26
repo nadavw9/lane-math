@@ -176,6 +176,15 @@ window.addEventListener("pointerdown", warmAudio);
  */
 const map = new MapScreen();
 renderer.stage.addChild(map.root);
+/*
+ * The map's room art, loaded off the critical path.
+ *
+ * Not awaited: the map is reachable only after 1-10 (§7.6) and redraws on every
+ * show(), so a room that arrives late simply appears on the next open. Blocking
+ * boot on four backgrounds the player cannot reach yet would trade a real cost
+ * for no benefit.
+ */
+void map.loadRooms(import.meta.env.BASE_URL);
 
 function showMap(): void {
   renderer.setBoardVisible(false);
