@@ -309,6 +309,17 @@ testing itself.**
 
 ## Broken harness, not broken product
 
+**A test that REIMPLEMENTS its subject tests its own copy.**
+`coverfit.test.ts` recomputed cover-fit arithmetic locally instead of calling
+the renderer's implementation. `setWorld` was a stub for the entire life of the
+project — every background ever generated went unshipped, through four art
+directions — and the test passed the whole time. It would have passed with the
+renderer deleted.
+
+This subsumes the other harness failures: a check that constructs its own
+subject, its own server, its own entry point or its own copy of the logic is
+measuring itself. Call the real thing or the check is decorative.
+
 **A broken harness and a broken product look identical from the output.** When a
 result is surprising, or contradicts a previous run, suspect the harness first.
 
