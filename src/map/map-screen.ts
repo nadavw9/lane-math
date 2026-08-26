@@ -3,8 +3,8 @@ import { Container, Text, TextStyle } from "pixi.js";
 import { button } from "../renderer/button.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
-import { BACKDROP, DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
-import { UI_FONT, squaredPaper, woodenTray } from "../renderer/tokens.js";
+import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
+import { UI_FONT, woodenTray } from "../renderer/tokens.js";
 import type { MapLevel, MapView } from "./model.js";
 
 /**
@@ -174,8 +174,15 @@ export class MapScreen {
 
     const width = DESIGN.width - PAD * 2;
 
-    // --- header: the desk, with the totals that were crowding the board ---
-    const header = squaredPaper(width, 58, BACKDROP);
+    /*
+     * --- header: the desk, with the totals that were crowding the board ---
+     *
+     * Wooden, not squared paper. The header's own name has always said "the
+     * desk" while it drew graph paper — a §9.1 classroom surface that
+     * ART_DIRECTION §10 superseded with the desk-in-room scenes. It was the
+     * last paper surface left in the game.
+     */
+    const header = woodenTray(width, 58, PALETTE.tray, TRAY_ALPHA);
     header.position.set(PAD, PAD);
     this.root.addChild(this.entry(header, MAP_BANDS.header));
 

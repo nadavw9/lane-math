@@ -646,41 +646,6 @@ export function operatorToken(
   return token;
 }
 
-/**
- * The lane: a strip of SQUARED PAPER (§9.6).
- *
- * Furniture carries the theme rather than being a neutral panel. The white
- * veil is still doing the separation job (§9.1) — the ruling is drawn on top of
- * it, so the band reads as a piece of graph paper laid on the desk rather than
- * as a rectangle of lighter background.
- *
- * Procedural, so it costs nothing and scales with the band: the pitch is fixed
- * in design units, which means the squares stay square whatever the lane's
- * height turns out to be for a given board.
- */
-export function squaredPaper(
-  w: number,
-  h: number,
-  veil: { colour: number; alpha: number },
-): Container {
-  const panel = new Container();
-  const g = new Graphics();
-  const pitch = 22;
-
-  g.roundRect(0, 0, w, h, 8).fill({ color: veil.colour, alpha: veil.alpha });
-
-  // Ruling, drawn INSIDE the rounded corners so it never pokes out of the strip.
-  const ruled = new Graphics();
-  for (let x = pitch; x < w; x += pitch) ruled.moveTo(x, 0).lineTo(x, h);
-  for (let y = pitch; y < h; y += pitch) ruled.moveTo(0, y).lineTo(w, y);
-  ruled.stroke({ width: 1, color: PALETTE.rule, alpha: 0.16 });
-
-  const clip = new Graphics().roundRect(0, 0, w, h, 8).fill(0xffffff);
-  ruled.mask = clip;
-
-  panel.addChild(g, clip, ruled);
-  return panel;
-}
 
 /**
  * The pool: a shallow WOODEN TRAY the tiles sit in (§9.6).
@@ -700,17 +665,54 @@ export function woodenTray(w: number, h: number, colour: number, alpha: number):
   const g = new Graphics();
   const r = 10;
 
+  /*
+   * A CONTACT SHADOW UNDER THE WHOLE TRAY, drawn before it.
+   *
+   * The tray is translucent wood on a wooden desk, so LUMINANCE CANNOT
+   * SEPARATE THEM — measured at 1.32-1.78:1 against the desk median, lowest on
+   * room 3. That is not a fixable ratio: tinting the wood or darkening the room
+   * would break the token contrast the gate holds, and the two materials are
+   * supposed to be the same wood. What tells the eye it is a separate object is
+   * geometry — an edge that catches light, a wall that shadows, and the ground
+   * darkening beneath it.
+   *
+   * Stacked offsets rather than one blurred sprite: no filter, no render
+   * target, the same trick the framed panel uses.
+   */
+  const contact = new Graphics();
+  for (let i = 4; i >= 1; i--) {
+    contact
+      .roundRect(-i * 0.6, h * 0.012 + i * 1.9, w + i * 1.2, h + i * 1.4, r + i)
+      .fill({ color: 0x1a0f08, alpha: 0.1 });
+  }
+  tray.addChild(contact);
+
   g.roundRect(0, 0, w, h, r).fill({ color: colour, alpha });
   grainOver(g, (gr) => gr.roundRect(0, 0, w, h, r), 0.2);
 
-  // The near wall catches light; the far wall is in shadow.
-  g.moveTo(r, 2)
-    .lineTo(w - r, 2)
-    .stroke({ width: 4, color: 0x000000, alpha: 0.16 });
-  g.moveTo(r, h - 2)
-    .lineTo(w - r, h - 2)
-    .stroke({ width: 3, color: 0xffffff, alpha: 0.22 });
-  g.roundRect(0, 0, w, h, r).stroke({ width: 1, color: 0x000000, alpha: 0.14 });
+  /*
+   * The near wall catches light; the far wall is in shadow. Both were too
+   * timid to carry the separation on their own, which they now have to.
+   */
+  // Far wall: a deeper, wider inner shadow, falling off in two passes so the
+  // wall reads as curved rather than as a drawn line.
+  g.moveTo(r, 2.5)
+    .lineTo(w - r, 2.5)
+    .stroke({ width: 7, color: 0x000000, alpha: 0.30 });
+  g.moveTo(r, 6)
+    .lineTo(w - r, 6)
+    .stroke({ width: 5, color: 0x000000, alpha: 0.14 });
+
+  // Near wall: a brighter lit top edge, with a hairline highlight riding it.
+  g.moveTo(r, h - 2.5)
+    .lineTo(w - r, h - 2.5)
+    .stroke({ width: 5, color: 0xffffff, alpha: 0.34 });
+  g.moveTo(r, h - 5)
+    .lineTo(w - r, h - 5)
+    .stroke({ width: 1.5, color: 0xffffff, alpha: 0.16 });
+
+  // The outline carries the sides, where neither wall stroke reaches.
+  g.roundRect(0, 0, w, h, r).stroke({ width: 1.5, color: 0x000000, alpha: 0.26 });
 
   tray.addChild(g);
   return tray;

@@ -10,10 +10,13 @@ export const DESIGN = { width: 420, height: 900 } as const;
 
 export const PALETTE = {
   /**
-   * Temporary desk surface until the four desk-in-room scenes arrive. The old
-   * paper worlds are superseded art and must not be used as a contrast surface.
+   * The clear colour behind the room scenes.
+   *
+   * No longer a "placeholder desk": the four desk-in-room backgrounds ship, so
+   * this is only what shows if one fails to load, plus the letterbox. The
+   * `placeholderDesk` alias is gone — it named a surface the game no longer
+   * draws, and the brightness gate must measure the ROOM, never this.
    */
-  placeholderDesk: 0x704a32,
   background: 0x704a32,
 
   /*
@@ -75,8 +78,6 @@ export const PALETTE = {
   felt: 0x241812,
   /** Ink navy is reserved for numerals drawn over the glass sprite. */
   glassNumeral: 0x1e2a3a,
-  /** Ruling on the lane's squared paper. */
-  rule: 0x6f6558,
 
   /**
    * KEPT, and outside the §9.6 palette. Flagged rather than removed: §9.4's

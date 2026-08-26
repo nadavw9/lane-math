@@ -234,23 +234,37 @@ async function measuredNumeralGrounds(): Promise<
   );
 }
 
-function flatSurface(colour: number): ImageData {
-  const rgb = rgbFromHex(colour);
-  const pixels = new Uint8Array(REQUIRED_SIZE.width * REQUIRED_SIZE.height * 3);
-  for (let i = 0; i < pixels.length; i += 3) {
-    pixels[i] = rgb.r;
-    pixels[i + 1] = rgb.g;
-    pixels[i + 2] = rgb.b;
-  }
-  return { width: REQUIRED_SIZE.width, height: REQUIRED_SIZE.height, pixels };
-}
 
-const PLACEHOLDER_DESK = flatSurface(PALETTE.placeholderDesk);
+/**
+ * THE FOUR SHIPPED ROOMS — the surfaces the player actually sees.
+ *
+ * This gate ran against `flatSurface(PALETTE.placeholderDesk)`, and its own
+ * test name said "on the placeholder desk". It never sampled a background image
+ * in its life. That was survivable only because `setWorld` was a stub and the
+ * game really did paint a flat colour; the moment the rooms shipped, every
+ * number this file produced described a surface that no longer exists.
+ *
+ * Loaded from `public/assets/bg` — the directory the game serves, not a staging
+ * copy, for the same reason the pipeline writes there directly.
+ */
+const ROOMS = [
+  { world: 1, name: "room 1 classroom" },
+  { world: 2, name: "room 2 library" },
+  { world: 3, name: "room 3 laboratory" },
+  { world: 4, name: "room 4 observatory" },
+] as const;
+
+async function loadRoom(world: number): Promise<ImageData> {
+  const { data, info } = await sharp(`public/assets/bg/world-${world}.webp`)
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return { width: info.width, height: info.height, pixels: new Uint8Array(data) };
+}
 
 describe("background brightness gate", () => {
   it("uses the approved felt and 3:1 graphical-token bar", () => {
     expect(PALETTE.felt).toBe(0x241812);
-    expect(PALETTE.placeholderDesk).toBe(0x704a32);
     const felt = luminance(rgbFromHex(PALETTE.felt));
     expect((0.223 + 0.05) / (felt + 0.05)).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
@@ -271,35 +285,42 @@ describe("background brightness gate", () => {
     expect(failures, `glass numerals below ${MIN_TEXT_CONTRAST}:1:\n${failures.join("\n")}`).toEqual([]);
   });
 
-  it("accepts every real glass and brass frame on the placeholder desk", async () => {
+  it("accepts every real glass and brass frame on all four rooms", async () => {
     const rows: string[] = [];
     const failures: string[] = [];
+    for (const room of ROOMS) {
+    const image = await loadRoom(room.world);
+    // Worth running only against the size the game serves.
+    expect(image.width, `${room.name} width`).toBe(REQUIRED_SIZE.width);
+    expect(image.height, `${room.name} height`).toBe(REQUIRED_SIZE.height);
+    rows.push(`  ${room.name}`);
     for (const family of ART_FAMILIES) {
       const frames = await measuredFrames(family.atlas);
       expect(frames.length, `${family.name} atlas has no frames`).toBeGreaterThan(0);
       for (const frame of frames) {
         const result = checkBackground(
-          "placeholder desk #704A32",
-          PLACEHOLDER_DESK,
+          room.name,
+          image,
           [{ ...family.zone, name: frame.name, token: frame.colours }],
           family.minimum,
         );
         const worst = result.zones.reduce((a, b) => (a.ratio <= b.ratio ? a : b));
         const representative = worstCaseSpriteColour(frame.colours, worst.background);
         rows.push(
-          `  ${family.name.padEnd(16)} ${frame.name.padEnd(20)} ` +
+          `    ${family.name.padEnd(16)} ${frame.name.padEnd(20)} ` +
             `${worst.direction.padEnd(10)} ${worst.ratio.toFixed(2)}:1 ` +
             `rgb ${representative.colour.r},${representative.colour.g},${representative.colour.b}`,
         );
         if (!result.passes) {
           failures.push(
-            `${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`,
+            `${room.name} / ${family.name} / ${frame.name}: ${worst.ratio.toFixed(2)}:1 (minimum ${family.minimum}:1)`,
           );
         }
       }
     }
+    }
     console.log(
-      `\nreal sprite brightness gate — placeholder desk #704A32 with felt #241812\n${rows.join("\n")}`,
+      `\nreal sprite brightness gate — four shipped rooms, every aspect\n${rows.join("\n")}`,
     );
     /*
      * Every family is judged against its OWN minimum and every one of them
