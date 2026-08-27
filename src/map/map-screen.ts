@@ -371,6 +371,34 @@ export class MapScreen {
     progress.alpha = 0.9;
     this.root.addChild(this.entry(progress, MAP_BANDS.footer));
 
+    /*
+     * --- RESERVED: THE ACADEMY (ART_DIRECTION §6) ---
+     *
+     * Everything above this point is sized to its content and stacks from the
+     * top, so what remains is one contiguous full-width region at the bottom.
+     * Measured on the shipped map that is 20.2% of the screen with all four
+     * worlds shown, and MORE early on when fewer blocks exist — which is
+     * exactly backwards, because the player with the least progress sees the
+     * most emptiness.
+     *
+     * It is named rather than filled. §6's restoration lives here: four rooms'
+     * worth of furnishings, priced off the struggling player's income, with the
+     * shabby veil retreating as objects appear. Naming it now is the difference
+     * between designing the panel a home and wedging it in later — the same
+     * mistake the board made before its bands sized to content.
+     *
+     * DO NOT consume this space for decoration, a wider footer, or a fifth
+     * block. If the ladder ever grows past four worlds, the Academy moves to
+     * its own screen rather than losing its room.
+     */
+    const academy = {
+      x: PAD,
+      y: y + 68,
+      width: DESIGN.width - PAD * 2,
+      height: Math.max(0, DESIGN.height - (y + 68) - PAD),
+    };
+    void academy;
+
     // --- footer: shop and modes, each absent before its unlock (§7.6) ---
     let footerX = PAD;
     if (v.showShop) {
