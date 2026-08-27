@@ -234,6 +234,8 @@ Unlike the glass caustics, this is not a same-material comparison problem and ca
 
 Absolute body colour is NOT comparable between measurement methods — the median of the darkest 90% reads (119,71,25) to (126,77,30) on this sheet where a direct body sample reads (129,83,37) to (136,89,44), and the lit band p50–p90 reads (155,100,44) to (166,109,52). All three are correct about the same brass. Only the SPREAD is a consistency check; the absolute value belongs to whichever statistic produced it.
 
+**Heterogeneous object sets defeat the specular centroid entirely.** The metric compares like shapes. Across eight different silhouettes it measures shape variety: sheet A read 176 degrees of spread and sheet B 245, on sheets whose lighting is visually consistent. Use `--skip-angle` for any sheet whose objects are not variants of a common form, and compare body colour instead.
+
 WITHIN-family spread is the binding check. Cross-family absolute angle is advisory only.
 
 **Atlas and compression.** Traffic Bomb's pipeline returns (GDD §11). It was excluded only because tokens were procedural.
