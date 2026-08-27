@@ -53,6 +53,16 @@ export class MapScreen {
   private rooms = new Map<number, Texture>();
   /** Which room's next object the player is being asked to confirm (§6). */
   private pendingRestore: number | null = null;
+  /**
+   * Progress through the completion moment, 0-1, or null when not running
+   * (ART_DIRECTION §6).
+   *
+   * Four rooms moving at once happens nowhere else in the game, and that is the
+   * whole of why it reads as completion rather than as a fifth purchase — so it
+   * is a single scalar driving every vignette, not four independent tweens that
+   * could drift apart.
+   */
+  private completion: number | null = null;
 
   constructor() {
     this.root.visible = false;
@@ -80,6 +90,13 @@ export class MapScreen {
   }
 
   show(view: MapView): void {
+    const before = this.view;
+    if (before) {
+      const was = [1, 2, 3, 4].reduce((t, w) => t + (before.restored[w] ?? 0), 0);
+      const now = [1, 2, 3, 4].reduce((t, w) => t + (view.restored[w] ?? 0), 0);
+      // The sixteenth object, and only the sixteenth.
+      if (was === 15 && now === 16) this.completion = 0;
+    }
     this.view = view;
     this.root.visible = true;
     this.entrance = new Entrance(Object.keys(MAP_BANDS).length);
@@ -93,7 +110,16 @@ export class MapScreen {
   }
 
   /** @returns true while the arrival is still running. */
+  /** §6's completion sweep, in milliseconds. */
+  private static readonly COMPLETION_MS = 900;
+
   advance(deltaMs: number): boolean {
+    if (this.completion !== null) {
+      this.completion += deltaMs / MapScreen.COMPLETION_MS;
+      if (this.completion >= 1) this.completion = null;
+      this.draw();
+      return true;
+    }
     if (!this.entrance) return false;
     if (this.entrance.advance(deltaMs)) {
       this.draw();
@@ -273,8 +299,32 @@ export class MapScreen {
     if (rect.height < 120) return;
 
     const shelf = new Container();
-    const framed = framedPanel(rect.width, Math.min(rect.height, 168));
+    const panelH = Math.min(rect.height, 168);
+    const framed = framedPanel(rect.width, panelH);
     shelf.addChild(framed.panel);
+
+    /*
+     * THE FRAME CATCHES LIGHT, left to right, during the completion moment.
+     *
+     * A narrow band swept across the brass rather than a glow over it: the
+     * frame already reads as a lit material, so light MOVING along it is the
+     * same substance behaving, where a bloom would be an effect laid on top.
+     * §9.5's register is weight, not energy.
+     */
+    if (this.completion !== null) {
+      const t = this.completion;
+      const sweepX = -0.25 + t * 1.5;
+      const band = new Graphics();
+      for (let i = 0; i < 4; i++) {
+        const x = (sweepX - i * 0.035) * rect.width;
+        band
+          .roundRect(x, 0, rect.width * 0.10, panelH, 6)
+          .fill({ color: PALETTE.brassLit, alpha: 0.11 * (1 - i * 0.2) * Math.sin(Math.PI * t) });
+      }
+      const clip = new Graphics().roundRect(0, 0, rect.width, panelH, 12).fill(0xffffff);
+      band.mask = clip;
+      shelf.addChild(clip, band);
+    }
 
     const inner = framed.interior;
     const title = this.text("THE ACADEMY", 11, PALETTE.tokenInk, "900");
@@ -282,7 +332,19 @@ export class MapScreen {
     shelf.addChild(title);
 
     const restoredTotal = [1, 2, 3, 4].reduce((t, w) => t + (v.restored[w] ?? 0), 0);
-    const line = this.text(`${restoredTotal} of 16 restored`, 11, PALETTE.tray);
+    /*
+     * A FINISHED ACADEMY SHOWS ITS NAME, NOT ITS ARITHMETIC (§6).
+     *
+     * Permanent, not part of the 900ms moment: the counter does not come back
+     * on the next visit. Counting to sixteen is what the player was doing;
+     * once they have stopped, saying "16 of 16" forever would keep them in it.
+     */
+    const finished = restoredTotal >= 16;
+    const line = this.text(
+      finished ? "The Academy is yours." : `${restoredTotal} of 16 restored`,
+      11,
+      finished ? PALETTE.highlight : PALETTE.tray,
+    );
     line.position.set(inner.x + inner.width - line.width - 10, inner.y + 6);
     shelf.addChild(line);
 
@@ -333,6 +395,13 @@ export class MapScreen {
           restored: (v.restored[world] ?? 0) as Restored,
           world,
         });
+        /*
+         * ALL FOUR AT ONCE (§6). Each room's own veil is already gone by the
+         * time the sixteenth object lands, so what fades here is the last of
+         * the cast across every vignette together — the one moment in the game
+         * where the four move as one.
+         */
+        if (this.completion !== null) overlay.alpha = 1 - this.completion;
         /*
          * Objects UNDER the veil, so a room that is half restored shows its
          * earned furniture through the remaining darkness rather than in front
@@ -649,6 +718,17 @@ export class MapScreen {
      * DO NOT consume this space for decoration, a wider footer, or a fifth
      * block. If the ladder ever grows past four worlds, the Academy moves to
      * its own screen rather than losing its room.
+     */
+    /*
+     * FOUR WORLDS, AND THE SHELF ASSUMES IT.
+     *
+     * The vignettes divide the interior into exactly four cells. There is no
+     * scroll, no wrap and no overflow handling, and at five worlds each cell
+     * would fall to ~75px, below the size the objects were composed for.
+     *
+     * §6's answer is that the Academy moves to its OWN SCREEN rather than
+     * losing its room — but nothing here enforces that, so this comment is what
+     * the person adding World 5 finds instead of discovering it.
      */
     const academy = {
       x: PAD,

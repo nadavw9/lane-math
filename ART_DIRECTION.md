@@ -174,6 +174,8 @@ Four objects on one floor line at one size read as a shop shelf. Four staged in 
 
 No modal, no confetti, no sound sting beyond the purchase's own weight. Four rooms moving at once happens nowhere else, and that is what makes it read as completion rather than as a fifth purchase.
 
+**The shelf holds exactly four rooms.** The vignettes divide one frame into four cells with no scroll or overflow; at five worlds each falls to ~75px, below the size the objects were composed for. A fifth world moves the Academy to its own screen rather than shrinking the shelf.
+
 **Restoration is finite and that is accepted.** After 16 objects the shop is the only sink. A player who has 3-starred forty levels and furnished the Academy has finished the game; a permanent sink belongs with Endless and Daily (§14), not here.
 
 ---
