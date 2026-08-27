@@ -1,4 +1,5 @@
 import type { Mode } from "../solver/index.js";
+import { furthestReached } from "./unlocks.js";
 import { DEFAULT_ECONOMY, livesActiveFor, starsFor, type EconomyConfig } from "./config.js";
 import {
   EMPTY_PROGRESS,
@@ -320,6 +321,62 @@ export class Economy {
       { ...before, hintsPurchased: [...before.hintsPurchased, hint] },
       { starsSpent: this.save.starsSpent + cost },
     );
+    return true;
+  }
+
+  /**
+   * ACADEMY RESTORATION (ART_DIRECTION §6).
+   *
+   * Prices are 2/2/3/3 per room — 10★ a world, 40★ across the ladder — set
+   * against the STRUGGLING player's income rather than the 120★ ceiling, so
+   * someone earning one star a level finishes the Academy as they finish the
+   * game.
+   */
+  static readonly RESTORE_COSTS: readonly number[] = [2, 2, 3, 3];
+
+  /** Objects restored in a world, 0-4. */
+  restoredIn(world: number): number {
+    return this.save.restored[String(world)] ?? 0;
+  }
+
+  /** Cost of the next object in a world, or null when the room is finished. */
+  nextRestoreCost(world: number): number | null {
+    const done = this.restoredIn(world);
+    return done >= 4 ? null : Economy.RESTORE_COSTS[done]!;
+  }
+
+  /**
+   * Can this room be worked on at all?
+   *
+   * A room unlocks with its world: no furnishing the observatory before World 4
+   * is reachable. `furthestReached` is lexicographic on ladder ids, so reaching
+   * "4-01" is what opens room 4.
+   */
+  canRestore(world: number): boolean {
+    return furthestReached(this.save) >= `${world}-01`;
+  }
+
+  /**
+   * Buy the next object in a room.
+   *
+   * Spends from `starsSpent` — the SAME pool as hints, so a star cannot fund
+   * both — and commits immediately, because a purchase held in memory is
+   * refunded by a force-quit and §13 names that exploit by name.
+   *
+   * @returns false when the room is finished, locked, or unaffordable. Never
+   * partially applies: the star and the object move together or not at all.
+   */
+  restore(world: number): boolean {
+    if (!this.canRestore(world)) return false;
+    const cost = this.nextRestoreCost(world);
+    if (cost === null) return false;
+    if (this.starsAvailable < cost) return false;
+
+    this.commit({
+      ...this.save,
+      starsSpent: this.save.starsSpent + cost,
+      restored: { ...this.save.restored, [String(world)]: this.restoredIn(world) + 1 },
+    });
     return true;
   }
 

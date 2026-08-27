@@ -140,6 +140,13 @@ if (screen) {
         api.showMap();
       }
     }
+    if (name.startsWith("confirm-")) {
+      // Open the restore confirm on world 1, with the star balance forced so
+      // the affordable and unaffordable states can both be photographed.
+      api.setStars?.(name === "confirm-poor" ? 0 : 20);
+      api.showMap();
+      api.tapRestore?.(1);
+    }
     if (name === "shop") {
       api.send({ type: "toggleShop" });
     }

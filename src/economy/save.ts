@@ -6,7 +6,7 @@
  * that is the point. Adding versioning after saves exist in the wild is the
  * expensive path, and the cost of writing it now is a switch with one arm.
  */
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
 export const SAVE_KEY = "lane-math.save.v1";
 
 export interface LevelProgress {
@@ -38,6 +38,15 @@ export interface SaveData {
   readonly clockHighWater: number;
   readonly totalStars: number;
   readonly starsSpent: number;
+  /**
+   * Objects restored per world, 0-4 (ART_DIRECTION §6).
+   *
+   * Persisted for the same reason as the failure counter (§5.1): a purchase
+   * that lives only in memory is refunded by a force-quit, and §13 names that
+   * exact exploit. Restoration spends from `starsSpent`, the same pool as
+   * hints, so the two cannot both spend the same star.
+   */
+  readonly restored: Readonly<Record<string, number>>;
   /** GDD §6. Persisted so the choice survives a relaunch. */
   readonly selectedMode: "casual" | "normal" | "expert";
   /**
@@ -68,6 +77,7 @@ export function emptySave(now: number, maxLives: number): SaveData {
     clockHighWater: now,
     totalStars: 0,
     starsSpent: 0,
+    restored: {},
     // GDD §6 and the Phase 3 brief: Normal is the default. Casual is a choice
     // the player makes once the selector unlocks at 3-10 (§7.6).
     selectedMode: "normal",
@@ -132,9 +142,17 @@ export function migrate(raw: unknown): SaveData | null {
     ...data,
     schemaVersion: data.schemaVersion,
   };
-  // switch (migrated.schemaVersion) {
-  //   case 1: Object.assign(migrated, toV2(migrated)); // falls through
-  // }
+  /*
+   * v1 -> v2: restoration state added (ART_DIRECTION §6).
+   *
+   * A v1 save has no `restored` map and every room is shabby, which is exactly
+   * what an empty map means — so the climb is additive and cannot lose
+   * progress. Written as a real case rather than a comment because this is the
+   * first migration the game has actually needed.
+   */
+  if (migrated.schemaVersion === 1) {
+    Object.assign(migrated, { restored: {}, schemaVersion: 2 });
+  }
 
   // A save written by a newer build, or one this build cannot climb to the
   // current version, is refused rather than half-read.
@@ -148,6 +166,7 @@ export function migrate(raw: unknown): SaveData | null {
     clockHighWater: migrated.clockHighWater ?? migrated.lastLifeGrantedAt ?? 0,
     totalStars: migrated.totalStars ?? 0,
     starsSpent: migrated.starsSpent ?? 0,
+    restored: migrated.restored ?? {},
     selectedMode: migrated.selectedMode ?? "normal",
     muted: migrated.muted ?? false,
   };

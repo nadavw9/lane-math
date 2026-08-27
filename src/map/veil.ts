@@ -71,12 +71,51 @@ export interface Slot {
  * unrelated events. Objects are composed base-at-bottom, so `y` is the centre
  * and the base sits at `y + h / 2`.
  */
-export const SLOTS: readonly Slot[] = [
-  { x: 0.19, y: 0.69, w: 0.30, h: 0.34 },
-  { x: 0.83, y: 0.66, w: 0.30, h: 0.40 },
-  { x: 0.51, y: 0.74, w: 0.26, h: 0.28 },
-  { x: 0.27, y: 0.41, w: 0.22, h: 0.22 },
+/**
+ * PER-OBJECT SLOTS, staged by DEPTH rather than by wall-versus-floor.
+ *
+ * §6 as amended calls for wall-mounted objects to hang. The delivered art does
+ * not contain any: every one of the sixteen — the clock, the blackboard, the
+ * star chart and the pipework included — is drawn free-standing, on feet, legs
+ * or a plinth. Hanging an object with visible feet on a wall floats it, so the
+ * amendment's premise does not survive contact with the sheets. Reported rather
+ * than silently resolved either way.
+ *
+ * What the screenshot actually showed was not wall objects on the floor: it was
+ * four objects on ONE floor line at one size, reading as a shop shelf. The fix
+ * the art supports is DEPTH — the room's floor line is measured per room, and
+ * objects stage back to front:
+ *
+ *   room 1 classroom   floor at 0.74 of the room half
+ *   room 2 library     floor at 0.75
+ *   room 3 laboratory  floor at 0.58   (its bench is higher)
+ *   room 4 observatory floor at 0.75
+ *
+ * Slot 4 sits furthest back — higher and smaller, near the wall. Slot 1 is
+ * nearest — lowest and largest. Each object still stands on a floor, and the
+ * four no longer line up.
+ */
+const FLOOR: Readonly<Record<number, number>> = { 1: 0.74, 2: 0.75, 3: 0.58, 4: 0.75 };
+
+/** Depth stages: how far up from the floor line, and how large. */
+const STAGES: readonly { back: number; scale: number; x: number }[] = [
+  { back: 0.00, scale: 1.00, x: 0.20 }, // nearest, lower left
+  { back: 0.04, scale: 0.90, x: 0.80 }, // near right
+  { back: 0.12, scale: 0.74, x: 0.50 }, // mid, centre
+  { back: 0.20, scale: 0.60, x: 0.33 }, // furthest, against the wall
 ];
+
+export function slotsFor(world: number): readonly Slot[] {
+  const floor = FLOOR[world] ?? 0.74;
+  return STAGES.map((stage) => {
+    const h = 0.34 * stage.scale;
+    const base = floor - stage.back;
+    return { x: stage.x, y: base - h / 2, w: 0.30 * stage.scale, h };
+  });
+}
+
+/** Back-compatible default, used where the world is not known. */
+export const SLOTS: readonly Slot[] = slotsFor(1);
 
 /** Which four objects furnish each world, in purchase order (§6). */
 export const OBJECTS: Readonly<Record<number, readonly string[]>> = {
@@ -93,6 +132,8 @@ export interface VeilOptions {
   /** Fraction of the height that is ROOM. The desk half is never veiled (§6). */
   readonly roomFraction: number;
   readonly restored: Restored;
+  /** Which room, so the slots can follow its own floor line. */
+  readonly world: number;
 }
 
 /**
@@ -103,7 +144,8 @@ export interface VeilOptions {
  * not, and hiding that behind one call would mean the caller could not tint.
  */
 export function veil(options: VeilOptions): { overlay: Container; tint: number } {
-  const { width, height, roomFraction, restored } = options;
+  const { width, height, roomFraction, restored, world } = options;
+  const slots = slotsFor(world);
   const roomH = height * roomFraction;
   const overlay = new Container();
 
@@ -140,8 +182,8 @@ export function veil(options: VeilOptions): { overlay: Container; tint: number }
    * underneath was drawing correctly the whole time, hidden by a sheet over the
    * thing it had just revealed.
    */
-  for (let i = restored; i < SLOTS.length; i++) {
-    const slot = SLOTS[i]!;
+  for (let i = restored; i < slots.length; i++) {
+    const slot = slots[i]!;
     if (!drape) break;
     const sheet = new Sprite(drape.texture);
     const w = slot.w * width * 1.25;
@@ -186,10 +228,11 @@ export type { Texture };
 export function objectsFor(world: number, restored: Restored, width: number, height: number): Container {
   const layer = new Container();
   const names = OBJECTS[world] ?? [];
+  const slots = slotsFor(world);
   for (let i = 0; i < restored && i < names.length; i++) {
     const entry = spriteFor(names[i]!);
     if (!entry) continue;
-    const slot = SLOTS[i]!;
+    const slot = slots[i]!;
     const box = { w: slot.w * width, h: slot.h * height };
     const sprite = new Sprite(entry.texture);
     const fit = Math.min(box.w / entry.texture.width, box.h / entry.texture.height);

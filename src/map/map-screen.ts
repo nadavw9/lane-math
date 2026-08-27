@@ -5,7 +5,7 @@ import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
-import { objectsFor, veiled, type Restored } from "./veil.js";
+import { OBJECTS, objectsFor, slotsFor, veiled, type Restored } from "./veil.js";
 import type { MapLevel, MapView } from "./model.js";
 
 /**
@@ -25,6 +25,8 @@ export interface MapEvents {
   readonly onToggleMute: () => void;
   readonly onOpenShop: () => void;
   readonly onSelectMode: (mode: string) => void;
+  /** Buy the next Academy object in this world (ART_DIRECTION §6). */
+  readonly onRestore: (world: number) => void;
 }
 
 const PAD = 12;
@@ -49,6 +51,8 @@ export class MapScreen {
    * they are going.
    */
   private rooms = new Map<number, Texture>();
+  /** Which room's next object the player is being asked to confirm (§6). */
+  private pendingRestore: number | null = null;
 
   constructor() {
     this.root.visible = false;
@@ -79,6 +83,12 @@ export class MapScreen {
     this.view = view;
     this.root.visible = true;
     this.entrance = new Entrance(Object.keys(MAP_BANDS).length);
+    this.draw();
+  }
+
+  /** Open the restore confirm for a world. Review hook and real entry point. */
+  openRestoreConfirm(world: number): void {
+    this.pendingRestore = world;
     this.draw();
   }
 
@@ -316,6 +326,7 @@ export class MapScreen {
           height: vh,
           roomFraction: 1,
           restored: (v.restored[world] ?? 0) as Restored,
+          world,
         });
         /*
          * Objects UNDER the veil, so a room that is half restored shows its
@@ -330,6 +341,38 @@ export class MapScreen {
         cell.addChild(overlay);
       }
 
+      /*
+       * THE NEXT DRAPE IS THE BUY BUTTON (§6).
+       *
+       * The drape is already the affordance — it is the visible "something is
+       * under here", it sits at a known slot, and it is the thing that
+       * disappears. A shop row would make restoration a third hint, and §6 is
+       * explicit that it is the GOAL rather than a spend.
+       *
+       * The slot boxes are 21x24 to 38x44 design px, under a comfortable tap
+       * target, so the hit area is the slot expanded to a 44px minimum. The
+       * four slots are far enough apart that this does not overlap.
+       */
+      const done = (v.restored[world] ?? 0) as Restored;
+      const cost = v.restoreCost[world] ?? null;
+      if (cost !== null && done < 4) {
+        const slot = slotsFor(world)[done]!;
+        const cx = slot.x * vw;
+        const cy = (slot.y + slot.h / 2) * vh;
+        const hw = Math.max(44, slot.w * vw) / 2;
+        const hh = Math.max(44, slot.h * vh) / 2;
+        const hit = new Graphics()
+          .rect(cx - hw, cy - hh, hw * 2, hh * 2)
+          .fill({ color: 0xffffff, alpha: 0.001 });
+        hit.eventMode = "static";
+        hit.cursor = "pointer";
+        hit.on("pointertap", () => {
+          this.pendingRestore = world;
+          this.draw();
+        });
+        cell.addChild(hit);
+      }
+
       cell.addChild(
         new Graphics().roundRect(0, 0, vw, vh, 5).stroke({ width: 1.5, color: 0x000000, alpha: 0.35 }),
       );
@@ -341,6 +384,100 @@ export class MapScreen {
 
     shelf.position.set(rect.x, rect.y);
     this.root.addChild(this.entry(shelf, MAP_BANDS.footer));
+
+    if (this.pendingRestore !== null) this.restoreConfirm(rect, v, this.pendingRestore);
+  }
+
+  /**
+   * "Restore the reading lamp — 2★, you have 7."
+   *
+   * §6 wants the price visible whether or not it can be paid: seeing what the
+   * next thing costs IS the loop, so an unaffordable object shows a disabled
+   * button and its cost rather than hiding. That is the opposite of §7.6's
+   * absent-before-unlock rule, and deliberately — a locked SYSTEM has nothing
+   * to say, an unaffordable object has a price.
+   */
+  private restoreConfirm(
+    rect: { x: number; y: number; width: number; height: number },
+    v: MapView,
+    world: number,
+  ): void {
+    const done = (v.restored[world] ?? 0) as Restored;
+    const cost = v.restoreCost[world];
+    if (cost === null || cost === undefined || done >= 4) {
+      this.pendingRestore = null;
+      return;
+    }
+    const name = (OBJECTS[world] ?? [])[done] ?? "object";
+    const affordable = v.starsAvailable >= cost;
+
+    const w = Math.min(300, rect.width - 24);
+    const h = 116;
+    const x = rect.x + (rect.width - w) / 2;
+    const y = rect.y + Math.max(8, (rect.height - h) / 2);
+
+    const panel = new Container();
+    const framed = framedPanel(w, h);
+    panel.addChild(framed.panel);
+    const inner = framed.interior;
+
+    const title = this.text(name.replace(/-/g, " "), 15, PALETTE.tokenInk, "900");
+    title.anchor.set(0.5, 0);
+    title.position.set(inner.x + inner.width / 2, inner.y + 6);
+    panel.addChild(title);
+
+    /*
+     * The price is the same line whether or not it can be paid, and it is NOT
+     * failure red: §9.6's red measured 1.69:1 on the felt — the one place the
+     * player most needs to read the number, made least legible by the colour
+     * meant to signal it. The refusal is carried by the disabled button, which
+     * says "not enough" in words; the price stays legible at 7.58:1.
+     */
+    const price = this.text(
+      `${cost}★  ·  you have ${v.starsAvailable}★`,
+      11,
+      PALETTE.tray,
+    );
+    price.anchor.set(0.5, 0);
+    price.position.set(inner.x + inner.width / 2, inner.y + 28);
+    panel.addChild(price);
+
+    const bw = (inner.width - 12) / 2;
+    const cancel = button({
+      width: bw,
+      height: 32,
+      label: "not yet",
+      labelColour: PALETTE.tray,
+      fill: PALETTE.felt,
+      onTap: () => {
+        this.pendingRestore = null;
+        this.draw();
+      },
+    });
+    cancel.position.set(inner.x, inner.y + 50);
+    panel.addChild(cancel);
+
+    const buy = button({
+      width: bw,
+      height: 32,
+      label: affordable ? "restore" : "not enough",
+      labelColour: affordable ? PALETTE.highlight : PALETTE.tray,
+      fill: affordable ? PALETTE.slotFilled : PALETTE.felt,
+      // Disabled, not hidden: the price is the point (§6).
+      state: affordable ? "idle" : "unavailable",
+      onTap: affordable
+        ? () => {
+            this.pendingRestore = null;
+            this.events?.onRestore(world);
+          }
+        : undefined,
+    });
+    buy.position.set(inner.x + bw + 12, inner.y + 50);
+    if (!affordable) buy.alpha = DIM.alpha;
+    panel.addChild(buy);
+
+    panel.position.set(x, y);
+    this.root.addChild(this.entry(panel, MAP_BANDS.footer));
   }
 
   private draw(): void {

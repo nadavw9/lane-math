@@ -44,6 +44,8 @@ export interface MapView {
    * vignette size then the objects cannot rescue it.
    */
   readonly restored: Readonly<Record<number, 0 | 1 | 2 | 3 | 4>>;
+  /** Cost of each room's next object, or null when finished or locked (§6). */
+  readonly restoreCost: Readonly<Record<number, number | null>>;
 }
 
 export const WORLDS = [1, 2, 3, 4] as const;
@@ -100,8 +102,18 @@ export function mapView(economy: Economy, ids: readonly string[]): MapView {
     worlds: [...WORLDS],
     starsAvailable: economy.starsAvailable,
     totalStars: save.totalStars,
-    // No purchase path yet; every room starts shabby.
-    restored: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    restored: {
+      1: economy.restoredIn(1) as 0 | 1 | 2 | 3 | 4,
+      2: economy.restoredIn(2) as 0 | 1 | 2 | 3 | 4,
+      3: economy.restoredIn(3) as 0 | 1 | 2 | 3 | 4,
+      4: economy.restoredIn(4) as 0 | 1 | 2 | 3 | 4,
+    },
+    restoreCost: {
+      1: economy.canRestore(1) ? economy.nextRestoreCost(1) : null,
+      2: economy.canRestore(2) ? economy.nextRestoreCost(2) : null,
+      3: economy.canRestore(3) ? economy.nextRestoreCost(3) : null,
+      4: economy.canRestore(4) ? economy.nextRestoreCost(4) : null,
+    },
     lives: economy.lives,
     maxLives: economy.maxLivesAllowed,
     muted: economy.muted,

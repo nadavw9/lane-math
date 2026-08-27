@@ -195,10 +195,12 @@ void map.loadRooms(import.meta.env.BASE_URL);
  * saved state, which is what keeps it from becoming an accidental cheat.
  */
 let forcedRestored: Record<number, 0 | 1 | 2 | 3 | 4> | null = null;
+let forcedStars: number | null = null;
 
 function viewWithRestoration(): ReturnType<typeof mapView> {
   const base = mapView(economy, LEVEL_IDS);
-  return forcedRestored ? { ...base, restored: forcedRestored } : base;
+  const withRooms = forcedRestored ? { ...base, restored: forcedRestored } : base;
+  return forcedStars === null ? withRooms : { ...withRooms, starsAvailable: forcedStars };
 }
 
 function showMap(): void {
@@ -227,6 +229,15 @@ map.attach({
     // The shop lives on the board, where the hints apply. The map is the door.
     showBoard();
     send({ type: "toggleShop" });
+  },
+  /*
+   * §6: the purchase is real. Economy.restore commits to the store
+   * immediately, so a force-quit between the tap and the next frame cannot
+   * refund it — the same class as the failure counter in §5.1.
+   */
+  onRestore: (world: number) => {
+    economy.restore(world);
+    map.show(viewWithRestoration());
   },
   onSelectMode: (mode) => {
     send({ type: "selectMode", mode: mode as "casual" | "normal" | "expert" });
@@ -519,6 +530,13 @@ Object.assign(window, {
     state: () => lastState,
     setEffectSpeed,
     showMap,
+    /** Review hook: force the spendable star balance. */
+    setStars: (n: number) => {
+      forcedStars = n;
+      if (map.visible) map.show(viewWithRestoration());
+    },
+    /** Review hook: open the restore confirm for a world. */
+    tapRestore: (world: number) => map.openRestoreConfirm(world),
     /** Review hook: set every room's restored count (ART_DIRECTION §6). */
     setRestored: (n: 0 | 1 | 2 | 3 | 4) => {
       forcedRestored = { 1: n, 2: n, 3: n, 4: n };
