@@ -162,7 +162,9 @@ Contrast rules from §9.1 still apply, inverted as needed: the gate governs, not
 | 3 Laboratory | specimen case, flask rack, copper pipework, balance |
 | 4 Observatory | star chart, armillary sphere, open shutter, telescope |
 
-**Slots are per-object, not per-index.** Six of the sixteen are wall-mounted — clock, blackboard, star chart, pipework among them — and a generic free-standing grid puts a wall clock on the floor. Each object's slot is chosen against its own room's painted walls and floor. The drape occupies the same box, so a hanging object is covered by a hanging sheet.
+**Slots are depth-staged, not wall-mounted.** The delivered art draws all sixteen objects free-standing on feet, legs or a plinth — including the clock, blackboard, star chart and pipework — so hanging any of them floats it. Instead the four slots stage back to front: each sits further from the viewer, lifted from its room's own measured floor line and scaled down accordingly. The laboratory's floor is higher than the others because its bench is.
+
+Four objects on one floor line at one size read as a shop shelf. Four staged in depth read as a room.
 
 **Priced off the STRUGGLING income, not the ceiling.** 2/2/3/3 per room, 10★ per world, 40★ total. A struggling player earning ~10★ per world finishes the Academy as they finish the ladder. A perfect player spends 40 of 120★ and keeps 80★ for hints. Pricing off the 120★ ceiling would put objects at 7.5★ and give the struggling player one object per ten levels, which is not a loop.
 
