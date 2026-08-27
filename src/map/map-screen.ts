@@ -285,24 +285,36 @@ export class MapScreen {
 
       const room = this.rooms.get(world);
       if (room) {
+        /*
+         * CROPPED TO THE ROOM HALF (§6).
+         *
+         * The desk edge sits at ~61% of the 900x2100 plate, measured by row
+         * focus energy. Cover-fitting the WHOLE plate into a 95x110 cell spent
+         * about 40% of it on desk that is identical in both states — the
+         * before/after diluted by inert wood. Fitting the room half instead
+         * gives the same footprint ~60% more usable area, and the shelf's brass
+         * frame is the surrounding surface the desk was standing in for.
+         *
+         * §6's no-veiled-desk rule is untouched: it governs the BOARD, where
+         * the desk is what the player plays on.
+         */
+        const ROOM_FRACTION = 0.61;
+        const roomH = room.height * ROOM_FRACTION;
         const art = new Sprite(room);
-        const cover = Math.max(vw / room.width, vh / room.height);
+        const cover = Math.max(vw / room.width, vh / roomH);
         art.scale.set(cover);
         art.anchor.set(0.5);
-        art.position.set(vw / 2, vh / 2);
+        // Land the ROOM HALF's centre in the cell, not the whole plate's.
+        art.position.set(vw / 2, vh / 2 - (roomH / 2 - room.height / 2) * cover);
         const mask = new Graphics().roundRect(0, 0, vw, vh, 5).fill(0xffffff);
         art.mask = mask;
         cell.addChild(art, mask);
 
-        /*
-         * §6: the desk half is never veiled. The vignette is cover-fitted from
-         * the same 900x2100 plate the board uses, whose desk edge sits at ~61%
-         * of the source — so the room half of THIS crop is the top ~61% too.
-         */
+        // The cell is now ALL room, so the veil covers all of it.
         const overlay = veiled(art, {
           width: vw,
           height: vh,
-          roomFraction: 0.61,
+          roomFraction: 1,
           restored: (v.restored[world] ?? 0) as Restored,
         });
         overlay.mask = mask;
