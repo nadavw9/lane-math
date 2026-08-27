@@ -151,6 +151,8 @@ Contrast rules from §9.1 still apply, inverted as needed: the gate governs, not
 
 **The desk half is never veiled.** The player's own desk is not shabby; only the Academy behind it.
 
+**The vignette crops to the room half.** The no-veiled-desk rule governs the board, where the desk is the surface the player plays on. In a 95×110 map vignette the desk is inert in both states and dilutes the before/after by ~40%; the shelf's own brass frame supplies the surrounding surface instead.
+
 **Light is the through-line.** Each room's fourth object is also its brightest, so the final purchase in a room is the one that visibly lifts it. World 4's telescope is the last object in the game.
 
 | World | Objects, cheapest first |
