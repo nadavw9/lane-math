@@ -204,6 +204,33 @@ export function operatorCount(size: number, remaining: number): Container {
   return chip;
 }
 
+/*
+ * EVERY MODAL SURFACE IN THE GAME IS THIS ONE (§9.0).
+ *
+ * Swept once, after the same defect appeared three times — the warning panel,
+ * the hint shop, and out-of-lives were each a flat card with a stroke, and each
+ * was fixed only when pointed at. Two instances of a rule means look for the
+ * third rather than wait for it to surface.
+ *
+ * The seven that use it: cleared, failure, warning, hint shop, out-of-lives,
+ * the Academy shelf, the Academy confirm. `PALETTE.card` — the cream surface
+ * they all used to be — now has no callers at all.
+ *
+ * WHAT LEGITIMATELY IS NOT A FRAMED PANEL, and why:
+ *
+ *   woodenTray, feltLinedTray   furniture the board sits ON, not a surface
+ *                               laid OVER it. A tray inside a brass frame
+ *                               would be a box inside a box.
+ *   recessedPanel               the numeral inset INSIDE a token, at a scale
+ *                               where a frame would be all frame.
+ *   ghostPlaque, ghostSlot,     the absence of a token, drawn stroke-only:
+ *   emptySlot                   framing a hole would make it an object.
+ *   the equation band veil      a band TINT, the same derived value the lane
+ *                               uses, not a panel at all.
+ *
+ * Anything new that reads as a panel laid over the board belongs here. If it
+ * does not, say why beside it.
+ */
 /**
  * A FRAMED PANEL — the modal shell for §9.4's failure options.
  *

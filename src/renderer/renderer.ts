@@ -762,21 +762,17 @@ export class Renderer {
     const x = lane.x + 12;
     const y = lane.y + lane.height / 2 - height / 2;
 
-    const panel = new Graphics()
-      .roundRect(x, y, width, height, 12)
-      .fill({ color: PALETTE.targetPlate, alpha: 0.97 });
-    panel
-      .moveTo(x + 12, y + 2)
-      .lineTo(x + width - 12, y + 2)
-      .stroke({ width: 3, color: 0x000000, alpha: 0.3 });
-    panel
-      .moveTo(x + 12, y + height - 2)
-      .lineTo(x + width - 12, y + height - 2)
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.14 });
-    panel
-      .roundRect(x, y, width, height, 12)
-      .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.5 });
-    this.root.addChild(this.entry(panel, BOARD_BANDS.furniture));
+    /*
+     * BRASS OVER FELT, like every other panel (§9.0).
+     *
+     * This was a flat navy card with a gold stroke — the third instance of the
+     * same defect, after the warning panel and the hint shop. Each time the fix
+     * was applied where the bug was pointed at rather than everywhere the rule
+     * held, which is the pattern CLAUDE.md now names.
+     */
+    const framed = framedPanel(width, height);
+    framed.panel.position.set(x, y);
+    this.root.addChild(this.entry(framed.panel, BOARD_BANDS.furniture));
 
     /*
      * THE AUTOMATON'S SEAT (ART_DIRECTION §2, concerned state).
