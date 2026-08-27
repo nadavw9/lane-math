@@ -133,6 +133,12 @@ if (screen) {
   await page.evaluate(async (name) => {
     const api = window.laneMath;
     if (name === "map") api.showMap();
+    if (name === "academy-0" || name === "academy-4") {
+      // The veil at its two ends, so the mechanism can be judged before any
+      // restoration object is commissioned (ART_DIRECTION §6).
+      api.setRestored?.(name === "academy-4" ? 4 : 0);
+      api.showMap();
+    }
     if (name === "shop") {
       api.send({ type: "toggleShop" });
     }

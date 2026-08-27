@@ -36,6 +36,14 @@ export interface MapView {
   readonly mode: string;
   /** Where the player is up to; the map opens looking at this. */
   readonly furthest: string;
+  /**
+   * Objects restored per world, 0-4 (ART_DIRECTION §6).
+   *
+   * Not yet purchasable — the veil is being proved before any object exists,
+   * because if a quarter of the darkness retreating is not a visible change at
+   * vignette size then the objects cannot rescue it.
+   */
+  readonly restored: Readonly<Record<number, 0 | 1 | 2 | 3 | 4>>;
 }
 
 export const WORLDS = [1, 2, 3, 4] as const;
@@ -92,6 +100,8 @@ export function mapView(economy: Economy, ids: readonly string[]): MapView {
     worlds: [...WORLDS],
     starsAvailable: economy.starsAvailable,
     totalStars: save.totalStars,
+    // No purchase path yet; every room starts shabby.
+    restored: { 1: 0, 2: 0, 3: 0, 4: 0 },
     lives: economy.lives,
     maxLives: economy.maxLivesAllowed,
     muted: economy.muted,

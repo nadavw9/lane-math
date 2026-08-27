@@ -4,7 +4,8 @@ import { button } from "../renderer/button.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
-import { UI_FONT, targetPlate, woodenTray } from "../renderer/tokens.js";
+import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
+import { veiled, type Restored } from "./veil.js";
 import type { MapLevel, MapView } from "./model.js";
 
 /**
@@ -189,7 +190,21 @@ export class MapScreen {
     for (let i = 3; i >= 1; i--) {
       seat.roundRect(-i * 0.8, 2 + i * 1.2, w + i * 1.6, h + i, 8).fill({ color: 0x1a0f08, alpha: 0.12 });
     }
-    seat.roundRect(-2, -2, w + 4, h + 4, 8).fill({ color: PALETTE.felt, alpha: 0.85 });
+    /*
+     * OPAQUE UNDER A LOCKED PLATE (§9.6).
+     *
+     * Dim is LESS PRESENCE, not a different substance — and presence is exactly
+     * what a locked plate lost when the block behind it became a room. The
+     * numerals were never the problem: measured 6.81:1 on fully-locked World 4
+     * against a 4.5:1 text bar, because the digit and its recessed panel dim
+     * together. What went was the plate's separation from the scene behind it.
+     *
+     * So the seat carries it. An opaque ground under a locked plate restores
+     * the separation without touching a colour, which is what §9.6 asks for.
+     */
+    seat
+      .roundRect(-2, -2, w + 4, h + 4, 8)
+      .fill({ color: PALETTE.felt, alpha: level.state === "locked" ? 1 : 0.85 });
     control.addChildAt(seat, 0);
 
     const face = targetPlate(
@@ -224,6 +239,87 @@ export class MapScreen {
     control.position.set(x, y);
     // The one OPEN level lands last: forty plates, and that is the door (§9.0).
     this.root.addChild(this.entry(control, level.state === "open" ? MAP_BANDS.open : band));
+  }
+
+  /**
+   * THE ACADEMY SHELF (ART_DIRECTION §6).
+   *
+   * One wide brass frame holding four vignettes, not four separate panels: at
+   * this width each room gets about 95px, and four small scenes in one frame
+   * read as a set — which is what "the Academy" is — where four framed panels
+   * would read as four unrelated widgets.
+   *
+   * Built before any restoration object exists, deliberately. The veil is the
+   * mechanism (§6), so if a quarter of the darkness retreating is not a visible
+   * change at this size, no amount of globes and telescopes will save it, and
+   * that is worth knowing before the art is commissioned.
+   */
+  private academyShelf(rect: { x: number; y: number; width: number; height: number }, v: MapView): void {
+    if (rect.height < 120) return;
+
+    const shelf = new Container();
+    const framed = framedPanel(rect.width, Math.min(rect.height, 168));
+    shelf.addChild(framed.panel);
+
+    const inner = framed.interior;
+    const title = this.text("THE ACADEMY", 11, PALETTE.tokenInk, "900");
+    title.position.set(inner.x + 10, inner.y + 6);
+    shelf.addChild(title);
+
+    const restoredTotal = [1, 2, 3, 4].reduce((t, w) => t + (v.restored[w] ?? 0), 0);
+    const line = this.text(`${restoredTotal} of 16 restored`, 11, PALETTE.tray);
+    line.position.set(inner.x + inner.width - line.width - 10, inner.y + 6);
+    shelf.addChild(line);
+
+    // Four vignettes across the interior, sized to what is left after the title.
+    const top = inner.y + 24;
+    const vh = Math.max(40, inner.height - 30);
+    const gap = 6;
+    const vw = (inner.width - gap * 3) / 4;
+
+    for (let i = 0; i < 4; i++) {
+      const world = i + 1;
+      const x = inner.x + i * (vw + gap);
+      const cell = new Container();
+      cell.position.set(x, top);
+
+      const room = this.rooms.get(world);
+      if (room) {
+        const art = new Sprite(room);
+        const cover = Math.max(vw / room.width, vh / room.height);
+        art.scale.set(cover);
+        art.anchor.set(0.5);
+        art.position.set(vw / 2, vh / 2);
+        const mask = new Graphics().roundRect(0, 0, vw, vh, 5).fill(0xffffff);
+        art.mask = mask;
+        cell.addChild(art, mask);
+
+        /*
+         * §6: the desk half is never veiled. The vignette is cover-fitted from
+         * the same 900x2100 plate the board uses, whose desk edge sits at ~61%
+         * of the source — so the room half of THIS crop is the top ~61% too.
+         */
+        const overlay = veiled(art, {
+          width: vw,
+          height: vh,
+          roomFraction: 0.61,
+          restored: (v.restored[world] ?? 0) as Restored,
+        });
+        overlay.mask = mask;
+        cell.addChild(overlay);
+      }
+
+      cell.addChild(
+        new Graphics().roundRect(0, 0, vw, vh, 5).stroke({ width: 1.5, color: 0x000000, alpha: 0.35 }),
+      );
+      const label = this.text(String(world), 10, PALETTE.tokenInk, "900");
+      label.position.set(4, vh - 14);
+      cell.addChild(label);
+      shelf.addChild(cell);
+    }
+
+    shelf.position.set(rect.x, rect.y);
+    this.root.addChild(this.entry(shelf, MAP_BANDS.footer));
   }
 
   private draw(): void {
@@ -397,7 +493,7 @@ export class MapScreen {
       width: DESIGN.width - PAD * 2,
       height: Math.max(0, DESIGN.height - (y + 68) - PAD),
     };
-    void academy;
+    this.academyShelf(academy, v);
 
     // --- footer: shop and modes, each absent before its unlock (§7.6) ---
     let footerX = PAD;

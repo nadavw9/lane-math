@@ -186,9 +186,24 @@ renderer.stage.addChild(map.root);
  */
 void map.loadRooms(import.meta.env.BASE_URL);
 
+/**
+ * Force the Academy's restoration state, for review only.
+ *
+ * There is no purchase path yet — the veil is being proved before any object
+ * exists (ART_DIRECTION §6), so the only way to see step 4 is to say so. This
+ * is a debug hook on the same object as the other shot drivers and reads no
+ * saved state, which is what keeps it from becoming an accidental cheat.
+ */
+let forcedRestored: Record<number, 0 | 1 | 2 | 3 | 4> | null = null;
+
+function viewWithRestoration(): ReturnType<typeof mapView> {
+  const base = mapView(economy, LEVEL_IDS);
+  return forcedRestored ? { ...base, restored: forcedRestored } : base;
+}
+
 function showMap(): void {
   renderer.setBoardVisible(false);
-  map.show(mapView(economy, LEVEL_IDS));
+  map.show(viewWithRestoration());
 }
 
 function showBoard(): void {
@@ -206,7 +221,7 @@ map.attach({
   onToggleMute: () => {
     economy.setMuted(!economy.muted);
     sound.setMuted(economy.muted);
-    map.show(mapView(economy, LEVEL_IDS));
+    map.show(viewWithRestoration());
   },
   onOpenShop: () => {
     // The shop lives on the board, where the hints apply. The map is the door.
@@ -215,7 +230,7 @@ map.attach({
   },
   onSelectMode: (mode) => {
     send({ type: "selectMode", mode: mode as "casual" | "normal" | "expert" });
-    map.show(mapView(economy, LEVEL_IDS));
+    map.show(viewWithRestoration());
   },
 });
 
@@ -504,13 +519,18 @@ Object.assign(window, {
     state: () => lastState,
     setEffectSpeed,
     showMap,
+    /** Review hook: set every room's restored count (ART_DIRECTION §6). */
+    setRestored: (n: 0 | 1 | 2 | 3 | 4) => {
+      forcedRestored = { 1: n, 2: n, 3: n, 4: n };
+      if (map.visible) map.show(viewWithRestoration());
+    },
     showBoard,
     mapView: () => mapView(economy, LEVEL_IDS),
     ads: () => ({ available: ads.available }),
     /** The §5.2 refill offer, exposed so the ad path can be exercised. */
     watchAdForLife: async () => {
       const outcome = await ads.offerLifeForAd(economy);
-      if (map.visible) map.show(mapView(economy, LEVEL_IDS));
+      if (map.visible) map.show(viewWithRestoration());
       else send({ type: "tick" });
       return outcome;
     },
