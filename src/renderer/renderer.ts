@@ -879,6 +879,7 @@ export class Renderer {
         elevation: 1 + carried * 2.2,
       });
       token.position.set(x, y - carried * 6);
+      // entry-exempt: a tile mid-flight to its slot, not part of the screen's arrival (§9.5)
       this.root.addChild(token);
     }
   }
@@ -1077,6 +1078,7 @@ export class Renderer {
       token.cursor = "pointer";
       token.on("pointertap", onTap);
     }
+    // entry-exempt: a pool token, animated by its own lift and settle (§9.5)
     this.root.addChild(token);
     return token;
   }
@@ -1100,7 +1102,9 @@ export class Renderer {
      */
     const mood = automatonState(s, this.idleMs);
     const friend = automaton(mood);
-    if (friend) this.root.addChild(friend);
+    // Entry-wrapped like every other surface (§9.0 motion): the game's
+    // character was the one thing that appeared instantaneously.
+    if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
 
     // --- lane: the target queue, visible from level open (GDD §4.2) ---
     // Translucent so the world background reads through. The brightness gate
@@ -1506,7 +1510,7 @@ export class Renderer {
         const size = 14;
         const watches = emblemMeter("life", eco.lives, eco.maxLives, size);
         watches.position.set(lane.x + 8, lane.y + 6);
-        this.root.addChild(watches);
+        this.root.addChild(this.entry(watches, BOARD_BANDS.status));
 
         const hud = this.text(
           `${eco.lives}/${eco.maxLives}`,
@@ -1514,7 +1518,7 @@ export class Renderer {
           eco.lives === 0 ? PALETTE.failed : PALETTE.text,
         );
         hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 8, lane.y + 6);
-        this.root.addChild(hud);
+        this.root.addChild(this.entry(hud, BOARD_BANDS.status));
       }
 
       /*
@@ -1536,14 +1540,14 @@ export class Renderer {
         const size = 15;
         const stars = emblemMeter("star", earned, 3, size);
         stars.position.set(lane.x + lane.width - 8 - meterWidth(3, size), lane.y + 6);
-        this.root.addChild(stars);
+        this.root.addChild(this.entry(stars, BOARD_BANDS.status));
       }
 
       if (eco.firstFailureExempt) {
         const exempt = this.text("free first failure — no life lost", 12, PALETTE.highlightInk);
         exempt.anchor.set(1, 0);
         exempt.position.set(lane.x + lane.width - 8, lane.y + 26);
-        this.root.addChild(exempt);
+        this.root.addChild(this.entry(exempt, BOARD_BANDS.status));
       }
 
       // Out of lives (GDD §5.2, §13). A designed screen, not a line of text.
@@ -1559,7 +1563,7 @@ export class Renderer {
 
     const statusText = this.text(banner, 15, colour);
     statusText.position.set(status.x, status.y);
-    this.root.addChild(statusText);
+    this.root.addChild(this.entry(statusText, BOARD_BANDS.status));
 
     const meta = this.text(
       `${s.levelId}  ${s.mode}  target ${Math.min(s.targetIndex + 1, s.targets.length)}/${s.targets.length}  fails ${s.failures}`,
@@ -1567,7 +1571,7 @@ export class Renderer {
       PALETTE.textDim,
     );
     meta.position.set(status.x, status.y + 22);
-    this.root.addChild(meta);
+    this.root.addChild(this.entry(meta, BOARD_BANDS.status));
 
     /*
      * The build string, and the way telemetry gets off a phone (§7.8).
@@ -1622,8 +1626,10 @@ export class Renderer {
     build.on("pointerup", cancel);
     build.on("pointerupoutside", cancel);
     build.on("pointercancel", cancel);
+    // entry-exempt: the dev build label, which is not part of the designed screen
     this.root.addChild(build);
 
+    // entry-exempt: the dev build label's hit area
     this.root.addChild(
       this.box(
         status.x + status.width - 90,
@@ -1649,6 +1655,7 @@ export class Renderer {
       // The mode selector claims the left of this row when it is unlocked
       // (3 chips of 62 + 6). Sit after it rather than on top of it.
       const modesWidth = u.modeSelector ? 3 * 68 : 0;
+      // entry-exempt: the dev level picker, absent from the shipped screen
       this.root.addChild(
         this.box(
           status.x + modesWidth,
@@ -1670,15 +1677,18 @@ export class Renderer {
       const gem = 18;
       const mark = hintDiamond(gem);
       mark.position.set(board.hints.x + 4 + gem / 2, board.hints.y + i * HINT_LINE_H + 9);
+      // entry-exempt: the dev level picker, absent from the shipped screen
       this.root.addChild(mark);
 
       const label = this.text(hint.text, 12, PALETTE.highlightInk);
       label.position.set(board.hints.x + 4 + gem + 6, board.hints.y + i * HINT_LINE_H + 2);
+      // entry-exempt: the dev level picker, absent from the shipped screen
       this.root.addChild(label);
     });
 
     // --- hint shop: absent before 3-6 (§7.6) ---
     if (u.hintShop && eco) {
+      // entry-exempt: the dev level picker, absent from the shipped screen
       this.root.addChild(
         this.box(
           status.x + status.width - 190,
@@ -1702,20 +1712,31 @@ export class Renderer {
         // the panel would have hung off the top of it.
         // Full band width, not the pool's — the pool now hugs its grid and can
         // be as narrow as three tiles, which is no width for a shop.
-        const panelH = 30 + s.shop.length * 40;
+        /*
+         * BRASS OVER FELT, like the other five modals (§9.0).
+         *
+         * This was a cream card with a gold stroke — the same treatment the
+         * warning panel had, removed there for the same reason: ART_DIRECTION
+         * §4 lists cream as light TEXT, not a surface. It survived here for two
+         * rounds after that lesson because the fix landed where the bug was
+         * noticed rather than everywhere the rule held.
+         *
+         * The rows were never the problem: they already run through the button
+         * component with idle/unavailable states and a designed empty state.
+         * Only the thing they sat on was wrong.
+         */
+        const panelH = 42 + s.shop.length * 40;
         const panelY = status.y - panelH - 8;
-        this.root.addChild(
-          this.entry(
-            new Graphics()
-              .roundRect(status.x, panelY, status.width, panelH, 8)
-              .fill({ color: PALETTE.card, alpha: 0.98 })
-              .roundRect(status.x, panelY, status.width, panelH, 8)
-              .stroke({ width: 2, color: PALETTE.highlightInk }),
-            BOARD_BANDS.furniture,
-          ),
-        );
-        const title = this.text("hints — none reveals a keystone", 12, PALETTE.textDim);
-        title.position.set(status.x + 8, panelY + 7);
+        const shopFrame = framedPanel(status.width, panelH);
+        shopFrame.panel.position.set(status.x, panelY);
+        this.root.addChild(this.entry(shopFrame.panel, BOARD_BANDS.furniture));
+
+        const shopInner = shopFrame.interior;
+        const innerX = status.x + shopInner.x;
+        const innerY = panelY + shopInner.y;
+
+        const title = this.text("hints — none reveals a keystone", 12, PALETTE.tray);
+        title.position.set(innerX, innerY + 2);
         this.root.addChild(this.entry(title, BOARD_BANDS.pool));
 
         /*
@@ -1725,24 +1746,24 @@ export class Renderer {
          * the stars instead, which is a route rather than a wall.
          */
         if (s.shop.every((e) => !e.owned && !e.affordable)) {
-          const how = this.text("clear levels with fewer failures to earn stars", 11, PALETTE.textDim);
+          const how = this.text("clear levels with fewer failures to earn stars", 11, PALETTE.tray);
           how.anchor.set(0.5, 0);
-          how.position.set(DESIGN.width / 2, panelY + panelH - 16);
+          how.position.set(DESIGN.width / 2, panelY + panelH - 18);
           how.alpha = 0.8;
           this.root.addChild(this.entry(how, BOARD_BANDS.status));
         }
 
         s.shop.forEach((entry, i) => {
-          const y = panelY + 26 + i * 40;
+          const y = innerY + 22 + i * 40;
           const enabled = entry.owned || entry.affordable;
           // Owned is "earned", so it is gold on the dark chip. Unaffordable is
           // the same chip under the dim treatment, not a greyer chip.
           // Cannot afford it: UNAVAILABLE, not disabled. It will not become
           // buyable by waiting — only by earning stars elsewhere.
           const row = this.box(
-            status.x + 8,
+            innerX,
             y,
-            status.width - 16,
+            shopInner.width,
             34,
             PALETTE.slotFilled,
             `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}`}`,
@@ -1764,6 +1785,7 @@ export class Renderer {
         const w = 62;
         const x = status.x + i * (w + 6);
         const active = s.mode === mode;
+        // entry-exempt: the out-of-lives panel, opened on demand rather than on arrival
         this.root.addChild(
           this.box(
             x,
@@ -1800,6 +1822,7 @@ export class Renderer {
       const panelY = lane.y + 40;
       const framed = framedPanel(panelW, panelH);
       framed.panel.position.set(panelX, panelY);
+      // entry-exempt: the fatal-move warning, which opens mid-play (§6)
       this.root.addChild(framed.panel);
 
       const inner = framed.interior;
@@ -1810,6 +1833,7 @@ export class Renderer {
       const line = this.text(w.line, 19, PALETTE.tokenInk);
       line.anchor.set(0.5);
       line.position.set(midX, topY + 26);
+      // entry-exempt: warning copy, arriving with its panel above
       this.root.addChild(line);
 
       /*
@@ -1828,6 +1852,7 @@ export class Renderer {
       );
       refused.anchor.set(0.5);
       refused.position.set(midX, topY + 54);
+      // entry-exempt: warning copy, arriving with its panel above
       this.root.addChild(refused);
 
       if (w.scripted) {
@@ -1838,6 +1863,7 @@ export class Renderer {
         );
         free.anchor.set(0.5);
         free.position.set(midX, topY + 78);
+        // entry-exempt: warning copy, arriving with its panel above
         this.root.addChild(free);
       }
 
@@ -1852,8 +1878,10 @@ export class Renderer {
         const cost = this.text("commit anyway and the level is lost", 12, PALETTE.tray);
         cost.anchor.set(0.5);
         cost.position.set(midX, topY + 80);
+        // entry-exempt: warning copy, arriving with its panel above
         this.root.addChild(cost);
 
+        // entry-exempt: warning buttons, arriving with their panel above
         this.root.addChild(
           this.box(
             midX - 128,
@@ -1869,6 +1897,7 @@ export class Renderer {
         // The destructive option is the SECOND one and does not carry the gold
         // accent: gold means "ready, armed, earned" (§9.6) and this is none of
         // those.
+        // entry-exempt: warning buttons, arriving with their panel above
         this.root.addChild(
           this.box(
             midX + 4,
@@ -1882,6 +1911,7 @@ export class Renderer {
           ),
         );
       } else {
+        // entry-exempt: warning buttons, arriving with their panel above
         this.root.addChild(
           this.box(
             midX - 60,

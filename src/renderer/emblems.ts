@@ -1,5 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 
+import { PALETTE } from "./layout.js";
+
 /**
  * The signature emblems, drawn as objects (ART_DIRECTION §3, §4, §8).
  *
@@ -37,9 +39,6 @@ const GOLD = 0xffc94a;
 const GOLD_LIT = 0xfff0c0;
 const GOLD_DEEP = 0xb07d18;
 /** §4 brass, the gradient's two ends. */
-const BRASS = 0xc9a227;
-const BRASS_DEEP = 0x8a6d1f;
-const BRASS_SPENT = 0x4f4526;
 /** §4 felt, for an empty socket. */
 const FELT = 0x241812;
 /** The warm contact shadow. Never neutral grey — the light is warm (§3). */
@@ -194,21 +193,21 @@ export function pocketWatch(size: number, state: "full" | "spent" = "full"): Con
   const crownW = caseR * 0.54;
   const crownH = caseR * 0.3;
   g.roundRect(-crownW / 2, cy - caseR - crownH * 0.82, crownW, crownH, crownH * 0.4).fill({
-    color: lit ? BRASS : BRASS_SPENT,
+    color: lit ? PALETTE.brass : PALETTE.brassSpent,
   });
 
   // Bezel, then the face inside it — one ring of separation, no outline.
-  g.circle(0, cy, caseR).fill({ color: lit ? BRASS_DEEP : BRASS_SPENT });
-  g.circle(0, cy, caseR * 0.82).fill({ color: lit ? BRASS : BRASS_SPENT });
+  g.circle(0, cy, caseR).fill({ color: lit ? PALETTE.brassDeep : PALETTE.brassSpent });
+  g.circle(0, cy, caseR * 0.82).fill({ color: lit ? PALETTE.brass : PALETTE.brassSpent });
 
   // The light across the face: lower-right falls away, upper-left catches it.
   // Both stay inside the face, so the silhouette is never eaten by the shading.
   g.circle(caseR * 0.14, cy + caseR * 0.16, caseR * 0.68).fill({
-    color: lit ? BRASS_DEEP : 0x000000,
+    color: lit ? PALETTE.brassDeep : 0x000000,
     alpha: lit ? 0.45 : 0.3,
   });
   g.circle(-caseR * 0.14, cy - caseR * 0.16, caseR * 0.52).fill({
-    color: lit ? GOLD : BRASS,
+    color: lit ? GOLD : PALETTE.brass,
     alpha: lit ? 0.35 : 0.12,
   });
   emblem.addChild(g);

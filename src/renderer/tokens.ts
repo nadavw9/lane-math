@@ -4,8 +4,6 @@ import { hintDiamond, radical } from "./emblems.js";
 import { PALETTE } from "./layout.js";
 
 /** §4 brass, the frame's two tones. */
-const BRASS = 0xc9a227;
-const BRASS_DEEP = 0x8a6d1f;
 import {
   numeralCentre,
   opacityFor,
@@ -247,7 +245,7 @@ export function framedPanel(
   const g = new Graphics();
   // Brass body, lit from the upper left: the deep tone underneath, the lit tone
   // laid over the top-left so the frame has a direction rather than a fill.
-  g.roundRect(0, 0, w, h, radius).fill({ color: BRASS_DEEP });
+  g.roundRect(0, 0, w, h, radius).fill({ color: PALETTE.brassDeep });
   /*
    * Light falls off DOWN the frame, built from stacked bands rather than one.
    *
@@ -259,7 +257,7 @@ export function framedPanel(
    * render target, just shapes.
    */
   for (let i = 0; i < 6; i++) {
-    g.roundRect(0, 0, w, h * (0.26 + i * 0.07), radius).fill({ color: BRASS, alpha: 0.19 });
+    g.roundRect(0, 0, w, h * (0.26 + i * 0.07), radius).fill({ color: PALETTE.brass, alpha: 0.19 });
   }
   // The outer top edge catches the light; the bottom falls into shadow.
   g.moveTo(radius, 1.5)
@@ -301,7 +299,7 @@ export function framedPanel(
     [border * 0.62, h - border * 0.62],
     [w - border * 0.62, h - border * 0.62],
   ] as const) {
-    studs.circle(sx, sy, sr).fill({ color: BRASS_DEEP });
+    studs.circle(sx, sy, sr).fill({ color: PALETTE.brassDeep });
     studs.circle(sx - sr * 0.18, sy - sr * 0.18, sr * 0.78).fill({ color: 0xd8b53a });
     studs.circle(sx - sr * 0.3, sy - sr * 0.32, sr * 0.34).fill({ color: 0xffe9a8, alpha: 0.6 });
   }
@@ -313,7 +311,7 @@ export function framedPanel(
   const ch = border * 0.92;
   cartouche
     .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch, ch * 0.42)
-    .fill({ color: BRASS });
+    .fill({ color: PALETTE.brass });
   cartouche
     .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch * 0.5, ch * 0.42)
     .fill({ color: 0xffe9a8, alpha: 0.3 });

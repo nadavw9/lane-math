@@ -72,6 +72,21 @@ export const PALETTE = {
   /** The same intent as `highlight`, for text on paper, where gold vanishes. */
   highlightInk: 0x8a5a12,
 
+  /*
+   * BRASS, and the family of shades it is lit and shadowed with.
+   *
+   * These lived as module-local constants in BOTH tokens.ts and emblems.ts —
+   * the same three values written twice. Nothing was wrong with either copy,
+   * which is the point: a divergence starts at the second definition, not at
+   * the first wrong value, and §9.0 asks every colour to be in the material
+   * set rather than near it.
+   */
+  brass: 0xc9a227,
+  brassDeep: 0x8a6d1f,
+  brassLit: 0xffe9a8,
+  /** An unlit brass object — §5's spent state, not a grey (§9.6). */
+  brassSpent: 0x4f4526,
+
   /** The pool tray: light wood, warm, translucent over the paper (§9.6). */
   tray: 0xc9a678,
   /** Dark brown felt under every real tile and dial. */

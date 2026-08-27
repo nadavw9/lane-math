@@ -149,6 +149,11 @@ export class MapScreen {
       onTap,
     });
     control.position.set(x, y);
+    /*
+     * entry-exempt: `chip` is a generic helper and its CALLERS decide the band —
+     * the shop chip, the mode chips and the mute toggle all arrive with the
+     * footer. Wrapping here would put every chip on one band regardless.
+     */
     this.root.addChild(control);
     return control;
   }
@@ -521,7 +526,7 @@ export class MapScreen {
       // object that stands for one is a clock.
       const lives = emblemMeter("life", v.lives, v.maxLives, 14);
       lives.position.set(PAD + 10, PAD + 33);
-      this.root.addChild(lives);
+      this.root.addChild(this.entry(lives, MAP_BANDS.header));
     }
 
     const muteLabel = v.muted ? "sound off" : "sound on";
