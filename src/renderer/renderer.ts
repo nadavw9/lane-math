@@ -280,7 +280,7 @@ export class Renderer {
      */
     if (spritesEnabled()) {
       const loaded = await Promise.all(
-        ["tiles", "operators", "operators-unlit", "plaques", "automaton"].map((family) =>
+        ["tiles", "operators", "operators-unlit", "plaques", "automaton", "academy-warm", "academy-cool", "drape"].map((family) =>
           loadAtlas(family, import.meta.env.BASE_URL),
         ),
       );

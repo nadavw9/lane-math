@@ -63,6 +63,29 @@ interface Options {
    */
   skipAngle: boolean;
   bodyTolerance: number;
+  /**
+   * The sheet holds UNLIKE OBJECTS, not variants of one form.
+   *
+   * Every comparative check in this tool assumes a family — five dials, three
+   * cubes, four poses of one automaton — where a difference between members IS
+   * drift. Across a lamp, a globe, a blackboard and an armchair, the same
+   * differences are the subject:
+   *
+   *   light angle    measures silhouette, not lighting (ART_DIRECTION §9)
+   *   body colour    measures MATERIAL — brass, slate, upholstery, paint —
+   *                  and those are supposed to differ
+   *   apparent size  measures the objects' real relative sizes. A lamp is
+   *                  smaller than an armchair; flagging that as an outlier is
+   *                  asking the art to be wrong
+   *   mean hue       same as body colour
+   *
+   * So this disables all four and keeps the mechanical checks, which stay
+   * meaningful: slice count, despill verification, empty-frame detection,
+   * reproducibility. The alternative — relaxing each tolerance until eight
+   * unlike objects fit — would leave a gate that no longer fails for real
+   * drift either.
+   */
+  heterogeneous: boolean;
   inner: number;
   outer: number;
   minArea: number;
@@ -91,7 +114,8 @@ function parseArgs(argv: string[]): Options {
     minSource: Number(get("min-source", "0")),
     baseline: baseline === "" ? undefined : Number(baseline),
     baselineTolerance: Number(get("baseline-tolerance", "5")),
-    skipAngle: argv.includes("--skip-angle"),
+    skipAngle: argv.includes("--skip-angle") || argv.includes("--heterogeneous"),
+    heterogeneous: argv.includes("--heterogeneous"),
     bodyTolerance: Number(get("body-tolerance", "12")),
     inner: Number(get("inner", "60")),
     outer: Number(get("outer", "120")),
@@ -296,12 +320,35 @@ function findRegions(rgba: Buffer, width: number, height: number, minArea: numbe
     if (area >= minArea) regions.push({ minX, minY, maxX, maxY, area });
   }
 
-  // Reading order, so sprite N in the report is sprite N on the sheet.
-  return regions.sort((a, b) => {
-    const rowA = Math.round(a.minY / 64);
-    const rowB = Math.round(b.minY / 64);
-    return rowA === rowB ? a.minX - b.minX : rowA - rowB;
-  });
+  /*
+   * Reading order, so sprite N in the report is sprite N on the sheet — which
+   * is what makes `--names` mean anything.
+   *
+   * ROWS ARE CLUSTERED BY CENTRE, NOT BY TOP EDGE. This used to bucket on
+   * `minY / 64`, which works when every object is the same size and fails the
+   * moment they are not: on the Academy's warm sheet the bank lamp is half the
+   * height of the clock beside it, its top edge lands a bucket lower, and it
+   * sorted into the SECOND row. Every name after it shifted, so `lamp` was
+   * applied to the clock and `armchair` to the orrery.
+   *
+   * Silent, and invisible in the atlas — the art is all present and correct,
+   * just labelled wrong, which then shows up as the wrong object in the wrong
+   * room. Centres and a tolerance derived from the objects' own median height
+   * adapt to whatever the sheet holds.
+   */
+  const heights = regions.map((r) => r.maxY - r.minY).sort((a, b) => a - b);
+  const medianH = heights.length === 0 ? 64 : heights[Math.floor(heights.length / 2)]!;
+  const tolerance = Math.max(16, medianH * 0.5);
+  const centre = (r: { minY: number; maxY: number }): number => (r.minY + r.maxY) / 2;
+
+  const byCentre = [...regions].sort((a, b) => centre(a) - centre(b));
+  const rows: (typeof regions)[] = [];
+  for (const region of byCentre) {
+    const row = rows[rows.length - 1];
+    if (row && Math.abs(centre(region) - centre(row[0]!)) <= tolerance) row.push(region);
+    else rows.push([region]);
+  }
+  return rows.flatMap((row) => row.sort((a, b) => a.minX - b.minX));
 }
 
 /* ------------------------------------------------------------------ *
@@ -642,7 +689,12 @@ for (const sprite of meta) {
  * is invisible in isolation and obvious once they sit side by side on a board.
  */
 const problems: string[] = [];
-if (options.skipAngle) {
+if (options.heterogeneous) {
+  process.stdout.write(
+    `  comparative checks skipped — heterogeneous set (angle, body colour, size, hue)
+`,
+  );
+} else if (options.skipAngle) {
   /*
    * BODY COLOUR IN PLACE OF LIGHT ANGLE. Every sprite's material must match
    * every other's: same brass, whatever the pose is doing. The channel spread
@@ -681,6 +733,7 @@ if (!options.skipAngle && options.baseline !== undefined) {
   }
 }
 for (const a of audits) {
+  if (options.heterogeneous) break;
   const meanBox = audits.reduce((t, x) => t + x.boxWidth * x.boxHeight, 0) / audits.length;
   const box = a.boxWidth * a.boxHeight;
   if (meanBox > 0 && Math.abs(box - meanBox) / meanBox > 0.25) {

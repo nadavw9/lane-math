@@ -5,7 +5,7 @@ import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
-import { veiled, type Restored } from "./veil.js";
+import { objectsFor, veiled, type Restored } from "./veil.js";
 import type { MapLevel, MapView } from "./model.js";
 
 /**
@@ -317,6 +317,15 @@ export class MapScreen {
           roomFraction: 1,
           restored: (v.restored[world] ?? 0) as Restored,
         });
+        /*
+         * Objects UNDER the veil, so a room that is half restored shows its
+         * earned furniture through the remaining darkness rather than in front
+         * of it. The drapes cover the slots that are still unbought.
+         */
+        const props = objectsFor(world, (v.restored[world] ?? 0) as Restored, vw, vh);
+        props.mask = mask;
+        cell.addChild(props);
+
         overlay.mask = mask;
         cell.addChild(overlay);
       }

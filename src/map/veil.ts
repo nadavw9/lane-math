@@ -1,5 +1,7 @@
 import { Container, Graphics, Sprite, type Texture } from "pixi.js";
 
+import { spriteFor } from "../renderer/sprites.js";
+
 /**
  * THE SHABBY VEIL (ART_DIRECTION §6).
  *
@@ -53,12 +55,37 @@ const COOL_GREY = 0x6b7480;
  * Positions are fractions of the room half, chosen to sit where each scene's
  * furniture actually is rather than scattered: low and wide, against the walls.
  */
-const SHEETS: readonly { x: number; y: number; w: number; h: number }[] = [
-  { x: 0.04, y: 0.52, w: 0.30, h: 0.34 },
-  { x: 0.68, y: 0.46, w: 0.30, h: 0.40 },
-  { x: 0.38, y: 0.60, w: 0.26, h: 0.28 },
-  { x: 0.16, y: 0.30, w: 0.22, h: 0.22 },
+export interface Slot {
+  /** Centre of the object, as a fraction of the vignette. */
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/**
+ * The four slots, shared by the drape and the object beneath it.
+ *
+ * Sharing them is what makes "the sheet comes off and the thing is underneath"
+ * work — a drape at one position and its object at another would read as two
+ * unrelated events. Objects are composed base-at-bottom, so `y` is the centre
+ * and the base sits at `y + h / 2`.
+ */
+export const SLOTS: readonly Slot[] = [
+  { x: 0.19, y: 0.69, w: 0.30, h: 0.34 },
+  { x: 0.83, y: 0.66, w: 0.30, h: 0.40 },
+  { x: 0.51, y: 0.74, w: 0.26, h: 0.28 },
+  { x: 0.27, y: 0.41, w: 0.22, h: 0.22 },
 ];
+
+/** Which four objects furnish each world, in purchase order (§6). */
+export const OBJECTS: Readonly<Record<number, readonly string[]>> = {
+  1: ["lamp", "clock", "globe", "blackboard"],
+  2: ["stepladder", "bookcase", "armchair", "orrery"],
+  3: ["specimen-case", "flask-rack", "pipework", "balance"],
+  4: ["star-chart", "armillary", "shutter", "telescope"],
+};
+
 
 export interface VeilOptions {
   readonly width: number;
@@ -91,25 +118,42 @@ export function veil(options: VeilOptions): { overlay: Container; tint: number }
   overlay.addChild(scrim);
 
   /*
-   * One sheet retreats per purchase. Drawn as a soft-cornered drape with a lit
-   * top edge, so it reads as cloth over a shape rather than as a grey rectangle
-   * — at 95px wide that edge is most of what says "sheet".
+   * One drape retreats per purchase.
+   *
+   * A SPRITE, not a rounded rectangle. The rects read as grey blocks at 95px —
+   * they said "something is covered" without saying "cloth", and they were the
+   * only non-art element on the shelf. One drape casting is reused at all four
+   * slots, mirrored and scaled, because a drape has no orientation the eye can
+   * check and four copies of one shape at four sizes reads as four sheets.
+   *
+   * Falls back to nothing rather than to the rectangles: a missing drape leaves
+   * a darker room, which is still a legible shabby state, where a grey box
+   * would be a visible placeholder shipping to a player.
    */
-  const remaining = SHEETS.length - restored;
-  const sheets = new Graphics();
-  for (let i = 0; i < remaining; i++) {
-    const s = SHEETS[i]!;
-    const x = s.x * width;
-    const y = s.y * roomH;
-    const w = s.w * width;
-    const h = s.h * roomH;
-    sheets.roundRect(x, y, w, h, Math.min(w, h) * 0.18).fill({ color: 0xd8d2c4, alpha: 0.5 });
-    sheets
-      .moveTo(x + w * 0.12, y + 1.5)
-      .lineTo(x + w * 0.88, y + 1.5)
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.28 });
+  const drape = spriteFor("drape");
+  /*
+   * Cover the slots NOT YET BOUGHT — `restored` onwards.
+   *
+   * This counted from 0 to `SLOTS.length - restored`, which drapes the slots
+   * the player has just PAID for and leaves the empty ones bare: at 2 of 4 the
+   * room showed two sheets and none of its new furniture. The object layer
+   * underneath was drawing correctly the whole time, hidden by a sheet over the
+   * thing it had just revealed.
+   */
+  for (let i = restored; i < SLOTS.length; i++) {
+    const slot = SLOTS[i]!;
+    if (!drape) break;
+    const sheet = new Sprite(drape.texture);
+    const w = slot.w * width * 1.25;
+    const h = slot.h * height * 1.15;
+    sheet.scale.set(Math.min(w / drape.texture.width, h / drape.texture.height));
+    sheet.anchor.set(0.5, 1);
+    // Base at the bottom of the slot box, like the object it hides.
+    sheet.position.set(slot.x * width, (slot.y + slot.h / 2) * height);
+    // Mirrored on alternate slots so the same casting does not read as a repeat.
+    if (i % 2 === 1) sheet.scale.x *= -1;
+    overlay.addChild(sheet);
   }
-  overlay.addChild(sheets);
 
   /*
    * The tint darkens the ART, which the scrim alone cannot do without also
@@ -129,3 +173,30 @@ export function veiled(art: Sprite, options: VeilOptions): Container {
 }
 
 export type { Texture };
+
+/**
+ * The objects a room has earned, laid out at their slots.
+ *
+ * Composed base-at-bottom: slots 1-3 stand on a floor and slot 4 sits on a
+ * surface, so an object centred in its box would float. Scaled to FIT its box
+ * rather than fill it — the sheets normalise apparent size across a family, and
+ * for furniture that is wrong (a lamp is not an armchair), so the slot's own
+ * dimensions restore the relative scale the art was drawn at.
+ */
+export function objectsFor(world: number, restored: Restored, width: number, height: number): Container {
+  const layer = new Container();
+  const names = OBJECTS[world] ?? [];
+  for (let i = 0; i < restored && i < names.length; i++) {
+    const entry = spriteFor(names[i]!);
+    if (!entry) continue;
+    const slot = SLOTS[i]!;
+    const box = { w: slot.w * width, h: slot.h * height };
+    const sprite = new Sprite(entry.texture);
+    const fit = Math.min(box.w / entry.texture.width, box.h / entry.texture.height);
+    sprite.scale.set(fit);
+    sprite.anchor.set(0.5, 1);
+    sprite.position.set(slot.x * width, (slot.y + slot.h / 2) * height);
+    layer.addChild(sprite);
+  }
+  return layer;
+}
