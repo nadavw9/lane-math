@@ -307,6 +307,17 @@ testing itself.**
 
 ---
 
+## Fix the rule, not the instance
+
+**Fixing a defect where you found it is half the job.** When a rule is learned —
+cream is not a surface, a test must call its subject, a cached value drifts —
+the next step is to find every other place it already applies. The hint shop
+kept the cream card for two rounds after the warning panel taught the rule,
+because the fix was applied where the bug was noticed rather than everywhere it
+was true.
+
+---
+
 ## Broken harness, not broken product
 
 **A test that REIMPLEMENTS its subject tests its own copy.**
