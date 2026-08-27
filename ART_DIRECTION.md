@@ -170,6 +170,10 @@ Four objects on one floor line at one size read as a shop shelf. Four staged in 
 
 **Map only.** The board shows 6% room; a restored globe would be invisible in play. Restoration lives in the map's Academy shelf.
 
+**Completion is the only moment all four rooms move together.** On the sixteenth purchase the last drape lifts as normal, then every room's remaining veil retreats at once over ~900ms while the shelf's brass frame takes a lighting sweep. The counter is replaced permanently by the Academy's name — a finished Academy shows its name, not its arithmetic.
+
+No modal, no confetti, no sound sting beyond the purchase's own weight. Four rooms moving at once happens nowhere else, and that is what makes it read as completion rather than as a fifth purchase.
+
 **Restoration is finite and that is accepted.** After 16 objects the shop is the only sink. A player who has 3-starred forty levels and furnished the Academy has finished the game; a permanent sink belongs with Endless and Daily (§14), not here.
 
 ---
