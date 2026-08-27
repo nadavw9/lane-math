@@ -162,6 +162,8 @@ Contrast rules from §9.1 still apply, inverted as needed: the gate governs, not
 | 3 Laboratory | specimen case, flask rack, copper pipework, balance |
 | 4 Observatory | star chart, armillary sphere, open shutter, telescope |
 
+**Slots are per-object, not per-index.** Six of the sixteen are wall-mounted — clock, blackboard, star chart, pipework among them — and a generic free-standing grid puts a wall clock on the floor. Each object's slot is chosen against its own room's painted walls and floor. The drape occupies the same box, so a hanging object is covered by a hanging sheet.
+
 **Priced off the STRUGGLING income, not the ceiling.** 2/2/3/3 per room, 10★ per world, 40★ total. A struggling player earning ~10★ per world finishes the Academy as they finish the ladder. A perfect player spends 40 of 120★ and keeps 80★ for hints. Pricing off the 120★ ceiling would put objects at 7.5★ and give the struggling player one object per ten levels, which is not a loop.
 
 **Map only.** The board shows 6% room; a restored globe would be invisible in play. Restoration lives in the map's Academy shelf.
