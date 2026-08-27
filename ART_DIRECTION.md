@@ -143,13 +143,28 @@ Contrast rules from §9.1 still apply, inverted as needed: the gate governs, not
 
 ---
 
-## 6. The meta-layer
+## 6. The meta-layer — Academy restoration
 
-**Stars restore the Academy.** Each room begins shabby — dust sheets, empty shelves, dark lamps — and stars furnish it: a globe, a telescope, a reading lamp, a specimen case.
+**Stars restore the Academy, one room per world.** Each room begins under a shabby veil and is lifted by purchasing four objects.
 
-This is the Royal Match loop and it is the single largest thing missing from the current design. Stars currently buy hints, which is a utility, not a reason to return. Both can coexist: hints are a spend, restoration is the *goal*.
+**The veil is the mechanism, not the objects.** Sixteen objects across four rooms means each object alone is a small change; each object plus a quarter of the darkness retreating is a large one. Start state: brightness −45%, saturation −60%, cool grey cast, dust-sheet shapes over the painted-in furniture. End state: the room as shipped, no scrim. Four equal steps between.
 
-Restoration is visible on the map, so the map becomes the reward screen rather than a list.
+**The desk half is never veiled.** The player's own desk is not shabby; only the Academy behind it.
+
+**Light is the through-line.** Each room's fourth object is also its brightest, so the final purchase in a room is the one that visibly lifts it. World 4's telescope is the last object in the game.
+
+| World | Objects, cheapest first |
+|---|---|
+| 1 Classroom | reading lamp, wall clock, globe, blackboard |
+| 2 Library | stepladder, filled bookshelf, reading chair, orrery |
+| 3 Laboratory | specimen case, flask rack, copper pipework, balance |
+| 4 Observatory | star chart, armillary sphere, open shutter, telescope |
+
+**Priced off the STRUGGLING income, not the ceiling.** 2/2/3/3 per room, 10★ per world, 40★ total. A struggling player earning ~10★ per world finishes the Academy as they finish the ladder. A perfect player spends 40 of 120★ and keeps 80★ for hints. Pricing off the 120★ ceiling would put objects at 7.5★ and give the struggling player one object per ten levels, which is not a loop.
+
+**Map only.** The board shows 6% room; a restored globe would be invisible in play. Restoration lives in the map's Academy shelf.
+
+**Restoration is finite and that is accepted.** After 16 objects the shop is the only sink. A player who has 3-starred forty levels and furnished the Academy has finished the game; a permanent sink belongs with Endless and Daily (§14), not here.
 
 ---
 
