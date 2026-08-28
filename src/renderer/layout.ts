@@ -8,6 +8,25 @@
  */
 export const DESIGN = { width: 420, height: 900 } as const;
 
+/**
+ * DEVELOPER OUTPUT IS OFF UNLESS ASKED FOR.
+ *
+ * The level id, mode, target counter, failure count and build string were
+ * drawn unconditionally — including on the live Pages build, where a player
+ * meets "3-02 normal target 1/5 fails 0" in the first three seconds. It is
+ * genuinely useful during development, so it is gated rather than deleted.
+ *
+ * `?debug` in the query string, or `window.laneMathDebug = true` before boot.
+ * Never on by default, and `debug-chrome.test.ts` fails if it renders without
+ * the flag.
+ */
+export function debugChrome(): boolean {
+  if (typeof window === "undefined") return false;
+  const flagged = (window as unknown as { laneMathDebug?: boolean }).laneMathDebug === true;
+  const queried = typeof window.location?.search === "string" && /(^|[?&])debug(=|&|$)/.test(window.location.search);
+  return flagged || queried;
+}
+
 export const PALETTE = {
   /**
    * The clear colour behind the room scenes.
@@ -101,6 +120,15 @@ export const PALETTE = {
    * a material, so it is not this pass's call to make.
    */
   failed: 0x7a2020,
+  /**
+   * The same signal as `failed`, for text on FELT.
+   *
+   * `failed` is a plate colour — it is read as a rim on a lit brass object. As
+   * ink on the dark lining it measures 1.69:1 and the "0/5" it was drawn in was
+   * invisible, which is the `text`-on-felt defect one field further down. Same
+   * hue, lifted until it clears 4.5:1 (5.79:1 measured).
+   */
+  failedLit: 0xdc7a68,
 } as const;
 
 /**
@@ -222,6 +250,26 @@ const EQUATION_PAD = 10;
  */
 export const HINT_LINE_H = 22;
 const STATUS_H = 60;
+
+/**
+ * THE STATUS BAND HAS TWO ROWS, and they are derived here.
+ *
+ * They used to be the literals +8, +44 and +46 written at four call sites. The
+ * band is 60px tall and the second row was placed at +44 with a height of 26,
+ * so the map button and the mode chips ended 10px BELOW the band they belong
+ * to — invisible while the band was a bare strip of desk, obvious the moment it
+ * got a tray to sit outside of.
+ */
+export function statusRows(status: Rect): {
+  readonly message: number;
+  readonly controlsY: number;
+  readonly controlH: number;
+} {
+  const controlH = 30;
+  // +7, not +3: the tray's rim is ~4px and at +3 the message line sat on it.
+  const message = status.y + 7;
+  return { message, controlsY: status.y + status.height - controlH - 4, controlH };
+}
 /** Room for the lives/stars HUD along the top of the lane. */
 const LANE_HEADER = 44;
 

@@ -1,239 +1,145 @@
-Lane Math — font subset, sprite gate, drawn emblems, cut-gem hint mark
-Reviewed 2026-08-22
-
-FONT SUBSET BUG (commit button drew "-" instead of "=")
-01-before-font-fix.png            board as shipped; bundled font was the LATIN-EXT
-                                  subset (U+0100+), so every glyph in the game was
-                                  really system-ui, not Outfit
-02-before-commit-button-zoom.png  commit button at 4x — a single solid bar
-03-after-font-fix.png             latin subset bundled; every numeral is now Outfit
-04-after-commit-button-zoom.png   commit button at 4x — a correct two-bar "="
-
-SPRITES — NOT A BUG
-05-world1-sprites-on.png          World 1 with ?sprites=1: amber glass tiles and
-                                  brass dials. 01/03 above were taken WITHOUT the
-                                  flag, so they show the procedural fallback.
-                                  spritesEnabled=1 loaded=8 missing=0
-
-EMBLEMS — star, pocket-watch, hint gem drawn as Graphics (Outfit has none of them)
-06..17                            working shots across three revisions:
-                                  v1 watch had a cream dial that outshone its case
-                                  (fried eggs); v1 plate stars clipped the numeral;
-                                  17 caught the shutter firing mid-entrance
-18-map-final.png       CURRENT    map: 3 lit + 2 spent watches, per-plate star
-                                  meters, banked total, hints chip, footer line
-19-map-footer-final.png           "26 of 40 cleared · 52 [star] earned"
-20-board-hud.png       CURRENT    board: watch meter + 3/5, star counter, hint line
-21..24                            hint mark before the gem pass — a flat gold
-                                  lozenge; its shadow and highlight were specified
-                                  as fractions of a 10px emblem, so a 0.8px
-                                  highlight and a 2.5px shadow painted nothing
-25-zoom-hint-gem.png   CURRENT    the cut gem at 18px, 8x: four facets around a
-                                  centre above the middle, bright upper-left plane,
-                                  dark lower-right, one specular, contact shadow
-
-26-live-deploy.png     CURRENT    the LIVE Pages deploy, not a local build:
-                                  nadavw9.github.io/lane-math/?sprites=1 renders
-                                  a two-bar "=", sprites 8/8, missing 0. The
-                                  served font is byte-identical to the committed
-                                  latin subset (sha256 eabf8cb2..., 14,048 b)
-
-MEASURED (tools/emblem-light.mjs, over each object's own pixels)
-                        upper-left vs lower-right   specular headroom   shadow
-  pocket-watch 14px           +19.3%                 58.1 @ 5.3% area   3.2% darker
-  star         15px           +17.9%                 43.6 @ 8.5% area   3.4% darker
-  hint gem     18px           +17.7%                 58.6 @ 15.0% area  13.0% darker
-
-Crops are nearest-neighbour upscales of the 1179x2556 (393x852 @3x) captures,
-so no resampling is mistaken for a facet or an edge.
-
 ================================================================================
-LATER BATCH — angle metric, recessed target panel (2026-08-22)
-
-BLOCKED: assets/raw/plaques-sheet.png does not exist. Searched the repo and the
-whole of the user profile directory. Everything below did not depend on it.
-
-27-plaque-panel.png     World 1: the recessed felt panel on every target plate
-28-world1-sprites.png   World 1 at phone aspect, ?sprites=1
-29-world4-sprites.png   World 4 at phone aspect, ?sprites=1 — six targets, all
-                        with recessed panels; glass tiles and brass dials real
-
-CONTRAST, recomputed here from the measured plaque brass L 0.206
-  ink navy #1E2A3A on brass         3.54:1   FAIL    (brief said 3.54)
-  cream    #F4E9D4 on brass         3.41:1   FAIL    (brief said 3.41)
-  cream    S4 #F4E9D4 on felt      14.37:1   pass    (brief said 14.37)
-  cream    shipped tokenInk on felt 14.50:1  pass    <- what the game draws
-  text bar 4.5:1
-
-LIGHT ANGLE METRIC — fixed
-  Was computed from PIXEL offsets, so aspect ratio rotated the result.
-  Negative control, the same synthetic spot on both objects:
-    square  aspect 1.00   135.0 deg
-    wide    aspect 4.12   166.4 deg    <- 31.4 deg false rejection
-  Normalised to fractional coordinates the two agree to under 0.5 deg.
-  Brass baseline re-derived: operators 118 deg mean, sd 1.3 (was 117 / 1.2).
-
-SPRITE GATE — found a real gap
-  No family has -unlit art. A spent dial drops to procedural next to real glass
-  the moment an operator budget runs out. Boot never reaches that state, so
-  every earlier check stayed green over it.
-
+SEVEN UI FIXES + THE DRAPE  (2026-08-28)
 ================================================================================
-PLAQUES (2026-08-22)
 
-30-plaques-world1.png   World 1, ?sprites=1 — real brass plaques
-31-plaques-world4.png   World 4, ?sprites=1 — every piece on the board is art
+Shot from dist/ at 393x852, DPR 3, ?sprites=1 — the real atlases, not the
+procedural fallback.
 
-AUDIT, normalised metric
-  plaque-lit      133 deg      plaque-lit-2    130 deg
-  within-sheet spread sd 1.4 deg   (limit 3.0)   PASS
-  vs brass baseline 118 deg: 13.7 deg   (limit 5.0)   flagged
+01-board-1-01.png          World 1. Debug status line GONE (fix 1). Commit key
+                           in unlit brass with the "=" engraved (fix 2).
+                           Equation row felt-lined like every other band
+                           (fix 3). Status band on a brass-rimmed felt tray with
+                           restart inside it (fix 4). Automaton standing in the
+                           pool's left margin (fix 7).
+02-board-armed-key.png     The same board with a legal expression staged, so
+                           the key is ARMED: lit brass, gold rim, gold in the
+                           cut. §9.6's gold state, which no shot had ever
+                           photographed before this one.
+02b-board-2-08-hud.png     2-08, lives active, 3 stars in play. The HUD ends of
+                           the lane: watches + counter at the left, star row at
+                           the right, both clear of the frame (fix 5).
 
-  Verdict: NOT art drift. Masking the dials' knurled ring moves all five
-  +5.9 deg toward 135, so the baseline object's closed bright rim biases the
-  metric. Plaques at 131.7 sit closer to §3's upper-left 135 than the dials do.
+THE SEVEN MODALS, all on framedPanel
+03-modal-cleared.png       Cleared.
+04-modal-failure.png       Failure.
+05-modal-warning.png       §6's Normal warning — overridable, both ways out.
+06-modal-hint-shop.png     Hint shop.
+07-modal-out-of-lives.png  Out of lives: 2-01 with lives at 0 and the free
+                           first failure already spent.
+12-modal-confirm-afford.png  Academy restore confirm, affordable.
+13-modal-confirm-short.png   The same confirm, short of stars.
 
-CONTRAST
-  plaque body vs lane ground      1.02:1   FAIL (declared, blocks default)
-  plaque body vs felt             3.79:1   pass
-  cream numeral on felt panel    14.50:1   pass
-  front-target gold rim on brass  2.58:1   was 8.21:1 on the old navy plate
+MAP AND ACADEMY
+08-map.png                 Worlds named: 1 CLASSROOM, 2 LIBRARY, 3 LABORATORY,
+                           4 OBSERVATORY, number kept for navigation (fix 6).
+09-academy-0-16.png        Nothing restored.
+10-academy-8-16.png        Half restored.
+11-academy-16-16.png       Fully restored.
 
-ATLAS REPRODUCIBILITY
-  Recovered: --size 360 --names <per family>. All 8 files byte-identical.
-  Recorded as npm run atlas:operators / atlas:tiles / atlas:plaques,
-  verified by npm run atlas:verify, wired into CI.
+--------------------------------------------------------------------------------
+MEASUREMENTS
+--------------------------------------------------------------------------------
 
-================================================================================
-SPENT DIALS, FRONT-TARGET BRIGHTNESS, LINED LANE (2026-08-22)
+THE DRAPE, at vignette scale — you were right, it was the brightest thing there
 
-32-front-vs-queued.png  World 4: queued plaques dimmed, front target at full
-                        brightness, on a felt-lined lane
-33-spent-operator.png   a spent minus dial beside available x and div dials
+  drape median L      0.5067      p90 0.7854
+  warm objects        0.0447      p90 0.2833
+  cool objects        0.0465      p90 0.3024
 
-GATE TABLE, real frames on the placeholder desk with felt
-  glass tiles     cube-lit            8.66:1   cube-lit-2  8.69:1   cube-lit-3 8.61:1
-  brass operators dial-plus-lit       4.12:1   minus 3.94  times 4.14  div 4.08  sqrt 4.23
-  brass plaques   plaque-lit          3.79:1   plaque-lit-2  3.83:1
-  spent dials     dial-plus-unlit     2.08:1   minus 2.07  times 2.07  div 2.04  sqrt 2.01
-  minimum 3:1                                  spent dials DECLARED, below bar
+  11x brighter than the objects it sits among. Now tinted by the room's own
+  veil, so it darkens as the room lifts rather than glowing through it:
 
-FRONT TARGET — brightness, not rim
-  queued (dimmed)  rgb 160,109,31  L 0.1851
-  front  (full)    rgb 198,134,37  L 0.2919
-  front : queued   1.45:1, applied across the whole plate rather than a 3px rim
+  restored 0/4   drape median L 0.041
+  restored 2/4                  0.081
+  restored 4/4                  0.137
 
-THE LANE LINING FIXED THE PLAQUES
-  plaque vs lane   1.02:1  ->  3.79:1
+  Still below the objects' p90 at every step, which is the point: the sheet
+  recedes and the restored furniture reads first.
 
-ANGLE METRIC — erosion measured and REJECTED
-  erosion  operators mean/sd   plaques mean/sd   gap
-     0%      117.8 / 1.3         129.8 / 1.1     12.1   <- kept
-     4%      122.2 / 1.9         157.4 / 3.7     35.2
-     8%      124.7 / 2.6         157.3 / 6.1     32.6
-    12%      121.6 / 4.7         138.8 / 0.1     17.2
-    16%      119.1 / 8.8         139.9 / 0.8     20.8
-    25%      122.4 / 66.8        152.6 / 0.8     30.2
-  No erosion converges the families; the gap is smallest at 0% and the
-  operators' within-family spread degrades monotonically, breaking the 3-degree
-  binding check at 12%.
+THE BRIGHTNESS GATE, re-run after the equation row was lined
 
-UNLIT SET
-  5 objects, 114 deg mean, sd 1.5 (lit set 118 / 1.3), frames identical 353x360
+  The gate had no equation zone at all — it measured tiles in the POOL and
+  never in the row the player drags them to. Added, and the newly lined row
+  measures:
 
-================================================================================
-SPRITES BY DEFAULT (2026-08-22)
+    staged glass tiles     8.61 - 8.69 : 1   (minimum 3:1)
+    staged brass operators 3.94 - 4.23 : 1   (minimum 3:1)
 
-34-sprites-default.png  World 4 mid-level, NO query string — sprites are the
-                        default now. Three ghost plaques filling the cleared
-                        slots at the top of the lane, a spent minus dial beside
-                        available x and div, and the front target below two
-                        queued plaques.
-                        The front target carries §9.4's RED rim here, not gold:
-                        playIntoFailure is the only programmatic route to a
-                        spent operator and it leaves the level refused. That is
-                        correct state, not a stale pulse — neither a settle nor
-                        a legal input clears it. 32-front-vs-queued.png has the
-                        normal gold rim.
+  Identical on all four rooms, because the lining is opaque. 8 gate tests pass.
 
-RESOLUTIONS
-  spent dials 2.01-2.08:1  exempt by rule, WCAG 2.2 SC 1.4.11 "except for
-                           inactive components"; floor is INACTIVE_MIN_CONTRAST
-                           = 1.8:1, perceptible but recessive. Non-colour
-                           indicator supplied by the strike bar.
-  front target 1.45:1      position is the primary identifier, brightness second,
-                           gold rim third. Recorded in renderer.ts so it is not
-                           "fixed" later.
-  erosion                  reverted in §9; metric stays at zero erosion.
+INK ON FELT — three strings were invisible, and my own fix 4 caused one
 
-GATE, all binding, no declared exceptions
-  glass tiles      8.61-8.69:1     minimum 3:1
-  brass operators  3.94-4.23:1     minimum 3:1
-  brass plaques    3.79-3.83:1     minimum 3:1
-  spent dials      2.01-2.08:1     minimum 1.8:1 (inactive)
+    text on felt          1.17:1     the lives counter "5/5"
+    textDim on felt       3.03:1     the status message line
+    highlightInk on felt  2.92:1     "free first failure — no life lost"
+    tokenInk on felt     14.50:1     what they use now
+    highlight on felt    12.50:1     the earned/won state
+    failedLit on felt     5.79:1     new: the zero-lives counter
 
-================================================================================
-OPERATOR COUNTS AND THE FRAMED FAILURE MODAL (2026-08-22)
+  `text`/`textDim`/`highlightInk` are the PAPER inks. Giving the status band a
+  felt tray moved the ground under the message line without moving the choice
+  of ink. Pinned both ways in status-band.test.ts, so the pair cannot be
+  "fixed" later by lightening `text` until one colour serves both grounds.
 
-37-operator-counts.png  World 3 dials with remaining-use chips: + 1, - 1, x 1,
-                        div 3. Never shown in Casual (GDD §7.6).
-38-failure-modal.png    the framed modal over a dimmed board, level 1-03 dead.
-                        The unreachable target stays visible above it.
+WHERE THE AUTOMATON CAN ACTUALLY STAND — measured over all 40 shipped levels
 
-COUNTER CHIP — measured, as promised
-  budgets across the ladder   1x92  2x74  3x45  4x16  5x2   -> always one digit
-  dial sizes                  55, 61, 72, 90, 93, 106       -> 55 is binding
-  chip felt vs brass body     3.79:1   (bar 3:1)      pass
-  cream digit on felt chip   14.50:1   (bar 4.5:1)    pass
-  symbol occlusion, worst     23.3% (minus, whose bar spans the dial)
-  occlusion if shrunk to 0.22 19.3%  -> 4 points for a third of the digit
-  DECISION: size kept, seat pulled 0.70R -> 0.62R so the chip stops overhanging
-  the disc (edge 0.520 -> 0.480 of the token). Not moved out of the quadrant.
+    pool left margin       min 14px   median 43px   max 62px
+    desk above the lane    min 15px   median 16px   max 64px
+    desk below the status band                      12px, every level
 
-FAILURE MODAL
-  composition from lose-frame.png; material is brass + felt, not stone + glow
-  board dims to 0.55 and the veil SWALLOWS INPUT, so the board beneath is
-  not still tappable through it
-  three defects found by looking: a specular drawn over the felt read as a
-  smudge, a half-width lighting overlay left a seam on the left edge, and a
-  single lit band left a pale tab where its corner curved in
+  It stood in that last one. The status band spans the full width, so it was
+  92% covered — a brass sliver between two trays. The pool band is the only
+  band that hugs its grid instead of spanning the width, so its left margin is
+  the one place on the surface with room.
 
-FAILURE MODAL COPY (2026-08-22)
-39-headline-costs-life.png  2-08, lives active and §5.2 already spent:
-                            "starting over costs a life — going back does not"
-40-headline-free.png        1-03, World 1 where §7.2 keeps lives off:
-                            "this restart is free — and going back is too"
-  primary button            "watch an ad · back to where it still worked"
-  The duplicate cost line below the buttons is removed — saying it twice WAS
-  the hierarchy inversion.
+--------------------------------------------------------------------------------
+WHAT I CHANGED BEYOND THE SEVEN
+--------------------------------------------------------------------------------
 
-================================================================================
-VIEWPORT FIT — the board did not fit a real phone (2026-08-22)
+  * `button` gained a material FACE. The first commit-key attempt added the
+    brass as a sibling behind the button's own fill, so it never drew — the key
+    photographed as flat navy. As a face it is painted inside the component and
+    sinks with the press.
+  * The status band's two rows are derived in `statusRows` instead of the
+    literals +8/+44/+46. The map button and the mode chips were 10px BELOW the
+    60px band they belong to; invisible on bare desk, obvious on a tray.
+  * Developer chrome (the meta line, the build label and its long-press
+    telemetry export) is behind `debugChrome()` AND now sits below the band, so
+    it cannot displace a designed row.
 
-42-smallest-viewport.png  360x640, the smallest supported size, 4-01. Whole
-                          board visible: six targets, the "=" button complete,
-                          three dials with counts, all 14 tiles, status band.
+--------------------------------------------------------------------------------
+FOUND WHILE RE-SHOOTING, AND FIXED
+--------------------------------------------------------------------------------
 
-MEASURED OVERFLOW, before -> after (canvas past the visual viewport, px)
-  360x640  small 16:9              172 x 306   ->   0 x 0
-  393x852  design                  139 x 302   ->   0 x 0
-  412x915  large                   120 x 267   ->   0 x 0
-  412x960  21:9                    120 x 280   ->   0 x 0
-  393x720  design, chrome shown    139 x 255   ->   0 x 0
+  * The hints chip was the THIRD site still on the old `status.y + 8` literal.
+    It overlapped the rail's top rim while map and restart sat on the row below.
+  * The hint shop's header was clipped by its own frame — flush against the
+    interior's left edge, which the filled rows survive and a letterform does
+    not. Inset 6px.
+  * The scripted warning's "rewound free" line was `highlightInk` on the panel's
+    felt: 2.92:1. Now gold.
+  * The status message sat at status.y + 3, on the tray's 4px rim. Moved to +7.
 
-  Note the design viewport was ALSO broken, by 139x302px. One viewport was
-  never the problem; the harness never measured overflow at any of them.
+MEASURED RATHER THAN ASSUMED — two lines I thought were broken and are not
 
-WORST CASE, 4-01 casual with one hint row: content spans y 16..888 = 872px of
-the 900px surface. At 360x640 it scales to 11..631 within 640 — inside.
+    "or wait — the timer is always running"       5.29:1 as rendered
+    "commit anyway and the level is lost"         5.89:1 as rendered
 
-================================================================================
-CLEARED PANEL (2026-08-23)
-43-cleared-panel.png       1-01 cleared: brass frame, felt interior, dimmed
-                           board, three stars seated inside, next level primary
-                           and gold-armed, replay/map secondary.
-44-cleared-last-level.png  ATTEMPTED 4-10 — shows the FAILURE modal instead.
-                           The dev win-driver loses 4-10 in the browser while
-                           the same strategy wins it 7/7 in node. The
-                           "next level absent" branch is therefore implemented
-                           but NOT visually verified.
+  Both looked unreadable in a downscaled view and both clear 4.5:1 in the
+  pixels. Left alone.
+
+HARNESS
+  * `shot.mjs` gained a `SHOT_SCREEN=armed` driver that stages a legal
+    expression, so the commit key's GOLD state is photographable. Every board
+    shot before this one showed the disarmed key — the state §9.6 actually
+    specifies had never been reviewed.
+  * out-of-lives has to be shot at 2-08 or later. Lives are absent before that
+    by §7.6, so a 2-01 seed with zero lives photographs an ordinary board.
+  * The hint shop needs `furthestReached >= 3-06`, which means a save ENTRY at
+    3-06, not clears up to 3-05.
+
+  * The FAILURE modal needs the warning overridden AND the play continued:
+    overriding takes the fatal move but the level is not lost until the lane
+    cannot advance (§9.4). `SHOT_SCREEN=failed` now drives that loop. Shot at
+    2-05 — at 1-03 `playIntoFailure` photographs the CLEARED panel, because the
+    tutorial tier is trapless by §8.3 and cannot be lost.

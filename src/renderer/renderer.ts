@@ -4,9 +4,9 @@ import type { BinaryOp, Mode, UnaryOp } from "../solver/index.js";
 import type { Command, InputEvent, ViewState } from "../game/types.js";
 import { automaton, automatonState, THINKING_AFTER_MS } from "./automaton.js";
 import {
-  BACKDROP,
   DESIGN,
   DIM,
+  debugChrome,
   LANE_FELT_ALPHA,
   HINT_LINE_H,
   PALETTE,
@@ -17,6 +17,7 @@ import {
   equationSlot,
   operatorSlot,
   poolSlot,
+  statusRows,
   targetSlot,
 } from "./layout.js";
 import { button, type ButtonState } from "./button.js";
@@ -49,6 +50,7 @@ import {
   UI_FONT,
   setGrainTexture,
   targetPlate,
+  commitKey,
   feltLinedTray,
 } from "./tokens.js";
 
@@ -1097,7 +1099,7 @@ export class Renderer {
      * sitting on the desk behind the work should look like.
      */
     const mood = automatonState(s, this.idleMs);
-    const friend = automaton(mood);
+    const friend = automaton(mood, pool);
     // Entry-wrapped like every other surface (§9.0 motion): the game's
     // character was the one thing that appeared instantaneously.
     if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
@@ -1295,18 +1297,23 @@ export class Renderer {
      */
     const canCommit = s.affordance === "commit";
     const commitRect = equationSlot(3, equation);
-    const commit = this.box(
-      commitRect.x + resistDx,
-      commitRect.y,
-      commitRect.width,
-      commitRect.height,
-      PALETTE.armed,
-      "=",
-      canCommit ? PALETTE.highlight : PALETTE.tokenInk,
-      canCommit ? () => this.emit({ type: "tapCommit" }) : undefined,
-      canCommit ? PALETTE.highlight : undefined,
-    );
-    if (!canCommit) commit.alpha = DIM.alpha;
+    /*
+     * Brass, through the button component's material face, so the key keeps
+     * all four interaction states and sinks as one object under a press.
+     */
+    const commit = button({
+      width: commitRect.width,
+      height: commitRect.height,
+      // EMPTY. The `=` is engraved into the face by `commitKey`; a label here
+      // printed a second one in cream on top of the cut one.
+      label: "",
+      fill: PALETTE.brassDeep,
+      labelColour: canCommit ? PALETTE.highlight : PALETTE.tokenInk,
+      face: (w, h) => commitKey(w, h, canCommit),
+      state: this.inputLocked || !canCommit ? "disabled" : "idle",
+      onTap: this.inputLocked || !canCommit ? undefined : () => this.emit({ type: "tapCommit" }),
+    });
+    commit.position.set(commitRect.x + resistDx, commitRect.y);
     this.root.addChild(this.entry(commit, BOARD_BANDS.equation));
 
     // --- operators. Affordance rule (§3.5): bold-active paired with dim-inactive.
@@ -1508,12 +1515,27 @@ export class Renderer {
         watches.position.set(lane.x + 8, lane.y + 6);
         this.root.addChild(this.entry(watches, BOARD_BANDS.status));
 
+        /*
+         * CREAM, NOT `text`. Same defect as the status line: `text` is the ink
+         * for paper and the lane is felt, so "5/5" measured 1.17:1 and could
+         * not be read at all. `failed` is a plate colour and fared no better at
+         * 1.69:1, so the zero state takes `failedLit` (5.79:1).
+         */
         const hud = this.text(
           `${eco.lives}/${eco.maxLives}`,
           14,
-          eco.lives === 0 ? PALETTE.failed : PALETTE.text,
+          eco.lives === 0 ? PALETTE.failedLit : PALETTE.tokenInk,
         );
-        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 8, lane.y + 6);
+        /*
+         * Clear of the meter, and centred against it.
+         *
+         * The counter sat 8px after `meterWidth`, which reports the meter's
+         * nominal run and not the specular bloom on the last watch — so "0/5"
+         * overlapped the fifth case. A wider gap, and the text is anchored on
+         * its vertical middle against the emblems rather than on its top.
+         */
+        hud.anchor.set(0, 0.5);
+        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 16, lane.y + 6 + size / 2);
         this.root.addChild(this.entry(hud, BOARD_BANDS.status));
       }
 
@@ -1535,12 +1557,15 @@ export class Renderer {
         const earned = s.phase === "won" ? eco.bestStars : eco.starsIfCleared;
         const size = 15;
         const stars = emblemMeter("star", earned, 3, size);
-        stars.position.set(lane.x + lane.width - 8 - meterWidth(3, size), lane.y + 6);
+        // Same clearance at the other end: nothing sits beside the stars, but
+        // the row is inset from the lane edge by the same margin so the two
+        // meters read as a pair rather than as one tucked tighter than the other.
+        stars.position.set(lane.x + lane.width - 16 - meterWidth(3, size), lane.y + 6);
         this.root.addChild(this.entry(stars, BOARD_BANDS.status));
       }
 
       if (eco.firstFailureExempt) {
-        const exempt = this.text("free first failure — no life lost", 12, PALETTE.highlightInk);
+        const exempt = this.text("free first failure — no life lost", 12, PALETTE.highlight);
         exempt.anchor.set(1, 0);
         exempt.position.set(lane.x + lane.width - 8, lane.y + 26);
         this.root.addChild(this.entry(exempt, BOARD_BANDS.status));
@@ -1550,24 +1575,62 @@ export class Renderer {
       if (eco.lockedOut) this.drawOutOfLives(lane, eco);
     }
 
+    /*
+     * A RAIL UNDER THE CONTROLS (§9.0).
+     *
+     * restart, map and hints were flat rectangles on bare wood — the only
+     * controls in the game with no housing, while every band that holds a token
+     * sits in felt. They now sit in the same tray, so the status row reads as
+     * part of the instrument rather than as three buttons dropped on the desk.
+     *
+     * Drawn beneath the controls, which are added after it.
+     */
+    const statusRail = feltLinedTray(
+      status.width + 12,
+      status.height + 6,
+      PALETTE.tray,
+      TRAY_ALPHA,
+      PALETTE.felt,
+    );
+    statusRail.position.set(status.x - 6, status.y - 2);
+    this.root.addChild(this.entry(statusRail, BOARD_BANDS.furniture));
+
+    /*
+     * THE BAND'S TWO ROWS, from the layout rather than from four literals.
+     */
+    const rows = statusRows(status);
+
     // --- status line + restart ---
     // §9.4: no "no solution exists" text. During play this line carries
     // rejections and confirmations; on failure the board has already said it.
     const banner = s.phase === "failed" ? "" : (this.rejection ?? s.message ?? "");
-    // Gold is the only accent, so "earned" is gold ink even in the status line.
-    const colour = s.phase === "won" ? PALETTE.highlightInk : PALETTE.textDim;
+    /*
+     * CREAM AND GOLD, because this band is FELT now.
+     *
+     * It carried `textDim` and `highlightInk`, which are the paper inks — the
+     * pair exists precisely so a call site has to choose a ground, and lining
+     * the band moved the ground without moving the choice. On felt they measure
+     * 3.03:1 and 2.92:1; cream and gold measure 14.50:1 and 12.50:1.
+     */
+    const colour = s.phase === "won" ? PALETTE.highlight : PALETTE.tokenInk;
 
     const statusText = this.text(banner, 15, colour);
-    statusText.position.set(status.x, status.y);
+    statusText.position.set(status.x, rows.message);
     this.root.addChild(this.entry(statusText, BOARD_BANDS.status));
 
+    // Developer output: level id, mode, target counter, failure count. Behind
+    // the flag, because a player met this in the first three seconds.
+    if (debugChrome()) {
     const meta = this.text(
       `${s.levelId}  ${s.mode}  target ${Math.min(s.targetIndex + 1, s.targets.length)}/${s.targets.length}  fails ${s.failures}`,
       12,
       PALETTE.textDim,
     );
-    meta.position.set(status.x, status.y + 22);
+    // Below the band entirely: the two designed rows are full, and developer
+    // chrome does not get to displace them.
+    meta.position.set(status.x, status.y + status.height + 2);
     this.root.addChild(this.entry(meta, BOARD_BANDS.status));
+    }
 
     /*
      * The build string, and the way telemetry gets off a phone (§7.8).
@@ -1589,9 +1652,12 @@ export class Renderer {
      * y+46 sits below restart and to the right of the map button, which is the
      * one free corner of the band.
      */
+    // Behind the same flag: a build string and a telemetry export gesture are
+    // both developer concerns, and a player should meet neither.
+    if (debugChrome()) {
     const build = this.text(this.buildLabel, 10, PALETTE.textDim);
     build.anchor.set(1, 0);
-    build.position.set(status.x + status.width, status.y + 46);
+    build.position.set(status.x + status.width, status.y + status.height + 2);
     build.alpha = 0.7;
     build.eventMode = "static";
     build.cursor = "pointer";
@@ -1624,14 +1690,15 @@ export class Renderer {
     build.on("pointercancel", cancel);
     // entry-exempt: the dev build label, which is not part of the designed screen
     this.root.addChild(build);
+    }
 
     // entry-exempt: the dev build label's hit area
     this.root.addChild(
       this.box(
         status.x + status.width - 90,
-        status.y + 8,
+        rows.controlsY,
         90,
-        32,
+        rows.controlH,
         PALETTE.slotFilled,
         "restart",
         // §9.4 forbids a banner, not a designed way out. On failure the one
@@ -1655,9 +1722,9 @@ export class Renderer {
       this.root.addChild(
         this.box(
           status.x + modesWidth,
-          status.y + 44,
+          rows.controlsY,
           72,
-          26,
+          rows.controlH,
           PALETTE.slotFilled,
           "map",
           PALETTE.tokenInk,
@@ -1688,9 +1755,9 @@ export class Renderer {
       this.root.addChild(
         this.box(
           status.x + status.width - 190,
-          status.y + 8,
+          rows.controlsY,
           92,
-          32,
+          rows.controlH,
           PALETTE.slotFilled,
           `hints ${eco.starsAvailable}`,
           // Open is an "armed" state, so it is gold — the only accent (§9.6).
@@ -1732,7 +1799,10 @@ export class Renderer {
         const innerY = panelY + shopInner.y;
 
         const title = this.text("hints — none reveals a keystone", 12, PALETTE.tray);
-        title.position.set(innerX, innerY + 2);
+        // Inset from the interior's own left edge. Flush against it, the first
+        // glyph was clipped by the frame's inner bevel — the rows get away with
+        // it because they are filled boxes, and a letterform does not.
+        title.position.set(innerX + 6, innerY + 2);
         this.root.addChild(this.entry(title, BOARD_BANDS.pool));
 
         /*
@@ -1785,9 +1855,9 @@ export class Renderer {
         this.root.addChild(
           this.box(
             x,
-            status.y + 44,
+            rows.controlsY,
             w,
-            26,
+            rows.controlH,
             active ? PALETTE.slotFilled : PALETTE.slot,
             mode,
             // The selected mode is an "armed" state: gold on the dark chip.
@@ -1852,10 +1922,12 @@ export class Renderer {
       this.root.addChild(refused);
 
       if (w.scripted) {
+        // Gold, not the paper gold: this line sits on the panel's felt, where
+        // `highlightInk` measures 2.92:1. Same ink split as the status band.
         const free = this.text(
           "rewound free — no star, no life, no failure",
           12,
-          PALETTE.highlightInk,
+          PALETTE.highlight,
         );
         free.anchor.set(0.5);
         free.position.set(midX, topY + 78);
@@ -2225,14 +2297,24 @@ export class Renderer {
     // band, and a second control over the equation row both collides with it
     // and re-narrates a loss the board has already communicated (§9.4).
 
-    // Equation band backdrop drawn last would cover the row, so draw beneath.
-    // Same white veil as the lane: one derived value, not three tuned ones.
-    this.root.addChildAt(
-      new Graphics()
-        .roundRect(equation.x, equation.y, equation.width, equation.height, 8)
-        .fill({ color: BACKDROP.colour, alpha: BACKDROP.alpha }),
-      1,
+    /*
+     * THE EQUATION ROW IS LINED, like every other band that holds tokens.
+     *
+     * It was the only one on bare wood — a white veil over the desk — while the
+     * lane, the operator band and the pool all sit in felt. It is where every
+     * commit happens, so it was the one place the material stopped.
+     *
+     * Drawn beneath: added last it would cover the row it lines.
+     */
+    const equationTray = feltLinedTray(
+      equation.width + 12,
+      equation.height + 12,
+      PALETTE.tray,
+      TRAY_ALPHA,
+      PALETTE.felt,
     );
+    equationTray.position.set(equation.x - 6, equation.y - 6);
+    this.root.addChildAt(equationTray, 1);
     const operatorTray = feltLinedTray(
       operators.width + 12,
       operators.height + 12,

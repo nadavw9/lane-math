@@ -29,6 +29,14 @@ export interface MapEvents {
   readonly onRestore: (world: number) => void;
 }
 
+/** §1's names for the four rooms. The map shows the room; it should say so. */
+const WORLD_NAMES: Readonly<Record<number, string>> = {
+  1: "Classroom",
+  2: "Library",
+  3: "Laboratory",
+  4: "Observatory",
+};
+
 const PAD = 12;
 const COLS = 5;
 const CELL = 62;
@@ -645,7 +653,12 @@ export class MapScreen {
       block.position.set(PAD, y);
       this.root.addChild(this.entry(block, MAP_BANDS.header + world));
 
-      const name = this.text(`WORLD ${world}`, 11, PALETTE.text, "900");
+      /*
+       * The rooms have names (§1) and the map was refusing to say them while
+       * showing a painted library behind the word "WORLD 2". The number stays
+       * for navigation — the ladder is numbered and the plates say 1 to 10.
+       */
+      const name = this.text(`${world}  ${WORLD_NAMES[world] ?? ""}`.toUpperCase(), 11, PALETTE.tokenInk, "900");
       name.position.set(PAD + 10, y + 7);
       this.root.addChild(this.entry(name, MAP_BANDS.header + world));
 

@@ -316,6 +316,16 @@ kept the cream card for two rounds after the warning panel taught the rule,
 because the fix was applied where the bug was noticed rather than everywhere it
 was true.
 
+**A change to the GROUND is a change to every ink on it.** Giving the status
+band a felt tray was a one-line composition fix; it also moved four strings from
+desk onto felt, where `text` measures 1.17:1, `textDim` 3.03:1 and
+`highlightInk` 2.92:1 — those three are the PAPER inks and the palette says so.
+The lesson generalises past colour: whenever a surface is added, replaced or
+lined, re-ask every question that was answered against the old surface. The
+brightness gate had the same hole in the other direction — it measured tiles in
+the pool and never in the equation row, so lining the row changed a ground the
+gate had never looked at.
+
 ---
 
 ## Broken harness, not broken product

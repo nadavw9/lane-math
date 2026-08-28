@@ -189,6 +189,50 @@ if (screen) {
       api.playIntoFailure?.();
       if (!api.state()?.warning) throw new Error("no warning on screen — nothing to shoot");
     }
+    if (name === "failed") {
+      /*
+       * THE FAILURE MODAL, which needs the warning OVERRIDDEN to reach.
+       *
+       * `spent` alone photographs the warning panel instead: in Normal the
+       * warning intercepts the fatal move, which is the whole point of §6. And
+       * it has to be a level with a trap — the tutorial tier is trapless by
+       * §8.3, so `playIntoFailure` at 1-03 photographs the CLEARED panel.
+       */
+      /*
+       * Overriding the warning does not lose the level on the spot — it takes
+       * the fatal move and play CONTINUES until the lane cannot advance, which
+       * is §9.4's failure signal rather than a verdict announced up front. So
+       * this drives the loop rather than the single move.
+       */
+      for (let i = 0; i < 8 && api.state()?.phase !== "failed"; i++) {
+        api.playIntoFailure();
+        await new Promise((r) => setTimeout(r, 500));
+        if (api.state()?.warning?.overridable) {
+          api.send({ type: "commitAnyway" });
+          await new Promise((r) => setTimeout(r, 500));
+        } else if (api.state()?.warning) {
+          api.send({ type: "dismissWarning" });
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+      if (api.state()?.phase !== "failed") throw new Error(`phase is ${api.state()?.phase}, not failed`);
+    }
+    if (name === "armed") {
+      /*
+       * Stage a legal expression so the commit key is ARMED. Its gold state is
+       * the one §9.6 actually specifies, and every board shot before this
+       * photographed the disarmed key — so the state the rule is about had
+       * never been reviewed.
+       */
+      const s0 = api.state();
+      const [a, b] = s0.tiles.filter((t) => !t.consumed);
+      const op = Object.keys(s0.budget)[0];
+      api.send({ type: "tapTile", id: a.id });
+      api.send({ type: "tapOperator", op });
+      api.send({ type: "tapTile", id: b.id });
+      if (api.state()?.affordance !== "commit") throw new Error("key not armed — nothing to shoot");
+    }
     if (name === "hint") {
       // A bought hint is the only way the hint line, and its mark, appear.
       api.send({ type: "buyHint", hint: "narrow" });

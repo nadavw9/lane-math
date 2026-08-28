@@ -55,6 +55,17 @@ export interface ButtonOptions {
    * press and drawn as a hole on the second.
    */
   readonly emblem?: (() => Container) | undefined;
+  /**
+   * A MATERIAL FACE drawn over the flat fill — brass on the commit key.
+   *
+   * A factory for the same reason `emblem` is one: paint() destroys and
+   * rebuilds every child on each press. It is built inside paint and offset by
+   * the press depth, so the material sinks with the button instead of floating
+   * above a key that has moved out from under it. Adding the face as a sibling
+   * outside the component was the first attempt and it drew BEHIND the fill,
+   * which is why the key photographed as flat navy.
+   */
+  readonly face?: ((width: number, height: number) => Container) | undefined;
   readonly onTap?: (() => void) | undefined;
 }
 
@@ -73,6 +84,7 @@ export function button(options: ButtonOptions): Container {
     fontSize,
     shape = "rect",
     emblem,
+    face,
     onTap,
   } = options;
 
@@ -127,6 +139,12 @@ export function button(options: ButtonOptions): Container {
       path(g, depth).stroke({ width: 2, color: outline });
     }
     body.addChild(g);
+
+    if (face) {
+      const material = face(width, height);
+      material.position.set(0, depth);
+      body.addChild(material);
+    }
 
     const text = new Text({
       text: label,

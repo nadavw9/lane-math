@@ -186,6 +186,23 @@ export function veil(options: VeilOptions): { overlay: Container; tint: number }
     const slot = slots[i]!;
     if (!drape) break;
     const sheet = new Sprite(drape.texture);
+    /*
+     * THE DRAPE MUST NOT BE THE BRIGHTEST THING IN THE ROOM.
+     *
+     * Measured on the shipped sprites: the drape's median luminance is 0.5067
+     * against 0.0447 for the warm objects and 0.0465 for the cool — ELEVEN
+     * TIMES brighter. Physically right for pale cloth in a dark room, and
+     * exactly backwards as a reward: the eye lands on what has NOT been
+     * restored, so a half-furnished Academy advertises its gaps.
+     *
+     * So the drape carries the veil too. It is tinted by the same brightness
+     * ramp as the room and then held below it, which lands its median near the
+     * objects' 90th percentile — present, readable as cloth, and no longer the
+     * first thing seen. As the room lifts, the sheets recede with it.
+     */
+    const shade = Math.round(255 * brightnessAt(restored) * 0.55);
+    sheet.tint = (shade << 16) | (shade << 8) | shade;
+    sheet.alpha = 0.92;
     const w = slot.w * width * 1.25;
     const h = slot.h * height * 1.15;
     sheet.scale.set(Math.min(w / drape.texture.width, h / drape.texture.height));

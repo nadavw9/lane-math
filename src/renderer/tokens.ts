@@ -869,3 +869,127 @@ export function emptySlot(w: number, h: number, shape: "square" | "circle"): Con
   token.addChild(g);
   return token;
 }
+
+/**
+ * THE COMMIT KEY — a heavy brass instrument key (§9.2, §9.6).
+ *
+ * It was a flat navy rectangle sitting beside operator dials with knurled rims
+ * and specular highlights: the most important control in the game, and the only
+ * one with no material. Brass puts it in the same family as the operators it
+ * sits with, and heavier — a deeper body, a broader bevel and a stronger
+ * contact shadow — because it is the commit rather than a choice.
+ *
+ * Armed stays GOLD per §9.6. Gold means ready, and this is the one control that
+ * is ever properly ready.
+ */
+export function commitKey(w: number, h: number, armed: boolean): Container {
+  const key = new Container();
+  const r = Math.min(w, h) * 0.24;
+
+  /*
+   * NO DROP SHADOW HERE. This is the material face `button` paints over its own
+   * body, and the button already casts — and pulls that cast in on press. A
+   * second shadow inside the face would sit under the key rather than under the
+   * button, and would not move when the button sank.
+   */
+  const g = new Graphics();
+
+  /*
+   * A BEZEL AND A FACE, not one filled rectangle.
+   *
+   * The first attempt was a single roundRect with five sheen bands over it, and
+   * it photographed as a flat khaki slab beside operator dials that have a
+   * knurled rim and a specular ring. Brass does not read as brass from a fill
+   * colour; it reads from the way light crosses a curved surface. So the key is
+   * built the way the dials are: an outer bezel, an inset face, a gradient
+   * swept across that face in enough steps to be smooth, and a glyph CUT into
+   * it rather than printed on it.
+   *
+   * Lit and unlit are the same construction with the light turned down —
+   * `brassSpent` is the palette's unlit brass and is what §5's spent dials
+   * already use, so the disarmed key is this key in shadow rather than a
+   * different, slightly sick material.
+   */
+  const body = armed ? PALETTE.brass : PALETTE.brassSpent;
+  const deep = armed ? PALETTE.brassDeep : 0x3a3220;
+
+  // The bezel: the wall of the key, darkest where it meets the row.
+  g.roundRect(0, 0, w, h, r).fill(deep);
+
+  const inset = Math.max(2.5, h * 0.09);
+  const fr = Math.max(1, r - inset * 0.6);
+  const fw = w - inset * 2;
+  const fh = h - inset * 2;
+
+  // The face, then the sweep across it. 18 bands rather than 5: at five the
+  // steps are visible as stripes, which is what made the first key look flat.
+  g.roundRect(inset, inset, fw, fh, fr).fill(body);
+  const BANDS = 18;
+  /*
+   * THE UNLIT KEY IS LIT WITH BRASS, NOT WITH BRASS-WHITE.
+   *
+   * `brassLit` is a near-white highlight. Swept over the dark `brassSpent` body
+   * it desaturates rather than lightens, and the key photographed as flat olive
+   * — a different material, which is exactly what the armed/disarmed pair must
+   * not look like. Unlit brass keeps its hue and only loses its specular, so
+   * the sweep uses `brass` itself when the key is disarmed.
+   */
+  const sheen = armed ? PALETTE.brassLit : PALETTE.brass;
+  for (let i = 0; i < BANDS; i++) {
+    const t = i / BANDS;
+    g.roundRect(inset, inset, fw, fh * (1 - t), fr).fill({
+      color: sheen,
+      alpha: (armed ? 0.036 : 0.055) * (1 - t),
+    });
+  }
+  // And the shadow gathering along the bottom of the face, the other half of
+  // the same curve.
+  for (let i = 0; i < 8; i++) {
+    const t = i / 8;
+    const band = fh * 0.34 * (1 - t);
+    g.roundRect(inset, inset + fh - band, fw, band, fr).fill({
+      color: 0x1a0f08,
+      alpha: 0.075 * (1 - t),
+    });
+  }
+  grainOver(g, (gr) => gr.roundRect(inset, inset, fw, fh, fr), armed ? 0.14 : 0.1);
+
+  // The bezel's own lighting: lit along the top, dark along the bottom wall.
+  g.moveTo(r, 1.5).lineTo(w - r, 1.5).stroke({
+    width: 3,
+    color: armed ? PALETTE.brassLit : PALETTE.brass,
+    alpha: armed ? 0.55 : 0.4,
+  });
+  g.moveTo(r, h - 1.5).lineTo(w - r, h - 1.5).stroke({ width: 3, color: 0x000000, alpha: 0.34 });
+  // The step from bezel to face, which is what makes the face read as inset.
+  g.roundRect(inset, inset, fw, fh, fr).stroke({ width: 1.5, color: 0x000000, alpha: 0.30 });
+  g.roundRect(0, 0, w, h, r).stroke({ width: 2, color: 0x000000, alpha: 0.30 });
+  if (armed) {
+    g.roundRect(1.5, 1.5, w - 3, h - 3, r).stroke({ width: 2, color: PALETTE.highlight, alpha: 0.75 });
+  }
+  key.addChild(g);
+
+  /*
+   * THE GLYPH IS ENGRAVED, not printed.
+   *
+   * A `=` in cream text on top of the key would sit on the material like a
+   * sticker. Cut, it is two grooves: a dark trough with a lit lower lip, which
+   * is the same way light works everywhere else on this key. It is drawn here
+   * rather than passed as the button's label so it moves, lights and dims as
+   * part of the material.
+   */
+  const cut = new Graphics();
+  const barW = fw * 0.46;
+  const barH = Math.max(3, fh * 0.11);
+  const barX = inset + (fw - barW) / 2;
+  const gap = barH * 1.5;
+  const midY = inset + fh / 2;
+  for (const y of [midY - gap / 2 - barH / 2, midY + gap / 2 - barH / 2]) {
+    cut.roundRect(barX, y, barW, barH, barH / 2).fill({ color: 0x1a0f08, alpha: armed ? 0.55 : 0.5 });
+    cut
+      .roundRect(barX, y + barH * 0.62, barW, barH * 0.5, barH / 3)
+      .fill({ color: armed ? PALETTE.highlight : PALETTE.brass, alpha: armed ? 0.85 : 0.5 });
+  }
+  key.addChild(cut);
+  return key;
+}

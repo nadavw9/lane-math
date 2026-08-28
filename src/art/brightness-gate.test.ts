@@ -99,6 +99,16 @@ const POOL_ZONE = union(EXTREMES.map((b) => b.pool));
 const OPERATOR_ZONE = union(EXTREMES.map((b) => b.operators));
 /** Target plaques sit in the lane, which is the desk itself, not a tray. */
 const LANE_ZONE = union(EXTREMES.map((b) => b.lane));
+/*
+ * THE STAGED POSITION, which this gate never measured.
+ *
+ * A tile is dragged from the pool into the equation row, and until now the row
+ * was the one band with no lining — a dark translucent veil over the room. The
+ * gate covered the tile where it starts and not where the player reads it, so
+ * "staged tokens are measured against whatever is under them" was true of the
+ * pool alone. The row is felt-lined now and it is gated as such.
+ */
+const EQUATION_ZONE = union(EXTREMES.map((b) => b.equation));
 
 /** Wood is composited over the room, then the opaque felt is the token surface. */
 const FELT_LINED_TRAY = [
@@ -155,6 +165,18 @@ const ART_FAMILIES = [
      * not the threshold.
      */
     zone: { ...asZone("lane / real brass", LANE_ZONE, PALETTE.targetPlate), furniture: FELT_LINED_TRAY },
+  },
+  {
+    name: "staged glass tiles",
+    atlas: "tiles",
+    minimum: MIN_CONTRAST,
+    zone: { ...asZone("equation / real glass", EQUATION_ZONE, PALETTE.tile), furniture: FELT_LINED_TRAY },
+  },
+  {
+    name: "staged brass operators",
+    atlas: "operators",
+    minimum: MIN_CONTRAST,
+    zone: { ...asZone("equation / real brass", EQUATION_ZONE, PALETTE.operator), furniture: FELT_LINED_TRAY },
   },
   {
     name: "spent brass dials",

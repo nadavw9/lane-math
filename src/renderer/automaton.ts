@@ -1,6 +1,6 @@
 import { Container, Sprite } from "pixi.js";
 
-import { DESIGN } from "./layout.js";
+import type { Rect } from "./layout.js";
 import { spriteFor } from "./sprites.js";
 import type { ViewState } from "../game/types.js";
 
@@ -12,11 +12,23 @@ import type { ViewState } from "../game/types.js";
  * lane and 12px below the status row. There is no vertical slack to give it,
  * and taking any would shrink the tokens on every large board.
  *
- * So it is drawn FIRST, into the desk margin at the bottom-left, and the bands
- * are drawn over it. Partial occlusion is the intended state rather than a
- * failure mode: it reads as an object sitting on the desk BEHIND the work,
- * which is what §2 asks for ("sits on the desk beside the board"), and it means
- * the board never has to make room.
+ * So it is drawn FIRST and the bands are drawn over it. Partial occlusion is
+ * the intended state rather than a failure mode: it reads as an object sitting
+ * on the desk BEHIND the work, which is what §2 asks for ("sits on the desk
+ * beside the board"), and it means the board never has to make room.
+ *
+ * WHICH margin was a measurement, not a guess. Across the 40 shipped levels:
+ *
+ *   pool left margin      min 14px   median 43px   max 62px
+ *   desk above the lane   min 15px   median 16px   max 64px
+ *   desk below the status band                     12px, every level
+ *
+ * It stood in that last one. The status band spans the full width, so the
+ * bottom margin is 12px of desk on EVERY board and the automaton was 92%
+ * covered — a brass sliver between two trays, which reads as a rendering fault
+ * rather than as scenery. The pool band is the one band that hugs its grid
+ * instead of spanning the width, so the strip to its left is the only place on
+ * the surface with room, and it is where the automaton now stands.
  *
  * It is also non-interactive. Nothing about it accepts a tap, so it cannot
  * steal a hit area from the pool or the restart button — the failure that cost
@@ -52,11 +64,23 @@ export function automatonState(state: ViewState, idleMs: number): AutomatonState
 }
 
 /** Height on the design surface. Small: it is scenery, not a participant. */
-const HEIGHT = 96;
-/** How much of it the board is allowed to cover. */
-const INSET_X = 2;
+const HEIGHT = 88;
+/**
+ * Kept clear of the frame on both axes.
+ *
+ * §2 asks for partial occlusion BY THE COLUMN. It was sliced by the viewport
+ * edge instead — at x=2 with its feet on y=900 the left of its body and the
+ * bottom of its base were cut by the screen, which reads as a rendering fault
+ * rather than as an object standing behind the board. Occluded by the board is
+ * scenery; occluded by the frame is a bug.
+ */
+const INSET_X = 8;
 
-export function automaton(state: AutomatonState): Container | null {
+/**
+ * @param pool The pool band. The automaton stands on its baseline, in the strip
+ *   of desk to its left — see the measurement above for why that strip.
+ */
+export function automaton(state: AutomatonState, pool: Rect): Container | null {
   const entry = spriteFor(`automaton-${state}`);
   if (!entry) return null;
 
@@ -72,8 +96,14 @@ export function automaton(state: AutomatonState): Container | null {
   const scale = HEIGHT / natural;
   sprite.scale.set(scale);
   sprite.x = INSET_X;
-  // Sits ON the desk: its feet meet the bottom of the design surface.
-  sprite.y = DESIGN.height - HEIGHT;
+  /*
+   * Feet on the pool band's baseline — the line the tray itself sits on, so the
+   * two objects share a floor rather than the automaton floating beside one.
+   * Clamped at 0 because a shallow pool on a seven-target board could otherwise
+   * push its head off the top of the surface, which is the frame doing the
+   * cutting again.
+   */
+  sprite.y = Math.max(0, pool.y + pool.height - HEIGHT);
   container.addChild(sprite);
   // Scenery. It must never take a hit area from a control.
   container.eventMode = "none";
