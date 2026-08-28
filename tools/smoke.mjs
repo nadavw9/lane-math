@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 
@@ -42,6 +42,42 @@ function readBase() {
   const tail = raw.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
   return tail ? `/${tail}/` : "/";
 }
+
+/**
+ * How many sprite frames the SHIPPED atlases declare.
+ *
+ * Read from dist, which is the directory the smoke server serves, so this
+ * counts what the player receives rather than what a staging copy holds.
+ */
+/**
+ * The atlases the GAME loads — renderer.ts's own list.
+ *
+ * Not every .json in the directory: `testfamily` is a pipeline fixture that
+ * ships alongside them and is never requested at runtime, so counting the
+ * directory would expect five frames the player never receives.
+ */
+const GAME_ATLASES = [
+  "tiles",
+  "operators",
+  "operators-unlit",
+  "plaques",
+  "automaton",
+  "academy-warm",
+  "academy-cool",
+  "drape",
+];
+
+function declaredSpriteCount() {
+  const dir = join("dist", "assets", "sprites");
+  return GAME_ATLASES.reduce((total, family) => {
+    const file = join(dir, `${family}.json`);
+    if (!existsSync(file)) return total;
+    const atlas = JSON.parse(readFileSync(file, "utf8"));
+    return total + Object.keys(atlas.frames ?? {}).length;
+  }, 0);
+}
+
+const expectedSprites = declaredSpriteCount();
 
 const base = readBase();
 const port = 4173;
@@ -189,7 +225,20 @@ try {
   check(state.drawnChildren > 0, `renderer drew a frame (${state.drawnChildren} objects)`);
   check(state.levelId !== null, `a level is open (${state.levelId})`);
   if (expectsSprites) {
-    check(state.spritesEnabled === 1 && state.spritesLoaded === 15, `real WebP sprites loaded (${state.spritesLoaded}/15)`);
+    /*
+     * COUNTED FROM THE ATLASES, NOT WRITTEN DOWN.
+     *
+     * This was `=== 15`, which was true when there were three families. The
+     * automaton, the two Academy sets and the drape took it to 36 and the
+     * smoke test failed on master with "36/15" — a correct build reported as
+     * broken, which is the worse direction for a gate to fail in. A number
+     * that has to be edited whenever art ships will be wrong whenever art
+     * ships, so it is derived from the frames the atlases actually declare.
+     */
+    check(
+      state.spritesEnabled === 1 && state.spritesLoaded === expectedSprites,
+      `real WebP sprites loaded (${state.spritesLoaded}/${expectedSprites})`,
+    );
     /*
      * A MISSING ATLAS MUST FAIL, NOT FALL BACK.
      *

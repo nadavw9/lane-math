@@ -515,14 +515,32 @@ export class MapScreen {
      * meant to signal it. The refusal is carried by the disabled button, which
      * says "not enough" in words; the price stays legible at 7.58:1.
      */
-    const price = this.text(
-      `${cost}★  ·  you have ${v.starsAvailable}★`,
-      11,
-      PALETTE.tray,
-    );
-    price.anchor.set(0.5, 0);
-    price.position.set(inner.x + inner.width / 2, inner.y + 28);
-    panel.addChild(price);
+    /*
+     * THE STARS ARE OBJECTS, not characters in the string.
+     *
+     * This line carried two literal U+2605s and the font coverage gate is
+     * right to refuse them: the UI face cannot supply that glyph, so it would
+     * ship as a fallback box or nothing at all on a device without a system
+     * font that has it. The same fix as the star meter, the life marker and
+     * the hint mark — the map header already draws its banked total this way,
+     * a number followed by a drawn star.
+     */
+    const priceGlyph = 11;
+    const priceRun = new Container();
+    const costText = this.text(`${cost}`, 11, PALETTE.tray);
+    const costStar = star(priceGlyph);
+    const sep = this.text("  ·  you have ", 11, PALETTE.tray);
+    const haveText = this.text(`${v.starsAvailable}`, 11, PALETTE.tray);
+    const haveStar = star(priceGlyph);
+
+    let runX = 0;
+    for (const part of [costText, costStar, sep, haveText, haveStar]) {
+      part.position.set(runX, part === costStar || part === haveStar ? priceGlyph / 2 + 1 : 0);
+      priceRun.addChild(part);
+      runX += part.width + 2;
+    }
+    priceRun.position.set(inner.x + inner.width / 2 - runX / 2, inner.y + 28);
+    panel.addChild(priceRun);
 
     const bw = (inner.width - 12) / 2;
     const cancel = button({
