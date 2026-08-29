@@ -2,18 +2,13 @@ import { effectSpeed } from "../renderer/tween.js";
 import type { Cue, CueName } from "./cues.js";
 
 /**
- * The sound layer, SYNTHESISED — the game ships no audio files.
+ * The sound layer. THE RULES ARE GDD §9.7 — read them there.
  *
- * Same reasoning as the procedural tokens (§9.2): no assets to load, no
- * compression step, and every sound is a parameter away from being retuned. It
- * also lets a sound scale with the event that fired it, which a sample cannot —
- * a tap on a 3 and a tap on a 64 are the same object at different sizes.
- *
- * THE PALETTE IS WOODEN AND PAPERY, never musical. Every voice is filtered
- * noise and low detuned oscillators with short decays: knocks, scrapes, tears,
- * thunks. There are deliberately no bells, no ascending intervals and no
- * ringing tails, because the register belongs to the same family as §9.5's —
- * weight, not energy.
+ * This comment used to BE the rule: procedural, no files, wooden and papery,
+ * no ascending intervals. It governed a whole subsystem from the top of one
+ * implementation file, where nothing pointed at it and nobody looking for the
+ * audio scope would find it. §9.7 now carries it, including the one deliberate
+ * exception this file implements — the level-complete cadence rises.
  */
 
 /** What was played and when — kept so the review harness can prove silence. */
@@ -93,6 +88,57 @@ export class Sound {
       // No audio is a perfectly playable game, so this is never an error path.
       this.ctx = null;
     }
+  }
+
+  /**
+   * ROOM TONE (§9.7): a slow filtered-noise bed, per room.
+   *
+   * Not music, and deliberately not: the complaint was SILENCE, and a melody is
+   * only one answer to it. This is the room the player is sitting in — a low
+   * band of noise, moving slowly enough that it is never a note, under the
+   * sparse `room` cue that gives each world its own object. It costs nothing to
+   * ship, which is the other half of why a 180-360KB loop can wait for data.
+   *
+   * One source, retuned on world change. Starting a second would layer two
+   * rooms and the player would hear the seam.
+   */
+  private bed: { source: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode } | null = null;
+  private bedRoom = 0;
+
+  setRoom(world: number): void {
+    this.bedRoom = Math.min(3, Math.max(0, world - 1));
+    const ctx = this.ctx;
+    if (!ctx || !this.master || !this.noise) return;
+
+    // Centre frequency per room: the Classroom is bright and papery, the
+    // Observatory is a big cold space. Same instrument, different room.
+    const centre = [420, 320, 500, 240][this.bedRoom] ?? 380;
+
+    if (!this.bed) {
+      const source = ctx.createBufferSource();
+      source.buffer = this.noise;
+      source.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = centre;
+      filter.Q.value = 0.7;
+      const gain = ctx.createGain();
+      // Far below every cue. It should be noticed only when it stops.
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.028, ctx.currentTime, 1.2);
+      source.connect(filter).connect(gain).connect(this.master);
+      source.start();
+      this.bed = { source, filter, gain };
+      return;
+    }
+    // A room change is a slow crossfade of the same bed, not a cut.
+    this.bed.filter.frequency.setTargetAtTime(centre, ctx.currentTime, 1.5);
+  }
+
+  /** Stop the bed — muting, or leaving for a screen that has no room. */
+  stopRoom(): void {
+    if (!this.bed || !this.ctx) return;
+    this.bed.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
   }
 
   /**
@@ -316,17 +362,88 @@ const VOICES: Record<CueName, Voice> = {
   },
 
   /**
-   * A star seating — one of three, fired as each arrives (§9.5), never together.
-   * Struck wood, not a bell: a 6ms transient and a 220Hz triangle lowpassed
-   * hard at 1100Hz, 220ms. The three pitches move by about a tone in total, so
-   * it reads as a tally being counted out rather than a fanfare resolving.
+   * A star seating — one of three, fired as each arrives, never together.
+   *
+   * IT RISES NOW, and that is §9.7's one deliberate exception. The three notes
+   * were 220 / 247 / 277Hz — a whole tone across all three — all lowpassed hard
+   * at 1100Hz, and a player who had just cleared a level said it did not read
+   * as a reward. They were right: nothing resolved, nothing brightened, and the
+   * filter removed the harmonics that would have made it feel like anything. It
+   * was a tally being counted out.
+   *
+   * Three changes, all inside the register:
+   *
+   *   220 -> 293 -> 330Hz     a perfect fifth in total, so the third note
+   *                           ARRIVES somewhere instead of near where it began
+   *   1100 -> 1600 -> 2200Hz  the filter opens as the pitch climbs: the same
+   *                           material with more light on it, which is the
+   *                           single biggest part of the change
+   *   0.22 -> 0.38s on the    long enough not to stop dead. Not a bell tail
+   *   third                   — struck wood that is allowed to finish
+   *
+   * Still struck wood. Still a 6ms transient, a triangle and a lowpass. The
+   * fourth event that these three lead to is `seat`, below.
    */
   star: {
     duration: 0.22,
     render: (s, at, cue, seconds) => {
-      const step = cue.tone ?? 0;
-      s.burst(at, 0.006, 0.07, { type: "lowpass", from: 1800 });
-      s.body(at, seconds, 220 * Math.pow(1.06, step * 2), 0.16, "triangle", 1100);
+      const step = Math.round((cue.tone ?? 0) * 2);
+      const pitch = [220, 293, 330][Math.min(2, Math.max(0, step))] ?? 220;
+      const cutoff = [1100, 1600, 2200][Math.min(2, Math.max(0, step))] ?? 1100;
+      const tail = step >= 2 ? seconds * 1.7 : seconds;
+      s.burst(at, 0.006, 0.07, { type: "lowpass", from: 1800 + step * 400 });
+      s.body(at, tail, pitch, 0.16, "triangle", cutoff);
+    },
+  },
+
+  /**
+   * THE MECHANISM CLOSING — the fourth event, as the cleared panel seats.
+   *
+   * The three stars are a phrase and this is what they resolve into: one low
+   * 110Hz thunk with a long decay, landing after the last star rather than with
+   * it. This is what makes the win a cadence instead of a list, and it is an
+   * OBJECT sound rather than a note, which is how a rising figure stays inside
+   * §9.7's register — a drawer closing well, not a fanfare.
+   */
+  seat: {
+    duration: 0.4,
+    render: (s, at, _cue, seconds) => {
+      s.burst(at, 0.01, 0.05, { type: "lowpass", from: 900 });
+      s.body(at, seconds, 110, 0.2, "sine", 700);
+      s.body(at + 0.01, seconds * 0.7, 165, 0.07, "triangle", 900);
+    },
+  },
+
+  /**
+   * ROOM TONE'S sparse event (§9.7) — the object in the room that occasionally
+   * makes a noise. `tone` selects which room, so the Classroom's clock and the
+   * Observatory's dome are the same voice with different parameters rather than
+   * four hand-written ones.
+   */
+  room: {
+    duration: 0.5,
+    render: (s, at, cue, seconds) => {
+      const room = Math.round((cue.tone ?? 0) * 3);
+      if (room === 0) {
+        // CLASSROOM: a clock escapement. Two dry ticks, the second quieter.
+        s.burst(at, 0.008, 0.045, { type: "bandpass", from: 2600, q: 6 });
+        s.burst(at + 0.26, 0.007, 0.03, { type: "bandpass", from: 2400, q: 6 });
+        return;
+      }
+      if (room === 1) {
+        // LIBRARY: a page settling. Paper, no pitch at all.
+        s.burst(at, 0.16, 0.03, { type: "highpass", from: 1400, to: 3200 }, 0.05);
+        return;
+      }
+      if (room === 2) {
+        // LABORATORY: glass touching glass, once, at the far end of the bench.
+        s.burst(at, 0.006, 0.028, { type: "bandpass", from: 4200, q: 9 });
+        s.body(at, seconds * 0.5, 1180, 0.02, "sine", 5200);
+        return;
+      }
+      // OBSERVATORY: the dome, or something large turning slowly a long way off.
+      s.body(at, seconds * 1.6, 62, 0.05, "sine", 300);
+      s.burst(at, seconds, 0.012, { type: "lowpass", from: 220, to: 140 }, 0.2);
     },
   },
 };

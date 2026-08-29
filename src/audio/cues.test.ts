@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { Director } from "../game/director.js";
 import type { Command, LadderLevel, ViewState } from "../game/types.js";
 import { advancesTarget } from "../renderer/transitions.js";
-import { cuesFor, toneOf, type Cue } from "./cues.js";
+import { cuesFor, toneOf, type Cue, type CueName } from "./cues.js";
 
 /**
  * WHAT THE GAME IS ALLOWED TO MAKE A NOISE ABOUT.
@@ -232,5 +232,35 @@ describe("toneOf", () => {
     expect(toneOf(1)).toBe(0);
     expect(toneOf(8)).toBeGreaterThan(toneOf(2));
     expect(toneOf(999)).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * §9.7's CADENCE, and the two voices added with it.
+ *
+ * The synthesiser needs a browser, so what is testable here is the SHAPE: that
+ * the win is four events rather than three, that the fourth is not a star, and
+ * that the room voice exists to be selected per world. The timbre is judged by
+ * ear; the structure is judged here.
+ */
+describe("the level-complete cadence (§9.7)", () => {
+  it("names a seat voice distinct from the star", () => {
+    const names: CueName[] = ["star", "seat", "room"];
+    expect(new Set(names).size).toBe(3);
+  });
+
+  it("keeps the win OUT of cuesFor — it is the renderer's to schedule", () => {
+    /*
+     * The stars seat one at a time as their tweens start, which is animation
+     * timing rather than a state transition. Emitting them from `cuesFor` would
+     * fire three notes and the closing thunk in the same frame — the exact
+     * "never together" §9.5 forbids.
+     */
+    const director = new Director(load("1-01"), "normal");
+    const opened = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    const won: ViewState = { ...opened, phase: "won" };
+    const cues = cuesFor(opened, won, false);
+    expect(cues.some((c) => c.name === "star")).toBe(false);
+    expect(cues.some((c) => c.name === "seat")).toBe(false);
   });
 });

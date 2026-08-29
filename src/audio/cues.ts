@@ -22,7 +22,11 @@ export type CueName =
   | "scrape"
   | "tear"
   | "fail"
-  | "star";
+  | "star"
+  /** The cleared panel settling — §9.7's fourth event, after the third star. */
+  | "seat"
+  /** Room tone: the sparse per-room event over the bed (§9.7). */
+  | "room";
 
 export interface Cue {
   readonly name: CueName;
