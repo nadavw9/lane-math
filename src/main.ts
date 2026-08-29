@@ -218,6 +218,12 @@ function showTitle(): void {
   title.show(titleView(economy, LEVEL_IDS));
 }
 
+/*
+ * When the deadline finishes the arrival, ask for a frame. Nothing else is
+ * going to: the case being guarded is that frames are not arriving.
+ */
+title.onSettled = () => renderer.present();
+
 title.attach({
   onContinue: () => {
     title.hide();

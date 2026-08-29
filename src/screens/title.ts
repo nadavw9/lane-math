@@ -50,6 +50,13 @@ export interface TitleView {
 
 const PAD = 12;
 
+/**
+ * How long the arrival gets before it is finished for you (see `settleTimer`).
+ * Comfortably past the entrance's own duration, so a healthy screen never
+ * reaches it and a starved one is never stuck behind it.
+ */
+const SETTLE_DEADLINE_MS = 1_200;
+
 /** Review affordance: `?settings=1` opens the panel on arrival. */
 function openSettingsRequested(): boolean {
   if (typeof window === "undefined") return false;
@@ -75,6 +82,19 @@ export class TitleScreen {
    * machine is drawing at 120fps or at 3.
    */
   private shownAt = 0;
+  /**
+   * A DEADLINE, not a clock.
+   *
+   * The arrival is an enhancement; the screen being USABLE is not. On the live
+   * build the entrance froze with only the logo drawn — frames were arriving
+   * far too rarely to carry it — and a returning player's entry screen showed a
+   * plaque and nothing else, no continue button at all. Whatever the frame rate
+   * does, this fires once and finishes the arrival.
+   *
+   * setTimeout is the right tool precisely because it is NOT tied to rendering:
+   * the failure being guarded is "no frames", so the guard cannot want a frame.
+   */
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(base: string) {
     void this.loadRooms(base);
@@ -114,8 +134,19 @@ export class TitleScreen {
     this.idleMs = 0;
     this.shownAt = performance.now();
     this.entrance = new Entrance(Object.keys(TITLE_BANDS).length);
+    if (this.settleTimer !== null) clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
+      if (!this.entrance) return;
+      this.entrance = null;
+      this.draw();
+      this.onSettled?.();
+    }, SETTLE_DEADLINE_MS);
     this.draw();
   }
+
+  /** Called when the deadline finishes the arrival, so the shell can present. */
+  onSettled: (() => void) | null = null;
 
   /** Review hook: is the settings panel open? */
   get isSettingsOpen(): boolean {
@@ -129,6 +160,10 @@ export class TitleScreen {
   }
 
   hide(): void {
+    if (this.settleTimer !== null) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
     this.root.visible = false;
   }
 
@@ -149,6 +184,10 @@ export class TitleScreen {
         return true;
       }
       this.entrance = null;
+      if (this.settleTimer !== null) {
+        clearTimeout(this.settleTimer);
+        this.settleTimer = null;
+      }
       this.draw();
       return false;
     }
