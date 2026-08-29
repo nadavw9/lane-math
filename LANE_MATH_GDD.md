@@ -299,7 +299,8 @@ Casual keeps the warning because unlimited operators admit multiple winning line
 
 **A warning must never fire once the level is already lost.** Warning a player about the only legal move remaining is wrong in every mode.
 
-**Casual blocks, Normal warns, Expert is silent.** A warning that cannot be overridden removes the failure state entirely, and with it lives, stars and the §9.4 continue path. Normal must be able to lose. §7.5's scripted trap at 1-04 remains a block in every mode — it is a teaching beat, not an assist.
+§7.5's scripted trap at 1-04 remains a block in every mode — it is a teaching beat, not an assist.
+
 
 **Modes differ by assistance, not by budget.** Counted-with-slack was removed: §3.1's argument against surplus numbers applies equally to operators — surplus is not difficulty, it is the removal of deduction. "Every operator must be used" lets the player reason backwards exactly as `S = 0` does for numbers.
 
