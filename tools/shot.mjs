@@ -133,6 +133,13 @@ if (screen) {
   await page.evaluate(async (name) => {
     const api = window.laneMath;
     if (name === "map") api.showMap();
+    if (name === "title") api.showTitle?.();
+    if (name === "title-settings") {
+      api.showTitle?.();
+      // AFTER the arrival, which is when a player could tap it.
+      await new Promise((r) => setTimeout(r, 2200));
+      api.titleSettings?.();
+    }
     if (name.startsWith("academy-")) {
       const n = Number(name.slice("academy-".length));
       if (Number.isFinite(n)) {

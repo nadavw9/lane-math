@@ -54,6 +54,9 @@ import {
   feltLinedTray,
 } from "./tokens.js";
 
+/** How long after the last star the panel seats (§9.7). */
+const SEAT_AFTER_MS = 120;
+
 
 const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/"];
 const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
@@ -157,6 +160,8 @@ export class Renderer {
   private sound: Sound | null = null;
   /** Which star tweens have already sounded, so each one speaks once. */
   private starsSounded = 0;
+  /** Counts down to §9.7's closing thunk after the last star. */
+  private seatDelayMs: number | null = null;
   /** Screens ARRIVE (§9.0). Restarted whenever a board or panel opens. */
   private entrance: Entrance | null = null;
   /** Outcome of the last rewarded-ad attempt, shown on the out-of-lives screen. */
@@ -399,6 +404,29 @@ export class Renderer {
    * back, drawn with the same tokens and the same material, so it shares the
    * renderer rather than standing up a second one.
    */
+  /** Review hook: is the render loop actually running? */
+  get tickerStarted(): boolean {
+    return this.app.ticker.started;
+  }
+
+  /**
+   * Drive another screen from THE SAME CLOCK the board uses.
+   *
+   * The map and the title ran their arrivals off a bare requestAnimationFrame
+   * loop in main.ts — a second clock, ticking beside Pixi's own. Two clocks
+   * cannot be kept in step, and the failure is silent and partial: the title
+   * screen photographed frozen part-way through its entrance, with the bands
+   * that had landed drawn and the ones that had not simply missing, while the
+   * scene graph inspected afterwards was completely correct. Nothing was wrong
+   * with the screen; its frames were arriving from somewhere the renderer knew
+   * nothing about.
+   *
+   * One clock. Anything that animates registers here.
+   */
+  onFrame(callback: (deltaMs: number) => void): void {
+    this.frameCallbacks.push(callback);
+  }
+
   get stage(): Container {
     return this.app.stage;
   }
@@ -728,6 +756,7 @@ export class Renderer {
   /** Drop every running effect. Used when a level opens or restarts (§9.5). */
   private clearFeel(): void {
     this.starsSounded = 0;
+    this.seatDelayMs = null;
     this.clearedEntrance = null;
     this.lifts.clear();
     this.flights.clear();
@@ -897,7 +926,13 @@ export class Renderer {
     this.fx.addChild(shatter.container);
   }
 
+  private readonly frameCallbacks: Array<(deltaMs: number) => void> = [];
+
   private tick(deltaMs: number): void {
+    // Other screens first: they own their own surfaces and the board's dirty
+    // bookkeeping below has nothing to say about them.
+    for (const callback of this.frameCallbacks) callback(deltaMs);
+
     let dirty = false;
 
     /*
@@ -995,8 +1030,26 @@ export class Renderer {
     const seated = this.starArrivals.filter((star) => star.started).length;
     for (let i = this.starsSounded; i < seated; i++) {
       this.sound?.play({ name: "star", tone: i / Math.max(1, this.starArrivals.length - 1) });
+      /*
+       * §9.7: the phrase RESOLVES. The last star is followed, a beat later, by
+       * the panel seating — a low thunk that turns three counted notes into a
+       * cadence. Scheduled here rather than as a fourth star so it lands after
+       * the note rather than under it.
+       */
+      if (i === this.starArrivals.length - 1) {
+        this.seatDelayMs = SEAT_AFTER_MS;
+      }
     }
     this.starsSounded = Math.max(this.starsSounded, seated);
+
+    if (this.seatDelayMs !== null) {
+      this.seatDelayMs -= deltaMs;
+      running = true;
+      if (this.seatDelayMs <= 0) {
+        this.seatDelayMs = null;
+        this.sound?.play({ name: "seat" });
+      }
+    }
 
     return running;
   }
