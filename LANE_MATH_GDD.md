@@ -290,8 +290,14 @@ Player-selectable. Same 40 levels, three modes — content multiplied at no auth
 | Mode | Operators | Fatal-move warning |
 |---|---|---|
 | **Casual** | Unlimited | **Blocks** the move. Free rewind. |
-| **Normal** | Exact | **Warns and allows override.** Committing anyway fails normally. |
-| **Expert** | Exact | None. |
+| **Normal** | Exact | None. |
+| **Expert** | Exact | None. Unique-solution levels only. |
+
+**Normal lost its warning when budgets went exact.** §8.5 reduced solution paths to 1 per level, which redefined "fatal move" as "any move that is not the answer". Measured: 106 fatal first moves across the 40-level ladder, firing on 28 of 40 levels before the player has acted. A free warning that identifies the correct move strictly dominates §5.4's branch-elimination hint at 3 stars, which §5.4 forbids.
+
+Casual keeps the warning because unlimited operators admit multiple winning lines, so it warns about a genuine dead end rather than announcing the answer.
+
+**A warning must never fire once the level is already lost.** Warning a player about the only legal move remaining is wrong in every mode.
 
 **Casual blocks, Normal warns, Expert is silent.** A warning that cannot be overridden removes the failure state entirely, and with it lives, stars and the §9.4 continue path. Normal must be able to lose. §7.5's scripted trap at 1-04 remains a block in every mode — it is a teaching beat, not an assist.
 
