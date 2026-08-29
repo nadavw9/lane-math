@@ -106,18 +106,18 @@ describe("progressive disclosure on the map (§7.6)", () => {
   it("reveals each system at its own unlock, and not before", () => {
     const upTo = (last: string): string[] => IDS.slice(0, IDS.indexOf(last) + 1);
 
-    // Lives at 2-8, shop at 3-6, modes cleared 3-10.
+    // Modes at 1-10 with the map, lives at 2-8, shop at 3-6.
+    const afterW1 = mapView(economyWith(upTo("1-10")), IDS);
+    expect(afterW1.showModes, "modes arrive with the map, at the first world boundary").toBe(true);
+    expect(afterW1.showLives).toBe(false);
+    expect(afterW1.showShop).toBe(false);
+
     const atW2 = mapView(economyWith(upTo("2-08")), IDS);
     expect(atW2.showLives).toBe(true);
     expect(atW2.showShop).toBe(false);
-    expect(atW2.showModes).toBe(false);
 
     const atW3 = mapView(economyWith(upTo("3-06")), IDS);
     expect(atW3.showShop).toBe(true);
-    expect(atW3.showModes).toBe(false);
-
-    const afterW3 = mapView(economyWith(upTo("3-10")), IDS);
-    expect(afterW3.showModes).toBe(true);
   });
 });
 

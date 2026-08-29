@@ -43,9 +43,17 @@ export function unlocksFor(save: SaveData): Unlocks {
     // 3-6: only once there are stars to spend. A shop full of unaffordable
     // items teaches "this is not for me".
     hintShop: reached(save, "3-06"),
-    // 3-10: choosing a mode before understanding the game is a decision made
-    // on zero information.
-    modeSelector: cleared(save, "3-10"),
+    /*
+     * 1-10, THE FIRST WORLD BOUNDARY — the same moment the map appears.
+     *
+     * It was 3-10, the thirtieth of forty levels, on the reasoning that
+     * choosing a mode before understanding the game is a decision made on zero
+     * information. True of a cold start; false by the end of World 1, and the
+     * cost was that a player who disliked how Normal played had to play
+     * twenty-six more levels to escape it. A player should be able to choose
+     * how they play before World 2.
+     */
+    modeSelector: cleared(save, "1-10"),
   };
 }
 

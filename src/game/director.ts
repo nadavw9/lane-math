@@ -237,7 +237,18 @@ export class Director {
     if (this.level.id === TRAP_TEST_LEVEL) return false;
     if (this.level.id === SCRIPTED_TRAP_LEVEL) return true;
     const unlocked = this.economy ? unlocksFor(this.economy.state).fatalWarning : ALL_UNLOCKED.fatalWarning;
-    return unlocked && this.mode !== "expert";
+    /*
+     * CASUAL ONLY (§6, amended). Normal lost the warning when §8.5 made budgets
+     * exact: solution paths fell to 1 per level, so "fatal move" quietly became
+     * "any move that is not the answer" and a free warning became an answer
+     * key — 106 fatal first moves across the ladder, tripping on 28 of 40
+     * levels before the player had acted. §5.4 forbids free assistance that
+     * exceeds paid, and branch elimination sells at 3 stars.
+     *
+     * Casual keeps it because unlimited operators admit multiple winning lines,
+     * so there it names a genuine dead end rather than the answer.
+     */
+    return unlocked && this.mode === "casual";
   }
 
   /**
@@ -873,7 +884,7 @@ export class Director {
    * Returns commands when the move is refused, or null to let it through.
    */
   private checkFatalMove(left: Tile, right: Tile, op: BinaryOp): Command[] | null {
-    if (this.overriding || !this.warningActive) return null;
+    if (this.overriding || !this.warningActive || this.alreadyLost) return null;
 
     const state: State = {
       tiles: this.live,
@@ -959,9 +970,33 @@ export class Director {
     };
   }
 
+  /**
+   * IS THE LEVEL ALREADY LOST? (§6, amended: "a warning must never fire once
+   * the level is already lost".)
+   *
+   * The warning asks `isWinnable` of the whole level AFTER the prospective
+   * move. Once a fatal move has been taken the level is unwinnable, so that
+   * question answers false for every subsequent move — including the only
+   * legal one left. The player who overrode once was then warned again on a
+   * forced, correct move, and again, until they reached the wall: the panel
+   * that opened at the mistake kept reopening, which is what made a warning
+   * read as a failure.
+   *
+   * Asking the same question of the CURRENT position separates the two. If the
+   * board is already dead, no move can be blamed for killing it.
+   */
+  private get alreadyLost(): boolean {
+    const budget = this.level.modes[this.mode]?.budget ?? {};
+    return !this.winnability.isWinnable(this.asSolverLevel(), budget, {
+      tiles: this.live,
+      targetIndex: this.targetIndex,
+      budget: this.budget,
+    });
+  }
+
   /** The transform equivalent of checkFatalMove. */
   private checkFatalTransform(tile: Tile, op: UnaryOp, to: number): Command[] | null {
-    if (this.overriding || !this.warningActive) return null;
+    if (this.overriding || !this.warningActive || this.alreadyLost) return null;
 
     const state: State = {
       tiles: this.live,

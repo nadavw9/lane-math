@@ -114,15 +114,30 @@ const commitMove = (director: Director, pick: Pick): ViewState => {
 };
 
 describe("modes change assistance, not budget (GDD §6, amended)", () => {
-  it("Normal warns on a fatal move — that is the whole difference from Expert", () => {
+  it("Normal is SILENT on a fatal move — the warning is Casual's alone now", () => {
+    /*
+     * §6 amended. Normal warned here until §8.5 made budgets exact and took
+     * solution paths to 1 per level: "fatal move" then meant "any move that is
+     * not the answer", and a free warning became an answer key that strictly
+     * dominates branch elimination at 3 stars, which §5.4 forbids.
+     */
     const director = new Director(load("3-05"), "normal", economyAt("3-05"));
     const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
     const fatal = fatalMoveOn(state, load("3-05"));
-    expect(fatal, "3-05 has a fatal move to warn about").not.toBeNull();
-    const warned = commitMove(director, fatal!);
-    expect(warned.warning).not.toBeNull();
-    // §6: Normal's warning is a warning, not a block.
-    expect(warned.warning!.overridable).toBe(true);
+    expect(fatal, "3-05 has a fatal move that would once have warned").not.toBeNull();
+    const committed = commitMove(director, fatal!);
+    expect(committed.warning, "Normal says nothing").toBeNull();
+    expect(committed.targetIndex, "and the move is simply taken").toBe(1);
+  });
+
+  it("Normal and Expert are now identical on the same fatal move", () => {
+    const outcome = (mode: "normal" | "expert"): string => {
+      const director = new Director(load("3-05"), mode, economyAt("3-05"));
+      const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
+      const after = commitMove(director, fatalMoveOn(state, load("3-05"))!);
+      return `${after.phase}/${after.targetIndex}/${after.warning ? "warned" : "silent"}`;
+    };
+    expect(outcome("normal")).toBe(outcome("expert"));
   });
 
   it("Casual BLOCKS the same move — it cannot be committed at all", () => {
@@ -137,41 +152,38 @@ describe("modes change assistance, not budget (GDD §6, amended)", () => {
     expect(stateOf(after).phase).toBe("playing");
   });
 
-  it("committing anyway in Normal loses the level normally — life, stars, §9.4 exit", () => {
+  it("a fatal move in Normal loses the level normally — life, stars, §9.4 exit", () => {
     /*
-     * THE POINT OF THE AMENDMENT. Blocking in Normal removed the failure state
-     * outright: no failure meant no life lost, no star penalty and no §9.4
-     * continue path, in the mode every player is in until 3-10. So this asserts
-     * the ordinary failure machinery ran, not merely that the move went through.
+     * NORMAL MUST STILL BE ABLE TO LOSE, which was the point of the earlier
+     * amendment and survives this one: no failure means no life lost, no star
+     * penalty and no §9.4 continue path. Removing the warning must not remove
+     * the failure with it.
      */
     const economy = economyAt("3-05");
     const director = new Director(load("3-05"), "normal", economy, undefined);
     let state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
     const fatal = fatalMoveOn(state, load("3-05"));
     state = commitMove(director, fatal!);
-    expect(state.warning!.overridable).toBe(true);
-
-    state = stateOf(director.handle({ type: "commitAnyway" }));
-    expect(state.warning, "the warning is gone once overridden").toBeNull();
+    expect(state.warning, "nothing intercepts it").toBeNull();
     // §4.1: the move is legal, so the level is not lost until the FRONT target
     // becomes unmakeable. What must be true here is that the move COMMITTED.
     expect(state.targetIndex).toBe(1);
 
-    // Play on to the wall the override walked into.
+    // Play on to the wall the fatal move walked into.
     for (let guard = 0; guard < 30 && state.phase === "playing"; guard++) {
       if (state.targets[state.targetIndex] === undefined) break;
       const next = fatalMoveOn(state, load("3-05")) ?? anyMoveOn(state, load("3-05"));
       if (!next) break;
       state = commitMove(director, next);
-      if (state.warning) state = stateOf(director.handle({ type: "commitAnyway" }));
+      expect(state.warning, "and nothing warns on the way down either").toBeNull();
     }
-    expect(state.phase, "the overridden move really does lose the level").toBe("failed");
+    expect(state.phase, "the fatal move really does lose the level").toBe("failed");
     expect(state.failures).toBe(1);
     expect(state.exit, "§9.4's way out is offered").not.toBeNull();
   });
 
   it("going back after a warning takes the equation down and commits nothing", () => {
-    const director = new Director(load("3-05"), "normal", economyAt("3-05"));
+    const director = new Director(load("3-05"), "casual", economyAt("3-05"));
     let state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
     const fatal = fatalMoveOn(state, load("3-05"));
     state = commitMove(director, fatal!);
@@ -191,7 +203,7 @@ describe("modes change assistance, not budget (GDD §6, amended)", () => {
      * "one of the last two or three targets has only one solution", no tiles —
      * so the interruption was giving away what the shop charges for.
      */
-    const director = new Director(load("3-05"), "normal", economyAt("3-05"));
+    const director = new Director(load("3-05"), "casual", economyAt("3-05"));
     const state = stateOf(director.handle({ type: "loadLevel", id: "3-05" }));
     const fatal = fatalMoveOn(state, load("3-05"));
     const w = commitMove(director, fatal!).warning!;
@@ -472,6 +484,9 @@ describe("progressive disclosure (GDD §7.6)", () => {
 
     economy.recordClear("1-10");
     expect(unlocksFor(economy.state).worldMap).toBe(true);
+    // The mode selector arrives WITH the map, at the first world boundary — it
+    // was at 3-10, twenty-six levels further on (§6, §7.6 amended).
+    expect(unlocksFor(economy.state).modeSelector).toBe(true);
     expect(unlocksFor(economy.state).lives).toBe(false);
 
     economy.recordFailure("2-08");
@@ -480,10 +495,6 @@ describe("progressive disclosure (GDD §7.6)", () => {
 
     economy.recordFailure("3-06");
     expect(unlocksFor(economy.state).hintShop).toBe(true);
-    expect(unlocksFor(economy.state).modeSelector).toBe(false);
-
-    economy.recordClear("3-10");
-    expect(unlocksFor(economy.state).modeSelector).toBe(true);
   });
 
   it("the Director reports unlocks so the renderer can omit, not grey out", () => {
