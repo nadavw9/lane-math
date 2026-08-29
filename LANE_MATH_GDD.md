@@ -806,6 +806,16 @@ Green was removed because gold already meant "ready", so green meant nothing. Fa
 
 **Furniture carries the theme.** Band backdrops are not neutral panels. The lane is a strip of squared paper; the pool is a shallow wooden tray. Top-grossing puzzle titles integrate theme into every visual element — the pieces themselves are objects from the game's world — and this is the cheapest place to do the same.
 
+### 9.7 Audio
+
+**Procedural, no audio files.** Synthesised through Web Audio. Same reasoning as procedural furniture: no assets, no compression step, trivially tunable, and every sound scales with the event that fired it.
+
+**The palette is wooden and papery**, not musical — struck wood, dry clicks, paper, low resonant thunks. No bells, no ringing tails, no slot-machine brightness.
+
+**One exception, deliberate: the level-complete cadence rises.** Three struck-wood notes across a perfect fifth with the filter opening as they climb, resolving into a low thunk as the panel seats. The earlier no-ascending-intervals rule produced a win that sounded like a tally being counted. A contemplative game can still let the drawer close well.
+
+**Room tone, not music.** A slow filtered-noise bed per room with sparse events drawn from that room — a clock escapement in the Classroom, page settles in the Library. Silence is the complaint; a melody is not the only answer. A looping music track is a separate decision with a 180-360KB price and is not taken.
+
 ---
 
 ## 10. Level format
