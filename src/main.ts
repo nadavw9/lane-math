@@ -617,11 +617,11 @@ Object.assign(window, {
     /** Review hook: open the title screen regardless of §7.4's cold-start rule. */
     showTitle,
     /** Review hook: open the title's settings panel. */
-    titleSettings: () => title.openSettings(),
+    titleSettings: () => {
+      title.openSettings();
+      renderer.present();
+    },
     /** Review hook: the title's scene graph, for the shot harness. */
-    titleRoot: () => title.root,
-    tickerStarted: () => renderer.tickerStarted,
-    stageOrder: () => renderer.stage.children.map((c, i) => `${i} ${c.label ?? c.constructor.name} vis=${c.visible} y=${Math.round(c.y)} n=${c.children?.length ?? 0}`),
     /** Review hook: force the spendable star balance. */
     setStars: (n: number) => {
       forcedStars = n;

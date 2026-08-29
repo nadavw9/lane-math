@@ -205,6 +205,22 @@ that way.
    was wrong showed up first as an A/B measurement where the *muted* run was slower than the
    unmuted one — an impossible result that was the leak, not noise.
 
+9. **A second clock.** Map and title arrivals ran on a bare `requestAnimationFrame` fed a
+   hardcoded 16.7ms, beside Pixi's ticker — so under software rendering the arrival ran ~20x
+   slow while the scene graph was perfectly correct. Any timing not driven by the renderer's own
+   frame is a second clock, and it will disagree with the first under load, in a background tab,
+   or on a slow device. Drive time from one source.
+
+   *Symptom:* a screen photographed frozen part-way through an animation, with everything that
+   had landed drawn correctly and everything that had not simply absent — while every runtime
+   inspection of the same screen showed the finished state. The scene graph and the picture
+   disagree, and both are telling the truth about different moments.
+
+   Two fixes were needed and either alone leaves the trap set: register the animation on the
+   renderer's ticker (`renderer.onFrame`), AND derive elapsed time from `performance.now()`
+   rather than accumulating the delta the caller passed. The second matters because an arrival
+   fed a fixed 16.7ms per callback takes 700 FRAMES rather than 700 milliseconds.
+
 ---
 
 ## QUALITY GATE

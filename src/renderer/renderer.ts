@@ -404,6 +404,18 @@ export class Renderer {
    * back, drawn with the same tokens and the same material, so it shares the
    * renderer rather than standing up a second one.
    */
+  /**
+   * PRESENT THE CURRENT SCENE.
+   *
+   * Another screen changing its own container does not make the BOARD dirty,
+   * and `tick` only redraws the board. Anything that mutates the stage outside
+   * the board's own bookkeeping asks for a frame here rather than hoping one
+   * arrives.
+   */
+  present(): void {
+    this.app.render();
+  }
+
   /** Review hook: is the render loop actually running? */
   get tickerStarted(): boolean {
     return this.app.ticker.started;

@@ -50,6 +50,12 @@ export interface TitleView {
 
 const PAD = 12;
 
+/** Review affordance: `?settings=1` opens the panel on arrival. */
+function openSettingsRequested(): boolean {
+  if (typeof window === "undefined") return false;
+  return /(^|[?&])settings=1(&|$)/.test(window.location?.search ?? "");
+}
+
 export class TitleScreen {
   readonly root = new Container();
   private view: TitleView | null = null;
@@ -96,11 +102,24 @@ export class TitleScreen {
   show(view: TitleView): void {
     this.view = view;
     this.root.visible = true;
-    this.settingsOpen = false;
+    /*
+     * `?settings=1` opens the panel in the FIRST draw, for review.
+     *
+     * Same family as `?sprites=1` and `?debug`: a reviewer needs to photograph
+     * a state, and driving it after the screen has already drawn means chasing
+     * a repaint through a harness that cannot deliver taps to a canvas. Putting
+     * it in the opening frame removes the chase entirely.
+     */
+    this.settingsOpen = openSettingsRequested();
     this.idleMs = 0;
     this.shownAt = performance.now();
     this.entrance = new Entrance(Object.keys(TITLE_BANDS).length);
     this.draw();
+  }
+
+  /** Review hook: is the settings panel open? */
+  get isSettingsOpen(): boolean {
+    return this.settingsOpen;
   }
 
   /** Review hook: open the settings panel without a tap. */

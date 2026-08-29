@@ -134,12 +134,16 @@ if (screen) {
     const api = window.laneMath;
     if (name === "map") api.showMap();
     if (name === "title") api.showTitle?.();
-    if (name === "title-settings") {
-      api.showTitle?.();
-      // AFTER the arrival, which is when a player could tap it.
-      await new Promise((r) => setTimeout(r, 2200));
-      api.titleSettings?.();
-    }
+    /*
+     * The title's SETTINGS panel is shot with `?settings=1` on the query and
+     * SHOT_SCREEN=title, not from here.
+     *
+     * Driving it after the screen has drawn does change the scene graph — the
+     * hook takes, and the panel is really there — but this harness cannot
+     * deliver a tap to a Pixi control (a board button ignores page.mouse.click
+     * too), and a change made after the first draw did not reach the captured
+     * frame. Opening it in the FIRST draw removes the chase.
+     */
     if (name.startsWith("academy-")) {
       const n = Number(name.slice("academy-".length));
       if (Number.isFinite(n)) {
@@ -245,11 +249,19 @@ if (screen) {
       api.send({ type: "buyHint", hint: "narrow" });
     }
   }, screen);
+  /*
+   * SHOT_SETTLE_MS to photograph a screen MID-ARRIVAL.
+   *
+   * The default is long enough for the entrance to finish, which is what a
+   * review of the resting state wants. A short settle catches the motion —
+   * and after the second-clock bug, a mid-arrival frame is worth being able
+   * to ask for deliberately rather than only getting one by accident.
+   */
+  await page.waitForTimeout(Number(process.env["SHOT_SETTLE_MS"] ?? 3000));
   // Long enough for the entrance to finish. The map lands in bands and the
   // footer is one of the last, so a short wait photographs a half-arrived
   // screen and the missing element looks like a bug rather than a shutter
   // fired early — which is exactly how it read the first time.
-  await page.waitForTimeout(3000);
 }
 
 // Say what was actually photographed, so a fallback render is never mistaken
