@@ -1,6 +1,6 @@
 import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture, Rectangle } from "pixi.js";
 
-import type { BinaryOp, Mode, UnaryOp } from "../solver/index.js";
+import type { BinaryOp, UnaryOp } from "../solver/index.js";
 import type { Command, InputEvent, ViewState } from "../game/types.js";
 import { automaton, automatonState, THINKING_AFTER_MS } from "./automaton.js";
 import {
@@ -1715,13 +1715,21 @@ export class Renderer {
     // room that does not exist yet is exactly the "not for me" the schedule
     // exists to prevent.
     if (u.worldMap) {
-      // The mode selector claims the left of this row when it is unlocked
-      // (3 chips of 62 + 6). Sit after it rather than on top of it.
-      const modesWidth = u.modeSelector ? 3 * 68 : 0;
+      /*
+       * FULL LEFT OF THE ROW. It used to be offset by the mode selector's three
+       * chips, and the arithmetic did not fit: chips 204 + map 72 + hints 92 +
+       * restart 90 needs 458px of a 396px band. Map landed at 216..288 and the
+       * hints chip at 218..310 — 70 of map's 72px covered, and the chip is
+       * added later so it won hit-testing too. From 3-10 onward there was no
+       * way back to the map from the board at all.
+       *
+       * The selector moved to the title screen's settings rather than the row
+       * being shrunk to fit, so this offset has nothing left to dodge.
+       */
       // entry-exempt: the dev level picker, absent from the shipped screen
       this.root.addChild(
         this.box(
-          status.x + modesWidth,
+          status.x,
           rows.controlsY,
           72,
           rows.controlH,
@@ -1844,29 +1852,16 @@ export class Renderer {
       }
     }
 
-    // --- mode selector: absent before 3-10 (§7.6) ---
-    if (u.modeSelector) {
-      const modes: Mode[] = ["casual", "normal", "expert"];
-      modes.forEach((mode, i) => {
-        const w = 62;
-        const x = status.x + i * (w + 6);
-        const active = s.mode === mode;
-        // entry-exempt: the out-of-lives panel, opened on demand rather than on arrival
-        this.root.addChild(
-          this.box(
-            x,
-            rows.controlsY,
-            w,
-            rows.controlH,
-            active ? PALETTE.slotFilled : PALETTE.slot,
-            mode,
-            // The selected mode is an "armed" state: gold on the dark chip.
-            active ? PALETTE.highlight : PALETTE.textDim,
-            () => this.emit({ type: "selectMode", mode }),
-          ),
-        );
-      });
-    }
+    /*
+     * THE MODE SELECTOR IS NOT ON THE BOARD ANY MORE.
+     *
+     * Three 62px chips in a 396px row that already held map, the hints chip and
+     * restart — the row overflowed by 62px and silently ate the map button. It
+     * lives in the title screen's settings now, which is also where a player
+     * looks for it: §6 is a choice about how you play, not a board control, and
+     * putting it on the board meant it could only appear once the board had
+     * room, which is why it was gated at 3-10 in the first place.
+     */
 
     // --- fatal move: BLOCKED in Casual and at 1-4, WARNED in Normal (§6) ---
     if (s.warning) {

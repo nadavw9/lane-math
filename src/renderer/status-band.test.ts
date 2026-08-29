@@ -76,3 +76,51 @@ describe("felt inks and paper inks stay separate", () => {
     );
   });
 });
+
+/**
+ * THE CONTROLS ROW MUST FIT, and it did not.
+ *
+ * Shipped widths, taken from the renderer's own call sites. With the mode
+ * selector on the board the row wanted 3x68 + 72 + 92 + 90 = 458px of a 396px
+ * band: map landed at 216..288 and the hints chip at 218..310, covering 70 of
+ * map's 72px, and because the chip is added to root later it won hit-testing
+ * as well. From 3-10 — the moment the selector unlocked — there was no way
+ * back to the map from the board.
+ *
+ * Nobody saw it because it needed 30 cleared levels to reproduce. A width sum
+ * does not, so it is asserted here.
+ */
+describe("the controls row fits the band", () => {
+  const board = bands({ targets: 3, tiles: 9, operators: 3, hints: 0 });
+  const status = board.status;
+
+  /** Every control the board puts on that row, at its widest unlock state. */
+  const controls = [
+    { name: "map", x: status.x, width: 72 },
+    { name: "hints chip", x: status.x + status.width - 190, width: 92 },
+    { name: "restart", x: status.x + status.width - 90, width: 90 },
+  ];
+
+  it("gives every control room inside the band", () => {
+    for (const c of controls) {
+      expect(c.x, `${c.name} starts left of the band`).toBeGreaterThanOrEqual(status.x);
+      expect(c.x + c.width, `${c.name} runs past the band`).toBeLessThanOrEqual(status.x + status.width);
+    }
+  });
+
+  it("overlaps none of them — a covered control is an unreachable one", () => {
+    for (let i = 0; i < controls.length; i++) {
+      for (let j = i + 1; j < controls.length; j++) {
+        const a = controls[i]!;
+        const b = controls[j]!;
+        const overlap = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+        expect(overlap, `${a.name} overlaps ${b.name} by ${overlap}px`).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
+  it("has the widths sum to less than the band, with slack to spare", () => {
+    const needed = controls.reduce((t, c) => t + c.width, 0);
+    expect(needed, `row needs ${needed}px of ${status.width}px`).toBeLessThanOrEqual(status.width);
+  });
+});
