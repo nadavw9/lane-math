@@ -109,14 +109,6 @@ export function label(value: string, size: number, fill: number): Text {
 function recessedPanel(w: number, h: number, value: string, style: TokenStyle): Container {
   const panel = new Container();
   /*
-   * NO VALUE, NO RECESS. An empty string still produced the inset — sized to a
-   * zero-width numeral, so it drew as a small black slab in the middle of the
-   * plaque. The title screen's logo plate is the caller that wants the brass
-   * and not the cut, because "LANE MATH" is set across the plate rather than
-   * engraved into a box meant for a two-digit target.
-   */
-  if (value === "") return panel;
-  /*
    * THE RECESSED PANEL (ART_DIRECTION §5).
    *
    * The numeral does not sit on the brass. Measured, plaque brass is L 0.206 —

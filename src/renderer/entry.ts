@@ -120,20 +120,6 @@ export const MAP_BANDS = {
 } as const;
 
 /**
- * Bands on the TITLE screen (§7.4).
- *
- * It arrives like every other surface. The plaque first, then the character,
- * then the one control the screen exists for, then the quiet things.
- */
-export const TITLE_BANDS = {
-  logo: 0,
-  automaton: 1,
-  cta: 2,
-  progress: 3,
-  settings: 4,
-} as const;
-
-/**
  * Bands on the CLEARED panel.
  *
  * THE PANEL ARRIVES FIRST, then the rule, then the stars seat into it. It used

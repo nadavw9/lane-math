@@ -2,8 +2,6 @@ import runtimeLevels from "./generated/levels.json";
 import { Ads, loadAdMob } from "./ads/ads.js";
 import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
-import { TitleScreen } from "./screens/title.js";
-import { continueId, titleEarnedFor, titleView } from "./screens/title-model.js";
 import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
 import { Economy } from "./economy/economy.js";
@@ -125,14 +123,7 @@ function send(input: InputEvent): void {
   apply(director.handle(input));
   // Changing mode changes the budgets in play, so the level is re-opened under
   // the new one rather than mutated mid-board.
-  if (input.type === "selectMode") /*
- * BOOT. §7.4's cold-start rule decides which surface opens.
- *
- * The level is opened either way so the board is warm behind the title and
- * `continue` is instant — the screen is an entry moment, not a loading gate.
- */
-open(currentLevel);
-if (titleEarnedFor(economy)) showTitle();
+  if (input.type === "selectMode") open(currentLevel);
 }
 
 function nextLevelIdAfter(id: string): string | null {
@@ -147,9 +138,6 @@ function open(level: LadderLevel): void {
   renderer.setNextLevel(nextLevelIdAfter(level.id));
   director = new Director(level, economy.selectedMode, economy, telemetry, winnability);
   void renderer.setWorld(level.world);
-  // §9.7's room tone follows the room. Safe before warm(): it no-ops until
-  // there is a context, and the next call after the first gesture starts it.
-  sound.setRoom(level.world);
   // The board arrives (§9.0). Every open, including a replay of the same level.
   renderer.setAdMessage(null);
   renderer.beginEntrance();
@@ -173,11 +161,7 @@ renderer.attachSound(sound);
 const warmAudio = (): void => {
   window.removeEventListener("pointerdown", warmAudio);
   // Deferred off the gesture so the handler returns before any audio work.
-  setTimeout(() => {
-    sound.warm();
-    // The bed can only start once a gesture has given us a context.
-    sound.setRoom(currentLevel.world);
-  }, 0);
+  setTimeout(() => sound.warm(), 0);
 };
 window.addEventListener("pointerdown", warmAudio);
 
@@ -202,50 +186,6 @@ renderer.stage.addChild(map.root);
  */
 void map.loadRooms(import.meta.env.BASE_URL);
 
-/*
- * THE TITLE SCREEN (§7.4), for a returning player only.
- *
- * A third surface on the same Application, same as the map. A FIRST run still
- * goes straight into 1-01 — §7.4 is explicit that a cold start meets a board
- * rather than a menu, and that has not changed.
- */
-const title = new TitleScreen(import.meta.env.BASE_URL);
-renderer.stage.addChild(title.root);
-
-function showTitle(): void {
-  map.hide();
-  renderer.setBoardVisible(false);
-  title.show(titleView(economy, LEVEL_IDS));
-}
-
-/*
- * When the deadline finishes the arrival, ask for a frame. Nothing else is
- * going to: the case being guarded is that frames are not arriving.
- */
-title.onSettled = () => renderer.present();
-
-title.attach({
-  onContinue: () => {
-    title.hide();
-    const level = levels.get(continueId(economy, LEVEL_IDS));
-    renderer.setBoardVisible(true);
-    if (level) open(level);
-  },
-  onToggleMute: () => {
-    economy.setMuted(!economy.muted);
-    sound.setMuted(economy.muted);
-    // The bed is not a cue and does not pass through the mute gain path the
-    // way `play` does, so it is stopped and restarted explicitly.
-    if (economy.muted) sound.stopRoom();
-    else sound.setRoom(currentLevel.world);
-    title.show(titleView(economy, LEVEL_IDS));
-  },
-  onSelectMode: (mode) => {
-    send({ type: "selectMode", mode: mode as "casual" | "normal" | "expert" });
-    title.show(titleView(economy, LEVEL_IDS));
-  },
-});
-
 /**
  * Force the Academy's restoration state, for review only.
  *
@@ -264,13 +204,11 @@ function viewWithRestoration(): ReturnType<typeof mapView> {
 }
 
 function showMap(): void {
-  title.hide();
   renderer.setBoardVisible(false);
   map.show(viewWithRestoration());
 }
 
 function showBoard(): void {
-  title.hide();
   map.hide();
   renderer.setBoardVisible(true);
 }
@@ -394,40 +332,12 @@ open(currentLevel);
 // COUNTDOWN and a clock that jumps five seconds at a time reads as broken.
 setInterval(() => send({ type: "tick" }), 1_000);
 
-/*
- * The map and the title run their own arrivals, on the RENDERER'S clock.
- *
- * This was a bare requestAnimationFrame loop here — a second clock beside
- * Pixi's. It half-worked, which is the worst way for it to fail: the title
- * photographed frozen part-way through its entrance while its scene graph was
- * perfectly correct, because the frames it was drawing into were not the
- * frames being presented.
- */
-renderer.onFrame((deltaMs) => {
-  if (map.visible) map.advance(deltaMs);
-  if (title.visible) title.advance(deltaMs);
-  roomEvents(deltaMs);
-});
-
-/*
- * §9.7's SPARSE ROOM EVENTS — the clock, the page, the glass, the dome.
- *
- * Long gaps, jittered, so the room never sounds like a metronome. Silent while
- * a modal is up: the room is background and a decision is not.
- */
-const ROOM_EVENT_MIN_MS = 9_000;
-const ROOM_EVENT_RANGE_MS = 13_000;
-let nextRoomEvent = ROOM_EVENT_MIN_MS;
-
-function roomEvents(deltaMs: number): void {
-  if (title.visible || map.visible) return;
-  const state = lastState;
-  if (!state || state.phase !== "playing" || state.warning !== null) return;
-  nextRoomEvent -= deltaMs;
-  if (nextRoomEvent > 0) return;
-  nextRoomEvent = ROOM_EVENT_MIN_MS + Math.random() * ROOM_EVENT_RANGE_MS;
-  sound.play({ name: "room", tone: (currentLevel.world - 1) / 3 });
-}
+// The map runs its own arrival; drive it while it is on screen.
+const mapTicker = (): void => {
+  if (map.visible) map.advance(16.7);
+  requestAnimationFrame(mapTicker);
+};
+requestAnimationFrame(mapTicker);
 
 for (const id of LEVEL_IDS) {
   const level = levels.get(id);
@@ -620,14 +530,6 @@ Object.assign(window, {
     state: () => lastState,
     setEffectSpeed,
     showMap,
-    /** Review hook: open the title screen regardless of §7.4's cold-start rule. */
-    showTitle,
-    /** Review hook: open the title's settings panel. */
-    titleSettings: () => {
-      title.openSettings();
-      renderer.present();
-    },
-    /** Review hook: the title's scene graph, for the shot harness. */
     /** Review hook: force the spendable star balance. */
     setStars: (n: number) => {
       forcedStars = n;
