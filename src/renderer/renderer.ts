@@ -1431,10 +1431,22 @@ export class Renderer {
       }
 
       const transformable = s.transformableTileIds.includes(tile.id);
+      /*
+       * GDD §7.7: on 1-01 a tile that cannot form the front target is DIM and
+       * does not respond. `constrainedTileIds` is null everywhere else, which
+       * is why this tests for null rather than for an empty list — an empty
+       * list is a real answer meaning "none of them".
+       *
+       * DIM, NOT INERT, is the whole point. A tile that silently ignores a tap
+       * reads as a broken game; one that is visibly unavailable reads as a
+       * guided one, and the affordance already existed — it simply was never
+       * driven by legality.
+       */
+      const illegal = s.constrainedTileIds !== null && !s.constrainedTileIds.includes(tile.id);
       const dimmed =
         s.affordance === "transform"
           ? !transformable
-          : s.affordance === "operators" || inSlot.has(tile.id);
+          : illegal || s.affordance === "operators" || inSlot.has(tile.id);
 
       /*
        * §9.5: the tile REWRITES ITSELF under a unary operator.
@@ -1487,7 +1499,9 @@ export class Renderer {
           token,
           r.x + r.width / 2,
           r.y + r.height / 2 - rise * 5,
-          () => this.emit({ type: "tapTile", id: tile.id }),
+          // A constrained-out tile carries no tap. It is dim rather than
+          // silent, so the absence reads as unavailable and not as broken.
+          illegal ? undefined : () => this.emit({ type: "tapTile", id: tile.id }),
         ),
         BOARD_BANDS.pool,
       );

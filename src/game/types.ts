@@ -85,6 +85,12 @@ export interface ViewState {
   readonly transformOp: UnaryOp | null;
   readonly transformableTileIds: readonly number[];
   readonly affordance: Affordance;
+  /**
+   * GDD §7.7: the tiles that may be tapped, or NULL where no constraint
+   * applies — which is every level except 1-01. Null and an empty array mean
+   * opposite things, so consumers must branch on null rather than on length.
+   */
+  readonly constrainedTileIds: readonly number[] | null;
   readonly message: string | null;
   readonly failures: number;
   /** Economy view. Null until the economy is attached. */

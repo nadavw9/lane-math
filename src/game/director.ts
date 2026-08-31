@@ -46,6 +46,16 @@ type PendingFatal =
 export const SCRIPTED_TRAP_LEVEL = "1-04";
 
 /**
+ * The one level where the board teaches by CONSTRAINT (GDD §7.7, amended).
+ *
+ * Tiles that cannot form the front target are dim and do not respond. Only here:
+ * §7.4 guarantees d_i = 1 on 1-01, so "only legal" and "only correct" are the
+ * same set and nothing is taken away. Anywhere else this would delete §9.5's
+ * shudder — refusal is a real signal — and do the player's arithmetic for them.
+ */
+export const CONSTRAINT_LEVEL = "1-01";
+
+/**
  * GDD §7.4. The TEST half of the teaching beat: 1-6 repeats 1-4's trap shape
  * with the warning OFF, "player must see it themselves".
  *
@@ -542,6 +552,50 @@ export class Director {
   }
 
   /** GDD §3.3: only offer a unary op on tiles it can legally act on. */
+  /**
+   * Which tiles may be tapped right now, or null where the rule does not apply.
+   *
+   * NULL IS NOT AN EMPTY LIST. Every level except 1-01 returns null, meaning
+   * "no constraint" — an empty array would read as "nothing is tappable" and
+   * freeze the board. The renderer branches on null for exactly that reason.
+   *
+   * It follows the move through: before a left tile is chosen, any tile that
+   * appears in some legal decomposition of the front target; once a left tile
+   * and an operator are down, only the tiles that complete it. Guiding only the
+   * first tap would leave the player stuck on the second with no signal.
+   */
+  private constrainedTileIds(): number[] | null {
+    if (this.level.id !== CONSTRAINT_LEVEL) return null;
+    if (this.phase !== "playing" || this.transformOp !== null) return null;
+    const target = this.frontTarget;
+    if (target === undefined) return null;
+
+    const left = this.slots.leftTileId === null ? null : this.tile(this.slots.leftTileId);
+    const op = this.slots.op;
+
+    // Second tap: the left operand and the operator are fixed, so a tile is
+    // legal exactly when it completes the arithmetic.
+    if (left && op) {
+      return this.available
+        .filter((t) => applyBinary(op, left.value, t.value, this.level.rules) === target)
+        .map((t) => t.id);
+    }
+
+    /*
+     * First tap: every tile that appears as either operand of some legal
+     * decomposition. Matched by VALUE rather than by the representative ids the
+     * solver returns — interchangeable same-value tiles collapse to one
+     * decomposition, and dimming the duplicate would be arbitrary.
+     */
+    const legal = enumerate(this.available, target, this.budget, this.level.rules);
+    const values = new Set<number>();
+    for (const option of legal) {
+      values.add(option.left);
+      values.add(option.right);
+    }
+    return this.available.filter((t) => values.has(t.value)).map((t) => t.id);
+  }
+
   private transformableIds(): number[] {
     if (this.transformOp === null) return [];
     return enumerateTransforms(this.available, this.budget, this.level.rules)
@@ -568,6 +622,7 @@ export class Director {
       exit: this.phase === "failed" ? this.failureExit() : null,
       transformOp: this.transformOp,
       transformableTileIds: this.transformableIds(),
+      constrainedTileIds: this.constrainedTileIds(),
       affordance: this.affordance(),
       message: this.message,
       failures: this.failures,
@@ -705,6 +760,20 @@ export class Director {
         return this.reject(`${this.transformOp} cannot act on ${tile.value}`);
       }
       return this.applyTransform(tile, this.transformOp);
+    }
+
+    /*
+     * §7.7's constraint, enforced HERE and not only in the renderer.
+     *
+     * The Director owns the rules; a view that draws a tile dim while the
+     * Director would still accept it is two answers to one question. Returning
+     * a tile already in a slot stays legal below — that is a rewind, not a new
+     * operand.
+     */
+    const constrained = this.constrainedTileIds();
+    const inSlot = this.slots.leftTileId === id || this.slots.rightTileId === id;
+    if (constrained !== null && !inSlot && !constrained.includes(id)) {
+      return this.reject(`${tile.value} cannot make ${this.frontTarget ?? 0}`);
     }
 
     if (this.slots.leftTileId === id || this.slots.rightTileId === id) {

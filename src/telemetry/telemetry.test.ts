@@ -144,9 +144,16 @@ describe("the funnel records every §7.8 event", () => {
     const sink = new MemorySink();
     const c = clock();
     const telemetry = new Telemetry([sink], c.now);
-    const level = load("1-01");
+    /*
+     * 2-01, NOT 1-01. §7.7 (amended) filters the pool on 1-01 so a wrong
+     * equation cannot be formed there at all — which is the point of that rule
+     * and makes 1-01 useless for testing an incorrect commit. Every other level
+     * still forms one and refuses it with §9.5's shudder, which is the path
+     * this event describes.
+     */
+    const level = load("2-01");
     const director = new Director(level, "normal", new Economy(new MemoryStore(), c.now), telemetry);
-    let state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    let state = stateOf(director.handle({ type: "loadLevel", id: "2-01" }));
 
     /*
      * Pick the operator from the LEVEL's budget rather than naming one. 1-01
@@ -157,10 +164,24 @@ describe("the funnel records every §7.8 event", () => {
     const op = Object.keys(state.budget)[0] as "+" | "-" | "*" | "/";
     const live = state.tiles.filter((t) => !t.consumed);
     const target = state.targets[state.targetIndex]!;
+    /*
+     * Wrongness is checked for the ACTUAL operator, not just for `+`. The old
+     * predicate returned true for every pair whenever the budget's operator was
+     * anything else, so on a level granting `-` it happily picked a CORRECT
+     * pair and then asserted the commit was incorrect.
+     */
+    const evaluate = (a: number, b: number): number | null => {
+      switch (op) {
+        case "+": return a + b;
+        case "-": return a - b;
+        case "*": return a * b;
+        case "/": return b !== 0 && a % b === 0 ? a / b : null;
+      }
+    };
     const wrong = live
       .flatMap((a) => live.filter((b) => b.id !== a.id).map((b) => [a, b] as const))
-      .find(([a, b]) => (op === "+" ? a.value + b.value !== target : true));
-    expect(wrong, "1-01 offers an incorrect pair under its own budget").toBeDefined();
+      .find(([a, b]) => evaluate(a.value, b.value) !== target);
+    expect(wrong, "the level offers an incorrect pair under its own budget").toBeDefined();
 
     state = stateOf(director.handle({ type: "tapTile", id: wrong![0].id }));
     state = stateOf(director.handle({ type: "tapOperator", op }));
