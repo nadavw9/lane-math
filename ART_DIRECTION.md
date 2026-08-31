@@ -51,6 +51,18 @@ Wonder escalates with difficulty. The player is literally climbing the building.
 | **Delighted** | Lens wide and bright, body lifts — on a clear |
 | **Concerned** | Lens dims, body sinks slightly — on a failure. Never mocking. |
 
+**The automaton may point at what happened, never at what to do.**
+
+It teaches by looking where the player should look, on events they can already see — a target arriving, a tile shattering, the lane refusing to advance, a level clearing — or on their own hesitation.
+
+Four hard limits:
+- never gaze at a specific pool tile; pointing at a tile is the answer
+- never react to the legality or fatality of a staged pair
+- never differ between a good and a bad move before commit
+- gaze changes only on player-visible events or player hesitation
+
+Since §8.5 reduced solution paths to one, any tell that fires on "about to spend something needed later" is true of every move except the answer — a wordless, free, continuous re-implementation of the warning §6 deleted. An unreliable version is worse: players farm tells, and one that is 80% accurate feels like the game cheated when it costs them a level.
+
 **Roles it must carry:** store icon, every ad creative, the empty-state of the map, the face of the out-of-lives screen.
 
 ---
