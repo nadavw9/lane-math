@@ -50,9 +50,10 @@ export interface ButtonOptions {
    * An emblem set beside the label, sharing its centring — a star on the hints
    * chip, for instance, which used to be a `★` inside the label string.
    *
-   * A FACTORY, not a Container, because paint() destroys and rebuilds every
-   * child on each press; a single instance would be destroyed on the first
-   * press and drawn as a hole on the second.
+   * A factory rather than a Container. It was required when paint() destroyed
+   * and rebuilt every child on each press; it is now called ONCE and the
+   * result repositioned, and the signature is kept because every caller passes
+   * a closure and there is nothing to gain from churning them.
    */
   readonly emblem?: (() => Container) | undefined;
   /**
@@ -95,25 +96,65 @@ export function button(options: ButtonOptions): Container {
   const radius = 7;
   const interactive = state === "idle" && onTap !== undefined;
 
+  /*
+   * THE CHILDREN ARE BUILT ONCE AND REDRAWN IN PLACE.
+   *
+   * `paint` used to open with
+   *
+   *   body.removeChildren().forEach((child) => child.destroy({ children: true }))
+   *
+   * which DESTROYED the display object the pointer was tracking, synchronously,
+   * inside the pointerdown handler. The immediately following pointerup then
+   * had no valid target, never reached this root, and the tap was lost. Given a
+   * gap the boundary re-resolved against the rebuilt children and the press
+   * worked — which is why it survived human taps of 50-150ms and failed every
+   * instant one. A pool tile, which does not repaint on press, was hit by the
+   * same synthetic click and fired: that contrast is what named the cause.
+   *
+   * Redrawing keeps §9.5's requirement intact. `Graphics.clear()` and a
+   * reposition are synchronous and land inside the same pointerdown, so the
+   * press is still immediate — the instantness never depended on the teardown,
+   * only on being done in the handler.
+   */
+  const g = new Graphics();
+  body.addChild(g);
+
+  const material = face ? face(width, height) : null;
+  if (material) body.addChild(material);
+
+  const text = new Text({
+    text: label,
+    style: new TextStyle({
+      fontFamily: UI_FONT,
+      fontSize: fontSize ?? Math.min(14, height * 0.42),
+      fontWeight: "800",
+      fill: labelColour,
+    }),
+  });
+  text.anchor.set(0.5);
+  body.addChild(text);
+
+  const mark = emblem ? emblem() : null;
+  if (mark) body.addChild(mark);
+
+  const elevated = state !== "unavailable";
+  const notch = width * 0.16;
+  const path = (gr: Graphics, dy: number): Graphics =>
+    shape === "hex"
+      ? gr.poly([
+          notch, dy,
+          width - notch, dy,
+          width, dy + height / 2,
+          width - notch, dy + height,
+          notch, dy + height,
+          0, dy + height / 2,
+        ])
+      : gr.roundRect(0, dy, width, height, radius);
+
   /** Redraw at a given press depth. Called synchronously on pointerdown. */
   const paint = (depth: number): void => {
-    body.removeChildren().forEach((child) => child.destroy({ children: true }));
-
-    const g = new Graphics();
-    const elevated = state !== "unavailable";
     const lift = elevated ? 1 - depth / PRESS_DEPTH : 0;
-    const notch = width * 0.16;
-    const path = (gr: Graphics, dy: number): Graphics =>
-      shape === "hex"
-        ? gr.poly([
-            notch, dy,
-            width - notch, dy,
-            width, dy + height / 2,
-            width - notch, dy + height,
-            notch, dy + height,
-            0, dy + height / 2,
-          ])
-        : gr.roundRect(0, dy, width, height, radius);
+    g.clear();
 
     /*
      * The shadow is the state. An idle button casts, a pressed one pulls its
@@ -138,38 +179,19 @@ export function button(options: ButtonOptions): Container {
     if (outline !== undefined) {
       path(g, depth).stroke({ width: 2, color: outline });
     }
-    body.addChild(g);
 
-    if (face) {
-      const material = face(width, height);
-      material.position.set(0, depth);
-      body.addChild(material);
-    }
+    if (material) material.position.set(0, depth);
 
-    const text = new Text({
-      text: label,
-      style: new TextStyle({
-        fontFamily: UI_FONT,
-        fontSize: fontSize ?? Math.min(14, height * 0.42),
-        fontWeight: "800",
-        fill: labelColour,
-      }),
-    });
-    text.anchor.set(0.5);
     const midY = depth + height / 2;
-    if (emblem) {
+    if (mark) {
       // Label and emblem are centred as one run, so the pair sits where a plain
       // label would rather than the text drifting left of centre.
-      const mark = emblem();
       const gap = 4;
       const run = text.width + gap + mark.width;
       text.position.set(width / 2 - run / 2 + text.width / 2, midY);
       mark.position.set(width / 2 + run / 2 - mark.width / 2, midY);
-      body.addChild(text);
-      body.addChild(mark);
     } else {
       text.position.set(width / 2, midY);
-      body.addChild(text);
     }
   };
 
