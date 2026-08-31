@@ -1,4 +1,4 @@
-import { Container, Text } from "pixi.js";
+import { Container, Text, type FederatedPointerEvent } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
 import { button } from "./button.js";
@@ -23,6 +23,15 @@ const WIDTH = 90;
 const HEIGHT = 30;
 const PRESS_DEPTH = 2;
 
+/*
+ * Pixi's emitter is typed to carry a FederatedPointerEvent. The handlers under
+ * test read nothing off it, so a stub stands in rather than assembling a real
+ * event and its whole boundary.
+ */
+const EVENT = {} as FederatedPointerEvent;
+const press = (root: Container): boolean => root.emit("pointerdown", EVENT);
+const release = (root: Container): boolean => root.emit("pointerup", EVENT);
+
 /** The label, which moves by exactly the press depth. */
 function labelOf(root: Container): Text {
   const body = root.children[0] as Container;
@@ -38,7 +47,7 @@ describe("a button press", () => {
     const atRest = label.y;
     expect(atRest).toBe(HEIGHT / 2);
 
-    root.emit("pointerdown");
+    press(root);
     /*
      * NO await, NO frame. §9.5: "a button that animates its press over 100ms
      * feels broken however good the animation is". The assertion is on the very
@@ -53,8 +62,8 @@ describe("a button press", () => {
     const body = root.children[0] as Container;
     const before = [...body.children];
 
-    root.emit("pointerdown");
-    root.emit("pointerup");
+    press(root);
+    release(root);
 
     const after = [...body.children];
     expect(after.length, "the child count changed across a press").toBe(before.length);
@@ -69,8 +78,8 @@ describe("a button press", () => {
     const root = button({ width: WIDTH, height: HEIGHT, label: "restart", onTap: () => (taps += 1) });
     const label = labelOf(root);
 
-    root.emit("pointerdown");
-    root.emit("pointerup");
+    press(root);
+    release(root);
 
     expect(taps).toBe(1);
     expect(label.y, "released buttons come back up").toBe(HEIGHT / 2);
@@ -85,8 +94,8 @@ describe("a button press", () => {
     let taps = 0;
     const root = button({ width: WIDTH, height: HEIGHT, label: "map", onTap: () => (taps += 1) });
     for (let i = 0; i < 5; i++) {
-      root.emit("pointerdown");
-      root.emit("pointerup");
+      press(root);
+      release(root);
     }
     expect(taps).toBe(5);
     expect((root.children[0] as Container).children.every((c) => !c.destroyed)).toBe(true);
