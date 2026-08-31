@@ -431,7 +431,14 @@ Nothing appears on screen before it is needed. Every system is a reward for prog
 - **Maximum one line of text per teaching beat.** No modals, no dismissible popups, no "Next →" chains.
 - **Never explain a mechanic the board can demonstrate.** Highlight, pulse, and dim carry the instruction.
 - **No forced tutorial replay.** A returning or fast-learning player must be able to skip ahead; even a crude two-way split (experienced / new) measurably reduces early churn.
-- **The board teaches by constraint.** In 1-1, only legal moves are tappable. The player cannot form a wrong equation, so no error message is needed.
+
+**The board teaches by constraint in 1-01 only.** Tiles that cannot form the front target render DIM and do not respond. §7.4 guarantees d_i = 1 there, so "only legal" and "only correct" are the same set and nothing is lost.
+
+This does not extend past 1-01. Elsewhere a wrong equation is formed and refused with §9.5's shudder — refusal is a real signal, and filtering the pool anywhere else would do the player's arithmetic for them.
+
+Dim rather than inert: a tile that silently ignores a tap reads as a broken game, not a guided one.
+
+**This was previously specified and never implemented.** The claim sat in §7.7 from the FTUE session onward describing behaviour that did not exist.
 
 ### 7.8 Instrumentation — the FTUE funnel
 
