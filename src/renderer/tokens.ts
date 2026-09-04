@@ -379,6 +379,8 @@ export interface TokenStyle {
   /** Bevel highlight/shadow strength. 0 flattens the token (recessed plates). */
   readonly bevel: number;
   readonly outline?: number | undefined;
+  /** Override the 3px token rim when a state needs a firmer silhouette. */
+  readonly outlineWidth?: number | undefined;
   /**
    * How far off the surface the token is sitting, 1 = resting (§9.5).
    *
@@ -504,7 +506,7 @@ export function numberTile(
       art.container.addChild(
         new Graphics()
           .roundRect(0, 0, w, h, Math.min(w, h) * 0.22)
-          .stroke({ width: 3, color: style.outline }),
+          .stroke({ width: style.outlineWidth ?? 3, color: style.outline }),
       );
     }
     return art.container;
@@ -548,7 +550,7 @@ export function numberTile(
       .stroke({ width: 2, color: 0xffffff, alpha: 0.16 * style.bevel });
   }
   if (style.outline !== undefined) {
-    g.roundRect(0, 0, w, h, r).stroke({ width: 3, color: style.outline });
+    g.roundRect(0, 0, w, h, r).stroke({ width: style.outlineWidth ?? 3, color: style.outline });
   }
   token.addChild(g);
 

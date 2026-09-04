@@ -6,6 +6,7 @@ export interface ArmCue {
   readonly scale: number;
   readonly elevation: number;
   readonly outline: number;
+  readonly outlineWidth: number;
 }
 
 const PERIOD_MS = 1_200;
@@ -38,6 +39,7 @@ export function armCueFor(
     lift: 3 + light,
     scale: 1.035 + light * 0.01,
     elevation: 1.75 + light * 0.25,
-    outline: mixColour(PALETTE.brass, PALETTE.brassLit, light * 0.48),
+    outline: mixColour(PALETTE.brass, PALETTE.brassLit, light * 0.8),
+    outlineWidth: 5,
   };
 }
