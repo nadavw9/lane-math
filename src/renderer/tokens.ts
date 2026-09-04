@@ -119,17 +119,26 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
    * measures 14.50:1 and is what an engraved instrument nameplate actually is:
    * a darkened inset with the marking cut into it.
    *
-   * Sized to the numeral rather than to a fraction of the plate, so a two-digit
-   * target does not crowd the cut that a one-digit target leaves half empty.
+   * Sized to the plate's cast recess (rivet-to-rivet), not to the glyph bounds,
+   * so a front-target `3` seats in the same brass window as a two-digit value.
    */
   const text = label(value, Math.min(h * 0.52, 30), style.text);
   const inset = new Graphics();
-  const padX = text.height * 0.34;
-  const padY = text.height * 0.16;
-  const panelW = Math.min(w * 0.74, text.width + padX * 2);
-  const panelH = Math.min(h * 0.66, text.height + padY * 2);
+  /*
+   * Well size follows the BRASS FRAME, not the glyph.
+   *
+   * Sizing to the numeral left single-digit targets (a front `3`) as a tiny felt
+   * postage stamp floating inside the cast recess between the rivets — phone-eye
+   * read that as plaque misfit. The atlas plaques already cut a fixed recess;
+   * the procedural felt must fill that same window so short and long values
+   * share one seating.
+   */
+  const panelW = w * 0.58;
+  const panelH = h * 0.5;
   const panelX = (w - panelW) / 2;
-  const panelY = (h - panelH) / 2;
+  // Optical centre: atlas bevels are heavier bottom-right, so geometric centre
+  // reads low inside the casting. Nudge the felt well slightly toward the light.
+  const panelY = (h - panelH) / 2 - h * 0.04;
   const radius = Math.min(panelW, panelH) * 0.2;
 
   inset.roundRect(panelX, panelY, panelW, panelH, radius).fill({ color: PALETTE.felt });
@@ -417,9 +426,17 @@ export function targetPlate(
   const art = spriteBase("plaque", "idle", w, h, Math.abs(variant) % 2);
   if (art) {
     if (style.outline !== undefined) {
-      art.container.addChild(hexPath(new Graphics(), w, h).stroke({ width: 3, color: style.outline }));
+      art.container.addChild(
+        hexPath(new Graphics(), w, h).stroke({
+          width: style.outlineWidth ?? 3.5,
+          color: style.outline,
+        }),
+      );
     }
-    art.container.addChild(recessedPanel(w, h, value, style));
+    // Felt well + cream numeral, seated on the content centre (not the shadow frame).
+    const well = recessedPanel(w, h, value, style);
+    well.position.set(art.numeral.x - w / 2, art.numeral.y - h / 2);
+    art.container.addChild(well);
     return art.container;
   }
 
@@ -438,7 +455,7 @@ export function targetPlate(
     .stroke({ width: 2, color: 0xffffff, alpha: 0.1 });
 
   if (style.outline !== undefined) {
-    hexPath(g, w, h).stroke({ width: 3, color: style.outline });
+    hexPath(g, w, h).stroke({ width: style.outlineWidth ?? 3, color: style.outline });
   }
   token.addChild(g);
 
@@ -853,19 +870,23 @@ export function emptySlot(w: number, h: number, shape: "square" | "circle"): Con
   const token = new Container();
   const g = new Graphics();
 
-  // A hole punched in the paper: darker than the ground, since the ground is
-  // now the light thing. Faint enough that a socket never competes with a token.
-  const inset = { color: 0x000000, alpha: 0.14 };
-  const edge = { width: 2, color: PALETTE.text, alpha: 0.4 };
+  // PE-05: lighter felt recess that still invites the next tap. Alpha-0.14
+  // black holes read too dead beside glass cubes at phone distance.
+  const inset = { color: 0x3a2a1c, alpha: 0.72 };
+  const edge = { width: 2.5, color: PALETTE.brassLit, alpha: 0.42 };
 
   if (shape === "circle") {
     const radius = Math.min(w, h) / 2;
     g.circle(w / 2, h / 2, radius).fill(inset);
     g.circle(w / 2, h / 2, radius).stroke(edge);
+    g.circle(w / 2, h / 2, Math.max(1, radius - 2))
+      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.08 });
   } else {
     const r = Math.min(w, h) * 0.22;
     g.roundRect(0, 0, w, h, r).fill(inset);
     g.roundRect(0, 0, w, h, r).stroke(edge);
+    g.roundRect(2, 2, w - 4, h - 4, Math.max(1, r - 2))
+      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.08 });
   }
 
   token.addChild(g);

@@ -48,6 +48,13 @@ export const PALETTE = {
   targetPlate: 0x1e2a3a,
   /** The front plate is the live one: same family, deeper and bluer. */
   targetFront: 0x16324f,
+  /**
+   * Front-target rim — cool steel, not gold.
+   *
+   * Gold-on-brass measured ~1.58:1 and failed the phone glance. A cool rim is a
+   * different channel from the plaque metal so the live target survives grayscale.
+   */
+  targetFrontRim: 0x8ec8e8,
   tile: 0x33241a,
   /**
    * A transformed tile is the SAME WOOD, freshly cut (§9.6).
@@ -437,8 +444,18 @@ export function bands(board: BoardSize): Bands {
   // token sizes the grid is narrower than the screen, and a full-width backdrop
   // around three big tiles reads as a tray someone forgot to fill.
   const poolWidth = grid.perRow * size + (grid.perRow - 1) * GAP;
+  /*
+   * Phone-eye PE-01: bias spare horizontal slack to the LEFT so the brass
+   * automaton can stand beside the tray with a full silhouette. Never shrink
+   * tokens; only spend right-side centering slack. Tight boards keep a smaller
+   * companion rather than burying it under cubes.
+   */
+  const AUTOMATON_DESK = 96;
+  const centeredX = (DESIGN.width - poolWidth) / 2;
+  const rightLimit = DESIGN.width - PAD - poolWidth;
+  const poolX = Math.min(Math.max(centeredX, AUTOMATON_DESK), Math.max(centeredX, rightLimit));
   const pool: Rect = {
-    x: (DESIGN.width - poolWidth) / 2,
+    x: poolX,
     y: poolBand.y,
     width: poolWidth,
     height: poolBand.height,
