@@ -45,3 +45,10 @@ https://github.com/nadavw9/lane-math/pull/5 (draft)
 - [ ] OOL face is brand-scale, not postage  
 
 PR: https://github.com/nadavw9/lane-math/pull/5
+
+## Scout REJECT → fix (2026-09-05 ~02:05 Athens)
+Scout rejected first draft for incomplete PE-01/PE-02 on dense + OOL.
+Follow-up commits on same PR branch: deskRepairSize + AUTOMATON_DESK=110, GUTTER_CLEARANCE=20, plaque well optical seating.
+PE-03 remains PARKED.
+Evidence: docs/review/06-tight-gutter.png, 05-ool.png, 05-ool-board.png, 05-ool-targets.png + morning-pack copies.
+DRAFT ONLY — never merge.
