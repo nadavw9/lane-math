@@ -43,7 +43,10 @@ export interface TileView {
 
 /**
  * GDD §3.5 tap state machine. Three slots, filled left to right; tapping a
- * filled slot returns that piece and rewinds to that step.
+ * filled slot returns that piece and rewinds to that step — except the swap
+ * gesture: with both operands filled, tap one then the other to exchange them
+ * without emptying the row (order-sensitive ops; correcting order must not
+ * cost two full re-entries).
  */
 export interface SlotsView {
   readonly leftTileId: number | null;
@@ -68,6 +71,12 @@ export interface ViewState {
   readonly targetIndex: number;
   readonly tiles: readonly TileView[];
   readonly slots: SlotsView;
+  /**
+   * GDD §3.5 swap gesture: which filled operand slot is armed for a swap.
+   * Null when idle. Set by tapping a filled left/right while both operands
+   * are present; tapping the other operand completes the exchange.
+   */
+  readonly swapArmedSlot: 0 | 2 | null;
   readonly budget: OperatorBudget;
   readonly phase: Phase;
   /**

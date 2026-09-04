@@ -1277,6 +1277,11 @@ export class Renderer {
               text: PALETTE.tokenInk,
               bevel: 1,
             });
+      // §3.5 swap gesture: arm dims the selected operand; the other stays
+      // bold so the second tap reads as the swap target — no new chrome.
+      if (s.swapArmedSlot !== null && (index === 0 || index === 2)) {
+        token.alpha = index === s.swapArmedSlot ? 0.55 : 1;
+      }
       this.entry(
         this.place(
           token,
