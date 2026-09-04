@@ -132,6 +132,8 @@ export const CLEARED_BANDS = {
   headline: 1,
   /** Stars keep their own §9.5 stagger on top of this. */
   stars: 2,
+  /** The tally becomes durable progress before the player is offered exits. */
+  progress: 3,
   /**
    * The way out lands LAST, after the tally has been counted.
    *
@@ -139,7 +141,7 @@ export const CLEARED_BANDS = {
    * moment the game gives back — and the failure panel earns its options the
    * same way, by waiting for the refusal to read first.
    */
-  actions: 3,
+  actions: 4,
 } as const;
 
 /** Scale a duration by the review clock, so entry slows with everything else. */
