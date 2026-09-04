@@ -22,6 +22,7 @@ import {
 } from "./layout.js";
 import { button, type ButtonState } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
+import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
 import { emblemMeter, hintDiamond, meterWidth, star } from "./emblems.js";
@@ -580,7 +581,10 @@ export class Renderer {
     this.reactToSlots(previous, next);
     this.reactToTransforms(previous, next);
 
-    if (previous.swapArmedSlot !== next.swapArmedSlot) this.armCueMs = 0;
+    if (previous.swapArmedSlot !== next.swapArmedSlot) {
+      this.armCueMs = 0;
+      void armHaptic(previous.swapArmedSlot, next.swapArmedSlot);
+    }
 
     // A target was cleared: the tiles that paid for it shatter into it (§9.3).
     if (next.targetIndex > previous.targetIndex) {
@@ -1293,6 +1297,7 @@ export class Renderer {
               text: PALETTE.tokenInk,
               bevel: armCue ? 1.12 : 1,
               outline: armCue?.outline,
+              outlineWidth: armCue?.outlineWidth,
               elevation: armCue?.elevation,
             });
       // §3.5 swap gesture: selection is MORE presence (§9.6). The armed

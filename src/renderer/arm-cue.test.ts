@@ -14,6 +14,7 @@ describe("swap arm cue", () => {
       scale: 1.035,
       elevation: 1.75,
       outline: PALETTE.brass,
+      outlineWidth: 5,
     });
     expect(armCueFor(2, 0, 0)).toBeNull();
     expect(armCueFor(0, null, 0)).toBeNull();
@@ -26,6 +27,7 @@ describe("swap arm cue", () => {
     expect(brightest.scale).toBeCloseTo(1.045);
     expect(brightest.elevation).toBe(2);
     expect(brightest.outline).not.toBe(PALETTE.brass);
+    expect(brightest.outlineWidth).toBeGreaterThan(3);
     expect(brightest).not.toHaveProperty("alpha");
   });
 
