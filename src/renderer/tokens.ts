@@ -140,6 +140,11 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
   // reads low inside the casting. Nudge the felt well slightly toward the light.
   const panelY = (h - panelH) / 2 - h * 0.04;
   const radius = Math.min(panelW, panelH) * 0.2;
+  // PE-02 Scout REJECT: seat numeral in the FELT WELL, not brass plate centre.
+  // Well is nudged up; text at (w/2,h/2) parked short digits low vs board cube.
+  const wellCX = panelX + panelW / 2;
+  const wellCY = panelY + panelH / 2;
+  const numeralY = wellCY - panelH * 0.08;
 
   inset.roundRect(panelX, panelY, panelW, panelH, radius).fill({ color: PALETTE.felt });
 
@@ -162,7 +167,7 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
     .stroke({ width: 1.5, color: 0xffffff, alpha: 0.13 });
 
   panel.addChild(inset);
-  text.position.set(w / 2, h / 2);
+  text.position.set(wellCX, numeralY);
   panel.addChild(text);
   return panel;
 }

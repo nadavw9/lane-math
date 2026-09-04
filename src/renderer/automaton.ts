@@ -7,10 +7,10 @@ import type { ViewState } from "../game/types.js";
 /**
  * THE BRASS AUTOMATON (ART_DIRECTION §2), placed as a NON-FLOW OVERLAY.
  *
- * Phone-eye bar: sits on the desk BESIDE the pool with a full readable
- * silhouette. Layout biases spare horizontal slack into the left gutter;
- * this sprite scales so the opaque CONTENT (not the soft contact-shadow
- * frame) clears pool.x. The renderer draws it above pool tiles.
+ * Phone-eye bar (PE-01 Scout REJECT fix): sits BESIDE the pool with a full
+ * readable silhouette. Layout reserves AUTOMATON_DESK when the natural fit
+ * would collapse the companion; this sprite clears pool.x with real air.
+ * The renderer draws it above pool tiles.
  *
  * Non-interactive — must never steal a hit area from the pool or Restart.
  */
@@ -33,10 +33,12 @@ export function automatonState(state: ViewState, idleMs: number): AutomatonState
 
 /** Preferred height when the gutter has room. */
 const HEIGHT = 88;
+/** Readable floor target when desk repair runs (PE-01 Scout REJECT). */
+const MIN_HEIGHT = 64;
 /** Kept clear of the viewport frame on the left. */
 const INSET_X = 4;
-/** Air between the opaque body and the pool's left edge. */
-const GUTTER_CLEARANCE = 8;
+/** Air between opaque body and pool — 8px still kissed under tile glow (PE-01). */
+const GUTTER_CLEARANCE = 14;
 
 /**
  * @param pool The pool band. Feet on its baseline; opaque body clears pool.x.
@@ -60,7 +62,9 @@ export function automaton(state: AutomatonState, pool: Rect): Container | null {
   const gutter = Math.max(0, pool.x - INSET_X - GUTTER_CLEARANCE);
   const maxDrawnW = gutter > 0 ? gutter / contentRightFrac : 1;
   const heightFromGutter = maxDrawnW * (frameH / frameW);
-  const height = Math.min(HEIGHT, heightFromGutter);
+  const height = heightFromGutter >= MIN_HEIGHT
+    ? Math.min(HEIGHT, heightFromGutter)
+    : Math.max(1, heightFromGutter);
   const scale = height / frameH;
   sprite.scale.set(scale);
 
