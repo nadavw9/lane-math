@@ -20,7 +20,7 @@ import {
   statusRows,
   targetSlot,
 } from "./layout.js";
-import { button, type ButtonState } from "./button.js";
+import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
 import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
@@ -838,11 +838,9 @@ export class Renderer {
           y + 104,
           width - 40,
           44,
-          PALETTE.armed,
-          "watch to continue",
-          PALETTE.highlight,
+          "Watch to Continue",
           () => this.emit({ type: "tapWatchAd" }),
-          PALETTE.highlight,
+          { variant: "primary" },
         ),
         BOARD_BANDS.equation,
       ),
@@ -1041,23 +1039,23 @@ export class Renderer {
     y: number,
     w: number,
     h: number,
-    fill: number,
     text: string,
-    labelColour: number,
     onTap?: () => void,
-    outline?: number,
-    state: ButtonState = "idle",
-    emblem?: () => Container,
+    options: {
+      readonly variant?: ButtonVariant | undefined;
+      readonly state?: ButtonState | undefined;
+      readonly armed?: boolean | undefined;
+      readonly emblem?: (() => Container) | undefined;
+    } = {},
   ): Container {
     const control = button({
       width: w,
       height: h,
       label: text,
-      fill,
-      labelColour,
-      outline,
-      emblem,
-      state: this.inputLocked ? "disabled" : state,
+      variant: options.variant,
+      armed: options.armed,
+      emblem: options.emblem,
+      state: this.inputLocked ? "disabled" : options.state,
       onTap: this.inputLocked ? undefined : onTap,
     });
     control.position.set(x, y);
@@ -1337,10 +1335,9 @@ export class Renderer {
       // EMPTY. The `=` is engraved into the face by `commitKey`; a label here
       // printed a second one in cream on top of the cut one.
       label: "",
-      fill: PALETTE.brassDeep,
-      labelColour: canCommit ? PALETTE.highlight : PALETTE.tokenInk,
+      variant: "primary",
       face: (w, h) => commitKey(w, h, canCommit),
-      state: this.inputLocked || !canCommit ? "disabled" : "idle",
+      state: this.inputLocked || !canCommit ? "disabled" : "armed",
       onTap: this.inputLocked || !canCommit ? undefined : () => this.emit({ type: "tapCommit" }),
     });
     commit.position.set(commitRect.x + resistDx, commitRect.y);
@@ -1743,15 +1740,13 @@ export class Renderer {
         rows.controlsY,
         90,
         rows.controlH,
-        PALETTE.slotFilled,
-        "restart",
-        // §9.4 forbids a banner, not a designed way out. On failure the one
-        // control that matters takes the gold the game uses for "ready", so
-        // the recovery affordance is findable without the board narrating a
-        // loss the player can already see.
-        s.phase === "failed" ? PALETTE.highlight : PALETTE.tokenInk,
+        "Restart",
         () => this.emit({ type: "tapRestart" }),
-        s.phase === "failed" ? PALETTE.highlight : undefined,
+        {
+          // §9.4 forbids a banner, not a designed way out. After failure this
+          // becomes a genuinely armed recovery action, not gold-coloured text.
+          armed: s.phase === "failed",
+        },
       ),
     );
 
@@ -1777,9 +1772,7 @@ export class Renderer {
           rows.controlsY,
           72,
           rows.controlH,
-          PALETTE.slotFilled,
-          "map",
-          PALETTE.tokenInk,
+          "Map",
           () => this.emit({ type: "tapMap" }),
         ),
       );
@@ -1810,14 +1803,13 @@ export class Renderer {
           rows.controlsY,
           92,
           rows.controlH,
-          PALETTE.slotFilled,
-          `hints ${eco.starsAvailable}`,
-          // Open is an "armed" state, so it is gold — the only accent (§9.6).
-          s.shopOpen ? PALETTE.highlight : PALETTE.tokenInk,
+          `Hints ${eco.starsAvailable}`,
           () => this.emit({ type: "toggleShop" }),
-          undefined,
-          "idle",
-          () => star(11),
+          {
+            // Open is an armed MATERIAL state, never DIM (§9.6).
+            armed: s.shopOpen,
+            emblem: () => star(11),
+          },
         ),
       );
 
@@ -1842,6 +1834,7 @@ export class Renderer {
          */
         const panelH = 42 + s.shop.length * 40;
         const panelY = status.y - panelH - 8;
+        const emptyShop = s.shop.every((e) => !e.owned && !e.affordable);
         const shopFrame = framedPanel(status.width, panelH);
         shopFrame.panel.position.set(status.x, panelY);
         this.root.addChild(this.entry(shopFrame.panel, BOARD_BANDS.furniture));
@@ -1850,7 +1843,11 @@ export class Renderer {
         const innerX = status.x + shopInner.x;
         const innerY = panelY + shopInner.y;
 
-        const title = this.text("hints — none reveals a keystone", 12, PALETTE.tray);
+        const title = this.text(
+          emptyShop ? "Clear Levels to Earn Hint Stars" : "Hints — None Reveals a Keystone",
+          12,
+          PALETTE.tray,
+        );
         // Inset from the interior's own left edge. Flush against it, the first
         // glyph was clipped by the frame's inner bevel — the rows get away with
         // it because they are filled boxes, and a letterform does not.
@@ -1863,14 +1860,6 @@ export class Renderer {
          * a greyed shop teaches "this is not for me". It now says how to earn
          * the stars instead, which is a route rather than a wall.
          */
-        if (s.shop.every((e) => !e.owned && !e.affordable)) {
-          const how = this.text("clear levels with fewer failures to earn stars", 11, PALETTE.tray);
-          how.anchor.set(0.5, 0);
-          how.position.set(DESIGN.width / 2, panelY + panelH - 18);
-          how.alpha = 0.8;
-          this.root.addChild(this.entry(how, BOARD_BANDS.status));
-        }
-
         s.shop.forEach((entry, i) => {
           const y = innerY + 22 + i * 40;
           const enabled = entry.owned || entry.affordable;
@@ -1883,13 +1872,14 @@ export class Renderer {
             y,
             shopInner.width,
             34,
-            PALETTE.slotFilled,
-            `${entry.label}   ${entry.owned ? "owned" : `${entry.cost}`}`,
-            entry.owned ? PALETTE.highlight : PALETTE.tokenInk,
+            `${entry.label}   ${entry.owned ? "Owned" : `${entry.cost}`}`,
             () => this.emit({ type: "buyHint", hint: entry.type }),
-            undefined,
-            enabled ? "idle" : "unavailable",
-            entry.owned ? undefined : () => star(11),
+            {
+              variant: entry.affordable && !entry.owned ? "primary" : "secondary",
+              state: enabled ? "idle" : "unavailable",
+              armed: entry.owned,
+              emblem: entry.owned ? undefined : () => star(11),
+            },
           );
           this.root.addChild(this.entry(row, BOARD_BANDS.equation));
         });
@@ -1995,9 +1985,7 @@ export class Renderer {
             topY + 104,
             124,
             34,
-            PALETTE.slotFilled,
-            "go back",
-            PALETTE.tokenInk,
+            "Go Back",
             () => this.emit({ type: "dismissWarning" }),
           ),
         );
@@ -2011,9 +1999,7 @@ export class Renderer {
             topY + 104,
             124,
             34,
-            PALETTE.felt,
-            "commit anyway",
-            PALETTE.tray,
+            "Commit Anyway",
             () => this.emit({ type: "commitAnyway" }),
           ),
         );
@@ -2025,9 +2011,7 @@ export class Renderer {
             topY + 98,
             120,
             32,
-            PALETTE.slotFilled,
-            w.scripted ? "let me look" : "got it",
-            PALETTE.tokenInk,
+            w.scripted ? "Let Me Look" : "Got It",
             () => this.emit({ type: "dismissWarning" }),
           ),
         );
@@ -2136,10 +2120,10 @@ export class Renderer {
        * so it earns the top slot and the gold.
        */
       const continueLabel = exit.canContinue
-        ? "watch an ad · back to where it still worked"
+        ? "Watch an Ad · Back to Where It Still Worked"
         : exit.continuesLeft === 0
-          ? "continues used"
-          : "nothing to rewind to";
+          ? "Continues Used"
+          : "Nothing to Rewind To";
       this.root.addChild(
         this.entry(
           this.box(
@@ -2147,12 +2131,12 @@ export class Renderer {
             seatY(0),
             buttonW,
             buttonH,
-            PALETTE.slotFilled,
             continueLabel,
-            exit.canContinue ? PALETTE.highlight : PALETTE.tokenInk,
             exit.canContinue ? () => this.emit({ type: "tapContinue" }) : undefined,
-            exit.canContinue ? PALETTE.highlight : undefined,
-            exit.canContinue ? "idle" : "disabled",
+            {
+              variant: "primary",
+              state: exit.canContinue ? "idle" : "unavailable",
+            },
           ),
           BOARD_BANDS.equation,
         ),
@@ -2166,9 +2150,7 @@ export class Renderer {
             seatY(1),
             half,
             buttonH,
-            PALETTE.slotFilled,
-            "restart",
-            PALETTE.tokenInk,
+            "Restart",
             () => this.emit({ type: "tapRestart" }),
           ),
           BOARD_BANDS.equation,
@@ -2181,9 +2163,7 @@ export class Renderer {
             seatY(1),
             half,
             buttonH,
-            PALETTE.slotFilled,
-            "map",
-            PALETTE.tokenInk,
+            "Map",
             () => this.emit({ type: "tapMap" }),
           ),
           BOARD_BANDS.equation,
@@ -2297,11 +2277,9 @@ export class Renderer {
               firstY,
               buttonW,
               buttonH,
-              PALETTE.slotFilled,
-              "next level",
-              PALETTE.highlight,
+              "Next Level",
               () => this.emit({ type: "tapNextLevel" }),
-              PALETTE.highlight,
+              { variant: "primary" },
             ),
             CLEARED_BANDS.actions,
             true,
@@ -2328,9 +2306,7 @@ export class Renderer {
             secondRow,
             half,
             buttonH,
-            PALETTE.slotFilled,
-            "replay",
-            PALETTE.tokenInk,
+            "Replay",
             () => this.emit({ type: "tapRestart" }),
           ),
           CLEARED_BANDS.actions,
@@ -2344,9 +2320,7 @@ export class Renderer {
             secondRow,
             half,
             buttonH,
-            PALETTE.slotFilled,
-            "map",
-            PALETTE.tokenInk,
+            "Map",
             () => this.emit({ type: "tapMap" }),
           ),
           CLEARED_BANDS.actions,

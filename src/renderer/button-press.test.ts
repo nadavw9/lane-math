@@ -2,6 +2,7 @@ import { Container, Text, type FederatedPointerEvent } from "pixi.js";
 import { describe, expect, it } from "vitest";
 
 import { button } from "./button.js";
+import { DIM, PALETTE } from "./layout.js";
 
 /**
  * THE PRESS MUST BE INSTANT, AND MUST NOT DESTROY ANYTHING.
@@ -32,6 +33,26 @@ const EVENT = {} as FederatedPointerEvent;
 const press = (root: Container): boolean => root.emit("pointerdown", EVENT);
 const release = (root: Container): boolean => root.emit("pointerup", EVENT);
 
+function named(root: Container, name: string): Container {
+  const body = root.children[0] as Container;
+  const child = body.children.find((candidate) => candidate.label === name);
+  if (!child) throw new Error(`no ${name} in the button`);
+  return child as Container;
+}
+
+/** Colours recorded by the real Pixi Graphics context built by button(). */
+function coloursOf(root: Container, name: string): number[] {
+  const graphics = named(root, name) as Container & {
+    context: {
+      instructions: Array<{ data?: { style?: { color?: number } } }>;
+    };
+  };
+  return graphics.context.instructions.flatMap((instruction) => {
+    const colour = instruction.data?.style?.color;
+    return colour === undefined ? [] : [colour];
+  });
+}
+
 /** The label, which moves by exactly the press depth. */
 function labelOf(root: Container): Text {
   const body = root.children[0] as Container;
@@ -42,7 +63,7 @@ function labelOf(root: Container): Text {
 
 describe("a button press", () => {
   it("moves the label DOWN by the press depth, synchronously inside pointerdown", () => {
-    const root = button({ width: WIDTH, height: HEIGHT, label: "restart", onTap: () => {} });
+    const root = button({ width: WIDTH, height: HEIGHT, label: "Restart", onTap: () => {} });
     const label = labelOf(root);
     const atRest = label.y;
     expect(atRest).toBe(HEIGHT / 2);
@@ -58,7 +79,7 @@ describe("a button press", () => {
   });
 
   it("keeps the SAME child objects across a press — nothing is destroyed", () => {
-    const root = button({ width: WIDTH, height: HEIGHT, label: "restart", onTap: () => {} });
+    const root = button({ width: WIDTH, height: HEIGHT, label: "Restart", onTap: () => {} });
     const body = root.children[0] as Container;
     const before = [...body.children];
 
@@ -75,7 +96,7 @@ describe("a button press", () => {
 
   it("fires onTap on release and returns the label to rest", () => {
     let taps = 0;
-    const root = button({ width: WIDTH, height: HEIGHT, label: "restart", onTap: () => (taps += 1) });
+    const root = button({ width: WIDTH, height: HEIGHT, label: "Restart", onTap: () => (taps += 1) });
     const label = labelOf(root);
 
     press(root);
@@ -92,7 +113,7 @@ describe("a button press", () => {
      * between. Nothing here may depend on a tick having run.
      */
     let taps = 0;
-    const root = button({ width: WIDTH, height: HEIGHT, label: "map", onTap: () => (taps += 1) });
+    const root = button({ width: WIDTH, height: HEIGHT, label: "Map", onTap: () => (taps += 1) });
     for (let i = 0; i < 5; i++) {
       press(root);
       release(root);
@@ -111,4 +132,62 @@ describe("a button press", () => {
    * exercised by the board tests that run against a real canvas. Recorded so
    * the gap reads as known rather than forgotten.
    */
+});
+
+describe("the brass and glass CTA material", () => {
+  it("draws primary and secondary bodies without the old navy fill", () => {
+    for (const variant of ["primary", "secondary"] as const) {
+      const root = button({
+        width: WIDTH,
+        height: HEIGHT,
+        label: "Action",
+        variant,
+        // A legacy caller cannot paint navy over the selected material.
+        fill: PALETTE.slotFilled,
+      });
+      expect(named(root, `button-${variant}`).visible).toBe(true);
+      expect(coloursOf(root, `button-${variant}`)).not.toContain(PALETTE.slotFilled);
+      expect(labelOf(root).style.fill).toBe(PALETTE.tokenInk);
+    }
+  });
+
+  it("sinks the material and removes its idle elevation while pressed", () => {
+    const root = button({
+      width: WIDTH,
+      height: HEIGHT,
+      label: "Action",
+      variant: "primary",
+      onTap: () => {},
+    });
+    const material = named(root, "button-primary");
+    const shadow = named(root, "button-contact-shadow");
+    expect(material.y).toBe(0);
+    expect(shadow.visible).toBe(true);
+
+    press(root);
+    expect(material.y).toBe(PRESS_DEPTH);
+    expect(shadow.visible).toBe(false);
+  });
+
+  it("makes unavailable flush while disabled retains a muted elevation", () => {
+    const disabled = button({ width: WIDTH, height: HEIGHT, label: "Action", state: "disabled" });
+    const unavailable = button({ width: WIDTH, height: HEIGHT, label: "Action", state: "unavailable" });
+
+    expect(named(disabled, "button-contact-shadow").visible).toBe(true);
+    expect(named(unavailable, "button-contact-shadow").visible).toBe(false);
+    expect(disabled.alpha).toBeLessThan(1);
+    expect(unavailable.alpha).toBe(1);
+  });
+
+  it("makes armed a first-class gold material, never the DIM treatment", () => {
+    const idle = button({ width: WIDTH, height: HEIGHT, label: "Action" });
+    const armed = button({ width: WIDTH, height: HEIGHT, label: "Action", state: "armed" });
+
+    expect(coloursOf(armed, "button-secondary")).toContain(PALETTE.highlight);
+    expect(coloursOf(idle, "button-secondary")).not.toContain(PALETTE.highlight);
+    expect(labelOf(armed).style.fill).toBe(PALETTE.highlight);
+    expect(labelOf(idle).style.fill).toBe(PALETTE.tokenInk);
+    expect(armed.alpha).toBe(1);
+    expect(armed.alpha).not.toBe(DIM.alpha);
+  });
 });
