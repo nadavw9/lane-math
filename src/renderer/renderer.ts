@@ -809,9 +809,9 @@ export class Renderer {
    */
   private drawOutOfLives(lane: Rect, eco: NonNullable<ViewState["economy"]>): void {
     const width = lane.width - 24;
-    // Taller so the concerned automaton can sit at brand scale (PE-04), and so
-    // the wait line stays inside the felt well above the brass frame.
-    const height = 264;
+    // PE-04: brand-scale concerned hero (#6) on master SAFE_TOP/cartouche seating
+    // (#8). Taller panel so wait line stays inside the felt well above the frame.
+    const height = 284;
     const x = lane.x + 12;
     /*
      * The framedPanel cartouche protrudes ABOVE the outer edge. Preferred seat
@@ -854,7 +854,8 @@ export class Renderer {
      * dropped into it afterwards is visible.
      */
     // PE-04: brand-scale concerned pose beside the copy — not a postage stamp.
-    const seat = 96;
+    // PE-04 size from #6; seat coords from #8 (interior, not outer brass).
+    const seat = 128;
     const seatX = contentLeft + 8;
     const seatY = contentTop + 10;
     // §2's table calls this state "Concerned"; the sheet ships it as `worried`.
@@ -896,7 +897,7 @@ export class Renderer {
 
     // §5.2's refill, and the first player-facing route to it. Until now
     // offerLifeForAd had no caller outside the debug harness.
-    const actionY = seatY + seat + 14;
+    const actionY = seatY + seat + 16;
     this.root.addChild(
       this.entry(
         this.box(

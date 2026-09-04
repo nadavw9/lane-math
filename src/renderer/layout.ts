@@ -117,6 +117,8 @@ export const PALETTE = {
   tray: 0xc9a678,
   /** Dark brown felt under every real tile and dial. */
   felt: 0x241812,
+  /** Felt lifted by the equation socket's brass lip; a recess, not an object. */
+  feltRecess: 0x6b4c34,
   /** Ink navy is reserved for numerals drawn over the glass sprite. */
   glassNumeral: 0x1e2a3a,
 
