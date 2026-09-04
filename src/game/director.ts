@@ -105,6 +105,13 @@ export class Director {
   private run = 0;
   private budget: OperatorBudget = {};
   private slots: SlotsView = { leftTileId: null, op: null, rightTileId: null };
+  /**
+   * GDD §3.5 swap gesture arm. When both operands are filled, tapping one
+   * operand slot arms it; tapping the other exchanges left/right without
+   * emptying the row or touching the operator. Tapping the armed slot again
+   * falls through to the normal rewind.
+   */
+  private swapArmed: 0 | 2 | null = null;
   private phase: Phase = "playing";
   private transformOp: UnaryOp | null = null;
   private message: string | null = null;
@@ -218,6 +225,7 @@ export class Director {
     this.budget = { ...(this.level.modes[this.mode]?.budget ?? {}) };
     this.history = [];
     this.slots = { leftTileId: null, op: null, rightTileId: null };
+    this.swapArmed = null;
     this.phase = "playing";
     this.transformOp = null;
     this.message = null;
@@ -499,6 +507,7 @@ export class Director {
     this.targetIndex = snapshot.targetIndex;
     this.budget = { ...snapshot.budget };
     this.slots = { leftTileId: null, op: null, rightTileId: null };
+    this.swapArmed = null;
     this.transformOp = null;
     this.phase = "playing";
   }
@@ -617,6 +626,7 @@ export class Director {
         consumed: this.consumed.has(t.id),
       })),
       slots: this.slots,
+      swapArmedSlot: this.swapArmed,
       budget: this.budget,
       phase: this.phase,
       exit: this.phase === "failed" ? this.failureExit() : null,
@@ -660,7 +670,10 @@ export class Director {
       //
       // On an overridable warning the equation was left standing so the
       // override could replay it, so "go back" has to take it down here.
-      if (this.warning?.overridable) this.slots = { leftTileId: null, op: null, rightTileId: null };
+      if (this.warning?.overridable) {
+        this.slots = { leftTileId: null, op: null, rightTileId: null };
+        this.swapArmed = null;
+      }
       this.warning = null;
       this.pendingFatal = null;
       return this.render();
@@ -751,6 +764,7 @@ export class Director {
   }
 
   private tapTile(id: number): Command[] {
+    this.swapArmed = null;
     const tile = this.tile(id);
     if (!tile || this.consumed.has(id)) return this.reject("that tile is gone");
 
@@ -795,6 +809,7 @@ export class Director {
   }
 
   private tapOperator(op: BinaryOp): Command[] {
+    this.swapArmed = null;
     if (this.transformOp !== null) return this.reject("finish or cancel the transform first");
     if (this.slots.leftTileId === null) return this.reject("pick a number first");
     if (this.slots.op !== null) return this.reject("operator already chosen");
@@ -806,6 +821,7 @@ export class Director {
 
   /** §3.5: tapping the unary op toggles TRANSFORM MODE; tapping again cancels. */
   private tapUnary(op: UnaryOp): Command[] {
+    this.swapArmed = null;
     if (this.transformOp === op) {
       this.transformOp = null;
       this.message = null;
@@ -853,7 +869,39 @@ export class Director {
   }
 
   private tapSlot(index: 0 | 1 | 2): Command[] {
-    // Tapping a filled slot returns the piece and rewinds to that step.
+    /*
+     * GDD §3.5: tapping a filled slot returns the piece and rewinds — plus the
+     * swap gesture when both operands are filled. Tap left then right (or the
+     * reverse) exchanges the tile ids; the operator stays. Correcting order
+     * must not cost emptying the row and re-entering both operands.
+     *
+     * Arming is one tap; completing the swap is the second. Tapping the armed
+     * slot again keeps the Wordle rewind. Emptying a slot still does not
+     * reshuffle the others.
+     */
+    const bothFilled =
+      this.slots.leftTileId !== null && this.slots.rightTileId !== null;
+
+    if (bothFilled && (index === 0 || index === 2)) {
+      if (this.swapArmed !== null && this.swapArmed !== index) {
+        this.slots = {
+          leftTileId: this.slots.rightTileId,
+          op: this.slots.op,
+          rightTileId: this.slots.leftTileId,
+        };
+        this.swapArmed = null;
+        this.message = null;
+        return this.render();
+      }
+      if (this.swapArmed === null) {
+        this.swapArmed = index;
+        this.message = null;
+        return this.render();
+      }
+      // Armed slot tapped again → fall through to rewind.
+    }
+
+    this.swapArmed = null;
     if (index === 0) {
       this.slots = { leftTileId: null, op: null, rightTileId: null };
     } else if (index === 1) {
@@ -928,6 +976,7 @@ export class Director {
     this.budget = spend(this.budget, op);
     this.targetIndex++;
     this.slots = { leftTileId: null, op: null, rightTileId: null };
+    this.swapArmed = null;
     this.message = `${left.value} ${op} ${right.value} = ${result}`;
 
     if (this.targetIndex >= this.level.targets.length) {
@@ -986,6 +1035,7 @@ export class Director {
     const blocks = this.warningBlocks;
     if (blocks) {
       this.slots = { leftTileId: null, op: null, rightTileId: null };
+      this.swapArmed = null;
       this.pendingFatal = null;
     } else {
       this.pendingFatal = { kind: "binary", leftId: left.id, rightId: right.id, op };

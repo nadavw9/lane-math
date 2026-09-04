@@ -304,3 +304,136 @@ describe("operator budgets are honoured", () => {
     expect(s.budget["*"]).toBe(1);
   });
 });
+
+describe("swap gesture on the equation row (GDD §3.5)", () => {
+  /**
+   * Order-sensitive board: 5−3 = 2 is legal; 3−5 is refused under early rules.
+   * Pool keeps extras so the equation can stand without starving the board.
+   */
+  const ORDERED: LadderLevel = {
+    id: "test-swap-order",
+    world: 1,
+    pool: [5, 3, 2, 4],
+    targets: [2],
+    rules: DEFAULT_RULES,
+    modes: {
+      casual: { budget: { "+": null, "-": null, "*": null, "/": null }, tier: "tutorial" },
+      normal: { budget: { "+": null, "-": null, "*": null, "/": null }, tier: "tutorial" },
+      expert: { budget: { "+": null, "-": null, "*": null, "/": null }, tier: "tutorial" },
+    },
+    surplus: 0,
+  };
+
+  const fillEquation = (
+    d: Director,
+    left: number,
+    op: "+" | "-" | "*" | "/",
+    right: number,
+  ): ViewState => {
+    let s = stateOf(d.handle({ type: "loadLevel", id: ORDERED.id }));
+    const leftId = idOfValue(s, left);
+    s = stateOf(d.handle({ type: "tapTile", id: leftId }));
+    s = stateOf(d.handle({ type: "tapOperator", op }));
+    const rightId = idOfValue(s, right);
+    s = stateOf(d.handle({ type: "tapTile", id: rightId }));
+    return s;
+  };
+
+  it("arms on first operand tap and swaps on the other without emptying slots", () => {
+    const d = new Director(ORDERED, "normal");
+    let s = fillEquation(d, 5, "-", 3);
+    const left = s.slots.leftTileId!;
+    const right = s.slots.rightTileId!;
+    expect(s.swapArmedSlot).toBeNull();
+
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 }));
+    expect(s.swapArmedSlot).toBe(0);
+    expect(s.slots.leftTileId).toBe(left);
+    expect(s.slots.op).toBe("-");
+    expect(s.slots.rightTileId).toBe(right);
+
+    s = stateOf(d.handle({ type: "tapSlot", index: 2 }));
+    expect(s.swapArmedSlot).toBeNull();
+    expect(s.slots.leftTileId).toBe(right);
+    expect(s.slots.rightTileId).toBe(left);
+    expect(s.slots.op).toBe("-");
+  });
+
+  it("also swaps right-then-left", () => {
+    const d = new Director(ORDERED, "normal");
+    let s = fillEquation(d, 5, "-", 3);
+    const left = s.slots.leftTileId!;
+    const right = s.slots.rightTileId!;
+
+    s = stateOf(d.handle({ type: "tapSlot", index: 2 }));
+    expect(s.swapArmedSlot).toBe(2);
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 }));
+    expect(s.slots.leftTileId).toBe(right);
+    expect(s.slots.rightTileId).toBe(left);
+    expect(s.slots.op).toBe("-");
+  });
+
+  it("second tap on the armed slot still rewinds (Wordle clear)", () => {
+    const d = new Director(ORDERED, "normal");
+    let s = fillEquation(d, 5, "-", 3);
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 }));
+    expect(s.swapArmedSlot).toBe(0);
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 }));
+    expect(s.swapArmedSlot).toBeNull();
+    expect(s.slots.leftTileId).toBeNull();
+    expect(s.slots.op).toBeNull();
+    expect(s.slots.rightTileId).toBeNull();
+  });
+
+  it("lets a swapped subtraction commit when order was wrong", () => {
+    const d = new Director(ORDERED, "normal");
+    let s = fillEquation(d, 3, "-", 5);
+    // 3−5 is illegal under DEFAULT_RULES (no negatives).
+    expect(rejection(d.handle({ type: "tapCommit" }))).toContain("not allowed");
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 }));
+    s = stateOf(d.handle({ type: "tapSlot", index: 2 }));
+    expect(s.slots.op).toBe("-");
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.phase).toBe("won");
+  });
+
+  it("swaps division operands so 6÷2 can replace illegal 2÷6", () => {
+    const DIV: LadderLevel = {
+      ...ORDERED,
+      id: "test-swap-div",
+      pool: [6, 2, 3, 4],
+      targets: [3],
+    };
+    const d = new Director(DIV, "normal");
+    let s = stateOf(d.handle({ type: "loadLevel", id: DIV.id }));
+    const two = idOfValue(s, 2);
+    const six = idOfValue(s, 6);
+    s = stateOf(d.handle({ type: "tapTile", id: two }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "/" }));
+    s = stateOf(d.handle({ type: "tapTile", id: six }));
+    // 2÷6 is not exact integer division.
+    expect(rejection(d.handle({ type: "tapCommit" }))).toContain("not allowed");
+    // Equation still standing (§9.5); swap fixes order without re-entry.
+    expect(s.slots.leftTileId).toBe(two);
+    expect(s.slots.rightTileId).toBe(six);
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 }));
+    s = stateOf(d.handle({ type: "tapSlot", index: 2 }));
+    expect(s.slots.leftTileId).toBe(six);
+    expect(s.slots.rightTileId).toBe(two);
+    expect(s.slots.op).toBe("/");
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.phase).toBe("won");
+  });
+
+  it("does not slide slots when clearing only the right operand", () => {
+    const d = new Director(ORDERED, "normal");
+    let s = fillEquation(d, 5, "-", 3);
+    const left = s.slots.leftTileId;
+    s = stateOf(d.handle({ type: "tapSlot", index: 2 }));
+    // First tap arms; second on same clears right only.
+    s = stateOf(d.handle({ type: "tapSlot", index: 2 }));
+    expect(s.slots.leftTileId).toBe(left);
+    expect(s.slots.op).toBe("-");
+    expect(s.slots.rightTileId).toBeNull();
+  });
+});
