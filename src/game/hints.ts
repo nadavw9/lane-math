@@ -26,8 +26,8 @@ export const HINT_COST: Readonly<Record<HintType, number>> = {
 
 export const HINT_LABEL: Readonly<Record<HintType, string>> = {
   narrow: "Narrow",
-  contested: "Contested resource",
-  branch: "Branch elimination",
+  contested: "Contested Resource",
+  branch: "Branch Elimination",
 };
 
 export interface Hint {

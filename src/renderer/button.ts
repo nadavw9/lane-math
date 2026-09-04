@@ -3,69 +3,28 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { DIM, PALETTE } from "./layout.js";
 import { UI_FONT } from "./tokens.js";
 
-/**
- * The one button in the game (GDD §9.0: four interaction states).
- *
- * Before this, every control was a flat rounded rectangle with a two-line bevel
- * drawn inline, and NOT ONE had a pressed state. Several were not buttons at
- * all — a bare Container with a `pointertap` listener and no visual response to
- * being touched.
- *
- * FOUR STATES, with the same semantics settled for tokens:
- *
- *   idle         full material, elevated, casting
- *   pressed      depressed into the surface, shadow pulled in
- *   disabled     temporarily unusable, CAN return to idle
- *   unavailable  locked or spent, will NOT return in this context
- *
- * The mechanism differs from the glass cubes because a button is not a glass
- * cube. A cube's `unavailable` is a separate unlit sprite, since its glow is
- * emitted light that a tint cannot remove. A button has no glow to extinguish,
- * so its `unavailable` is expressed as material instead: it loses its
- * elevation entirely and sits flush and inert, which is what a dead control
- * looks like. `disabled` keeps its elevation and only loses presence, so the
- * two remain distinguishable at a glance — which is the distinction the §9.0
- * audit found collapsed everywhere.
- */
-export type ButtonState = "idle" | "disabled" | "unavailable";
+/** GDD §9.0's persistent states. Pressed is sampled synchronously from input. */
+export type ButtonState = "idle" | "armed" | "disabled" | "unavailable";
+export type ButtonVariant = "primary" | "secondary";
 
 export interface ButtonOptions {
   readonly width: number;
   readonly height: number;
   readonly label: string;
-  readonly state?: ButtonState;
-  /** Gold for armed/earned, cream otherwise (§9.6 — gold is the one accent). */
-  readonly labelColour?: number;
+  readonly variant?: ButtonVariant | undefined;
+  readonly state?: ButtonState | undefined;
+  /** Convenience for models that already carry selection separately. */
+  readonly armed?: boolean | undefined;
+  /** @deprecated Material variants own their body colour. */
   readonly fill?: number;
+  /** @deprecated Labels are cream, or gold only while armed. */
+  readonly labelColour?: number;
+  /** @deprecated Armed state owns the gold rim; variants own every other rim. */
   readonly outline?: number | undefined;
   readonly fontSize?: number;
-  /**
-   * Hexagonal buttons exist for the map, whose level plates are the same
-   * hexagon the lane queues (§9.2 shape-coding). Routing them through this
-   * component rather than leaving them as bare hit areas is what gives forty
-   * of the game's most-pressed controls a pressed state.
-   */
   readonly shape?: "rect" | "hex";
-  /**
-   * An emblem set beside the label, sharing its centring — a star on the hints
-   * chip, for instance, which used to be a `★` inside the label string.
-   *
-   * A factory rather than a Container. It was required when paint() destroyed
-   * and rebuilt every child on each press; it is now called ONCE and the
-   * result repositioned, and the signature is kept because every caller passes
-   * a closure and there is nothing to gain from churning them.
-   */
   readonly emblem?: (() => Container) | undefined;
-  /**
-   * A MATERIAL FACE drawn over the flat fill — brass on the commit key.
-   *
-   * A factory for the same reason `emblem` is one: paint() destroys and
-   * rebuilds every child on each press. It is built inside paint and offset by
-   * the press depth, so the material sinks with the button instead of floating
-   * above a key that has moved out from under it. Adding the face as a sibling
-   * outside the component was the first attempt and it drew BEHIND the fill,
-   * which is why the key photographed as flat navy.
-   */
+  /** A bespoke casting, such as the engraved commit key or a map plaque. */
   readonly face?: ((width: number, height: number) => Container) | undefined;
   readonly onTap?: (() => void) | undefined;
 }
@@ -73,54 +32,69 @@ export interface ButtonOptions {
 /** How far a pressed button sinks. Small — it is depressing, not collapsing. */
 const PRESS_DEPTH = 2;
 
+/** Flat-top hexagon, shared by the hit material and map plaque face. */
+function path(g: Graphics, shape: "rect" | "hex", w: number, h: number, inset = 0): Graphics {
+  if (shape === "hex") {
+    const width = Math.max(0, w - inset * 2);
+    const height = Math.max(0, h - inset * 2);
+    const notch = Math.min(width * 0.16, height * 0.5);
+    return g.poly([
+      inset + notch, inset,
+      inset + width - notch, inset,
+      inset + width, inset + height / 2,
+      inset + width - notch, inset + height,
+      inset + notch, inset + height,
+      inset, inset + height / 2,
+    ]);
+  }
+  return g.roundRect(
+    inset,
+    inset,
+    Math.max(0, w - inset * 2),
+    Math.max(0, h - inset * 2),
+    Math.max(3, 7 - inset),
+  );
+}
+
+/**
+ * One procedural brass/glass CTA kit (ART_DIRECTION §3–5, GDD §9.0).
+ *
+ * Primary controls are raised brass keys. Secondary controls are felt wells
+ * held in brass. Both use the commit key's upper-left light, inset face,
+ * restrained grain and contact shadow; neither has a flat-fill escape hatch.
+ * State changes material and elevation instead of asking opacity to carry
+ * selected, disabled and spent at once.
+ */
 export function button(options: ButtonOptions): Container {
   const {
     width,
     height,
     label,
-    state = "idle",
-    labelColour = PALETTE.tokenInk,
-    fill = PALETTE.slotFilled,
-    outline,
+    variant = "secondary",
     fontSize,
     shape = "rect",
     emblem,
     face,
     onTap,
   } = options;
+  const state: ButtonState = options.armed ? "armed" : (options.state ?? "idle");
+  const interactive = (state === "idle" || state === "armed") && onTap !== undefined;
+  const elevated = state !== "unavailable";
 
   const root = new Container();
   const body = new Container();
   root.addChild(body);
 
-  const radius = 7;
-  const interactive = state === "idle" && onTap !== undefined;
+  const shadow = new Graphics();
+  shadow.label = "button-contact-shadow";
+  body.addChild(shadow);
 
-  /*
-   * THE CHILDREN ARE BUILT ONCE AND REDRAWN IN PLACE.
-   *
-   * `paint` used to open with
-   *
-   *   body.removeChildren().forEach((child) => child.destroy({ children: true }))
-   *
-   * which DESTROYED the display object the pointer was tracking, synchronously,
-   * inside the pointerdown handler. The immediately following pointerup then
-   * had no valid target, never reached this root, and the tap was lost. Given a
-   * gap the boundary re-resolved against the rebuilt children and the press
-   * worked — which is why it survived human taps of 50-150ms and failed every
-   * instant one. A pool tile, which does not repaint on press, was hit by the
-   * same synthetic click and fired: that contrast is what named the cause.
-   *
-   * Redrawing keeps §9.5's requirement intact. `Graphics.clear()` and a
-   * reposition are synchronous and land inside the same pointerdown, so the
-   * press is still immediate — the instantness never depended on the teardown,
-   * only on being done in the handler.
-   */
-  const g = new Graphics();
-  body.addChild(g);
+  const material = new Graphics();
+  material.label = `button-${variant}`;
+  body.addChild(material);
 
-  const material = face ? face(width, height) : null;
-  if (material) body.addChild(material);
+  const customFace = face ? face(width, height) : null;
+  if (customFace) body.addChild(customFace);
 
   const text = new Text({
     text: label,
@@ -128,7 +102,7 @@ export function button(options: ButtonOptions): Container {
       fontFamily: UI_FONT,
       fontSize: fontSize ?? Math.min(14, height * 0.42),
       fontWeight: "800",
-      fill: labelColour,
+      fill: state === "armed" ? PALETTE.highlight : PALETTE.tokenInk,
     }),
   });
   text.anchor.set(0.5);
@@ -137,55 +111,96 @@ export function button(options: ButtonOptions): Container {
   const mark = emblem ? emblem() : null;
   if (mark) body.addChild(mark);
 
-  const elevated = state !== "unavailable";
-  const notch = width * 0.16;
-  const path = (gr: Graphics, dy: number): Graphics =>
-    shape === "hex"
-      ? gr.poly([
-          notch, dy,
-          width - notch, dy,
-          width, dy + height / 2,
-          width - notch, dy + height,
-          notch, dy + height,
-          0, dy + height / 2,
-        ])
-      : gr.roundRect(0, dy, width, height, radius);
+  const radius = Math.min(9, height * 0.26);
+
+  /** Draw the shared soft contact shadow from broad to tight. */
+  const drawShadow = (lift: number): void => {
+    shadow.clear();
+    shadow.visible = elevated && lift > 0;
+    if (!shadow.visible) return;
+    for (let i = 3; i >= 1; i--) {
+      path(shadow, shape, width, height, i * 0.35)
+        .fill({ color: 0x1a0f08, alpha: (0.055 + i * 0.012) * lift });
+    }
+    shadow.position.set(0, 2.5 + lift * 1.8);
+  };
+
+  const grain = (g: Graphics, inset: number, colour: number, alpha: number): void => {
+    const usableW = Math.max(1, width - inset * 2);
+    const usableH = Math.max(1, height - inset * 2);
+    for (let i = 0; i < 7; i++) {
+      const x = inset + usableW * ((i * 0.37 + 0.11) % 1);
+      const y = inset + usableH * ((i * 0.61 + 0.17) % 1);
+      g.circle(x, y, 0.45 + (i % 2) * 0.25).fill({ color: colour, alpha });
+    }
+  };
+
+  const drawPrimary = (g: Graphics): void => {
+    const spent = state === "unavailable";
+    const armed = state === "armed";
+    const deep = spent ? 0x5d4b2b : PALETTE.brassDeep;
+    const mid = spent ? 0x77613a : (armed ? PALETTE.highlight : PALETTE.brass);
+    const light = spent ? 0x9b855d : PALETTE.brassLit;
+
+    path(g, shape, width, height).fill({ color: deep });
+    path(g, shape, width, height - Math.max(2, height * 0.09)).fill({ color: mid });
+    for (let i = 0; i < 4; i++) {
+      path(g, shape, width, height * (0.26 + i * 0.09), 1)
+        .fill({ color: light, alpha: spent ? 0.035 : 0.08 });
+    }
+    path(g, shape, width, height, 1.5)
+      .stroke({ width: 2, color: light, alpha: spent ? 0.22 : 0.55 });
+    g.moveTo(radius, 2).lineTo(width - radius, 2)
+      .stroke({ width: 2.5, color: light, alpha: spent ? 0.15 : 0.48 });
+    g.moveTo(radius, height - 2).lineTo(width - radius, height - 2)
+      .stroke({ width: 2.5, color: 0x2b1608, alpha: 0.42 });
+    g.ellipse(width * 0.22, height * 0.22, width * 0.18, Math.max(1, height * 0.07))
+      .fill({ color: 0xffffff, alpha: spent ? 0.04 : 0.15 });
+    grain(g, 5, 0x4a2f13, spent ? 0.07 : 0.13);
+  };
+
+  const drawSecondary = (g: Graphics): void => {
+    const spent = state === "unavailable";
+    const armed = state === "armed";
+    const rim = spent ? 0x67583b : (armed ? PALETTE.highlight : PALETTE.brass);
+    const rimDeep = spent ? 0x493e2d : PALETTE.brassDeep;
+    const felt = spent ? 0x2a231d : PALETTE.felt;
+    const inset = Math.max(3, Math.min(5, height * 0.14));
+
+    path(g, shape, width, height).fill({ color: rimDeep });
+    path(g, shape, width, height - 1).fill({ color: rim });
+    path(g, shape, width, height, inset).fill({ color: felt });
+    path(g, shape, width, height, inset)
+      .stroke({ width: 2.5, color: 0x000000, alpha: 0.38 });
+    g.moveTo(radius + inset, inset + 1.5)
+      .lineTo(width - radius - inset, inset + 1.5)
+      .stroke({ width: 2.5, color: 0x000000, alpha: 0.36 });
+    g.moveTo(radius, 1.5).lineTo(width - radius, 1.5)
+      .stroke({
+        width: 2,
+        color: spent ? 0x9b855d : PALETTE.brassLit,
+        alpha: spent ? 0.18 : 0.5,
+      });
+    g.ellipse(width * 0.2, height * 0.12, width * 0.12, Math.max(0.8, height * 0.045))
+      .fill({ color: 0xffffff, alpha: spent ? 0.025 : 0.1 });
+    grain(g, inset + 2, 0xd6b36a, spent ? 0.025 : 0.055);
+  };
 
   /** Redraw at a given press depth. Called synchronously on pointerdown. */
   const paint = (depth: number): void => {
     const lift = elevated ? 1 - depth / PRESS_DEPTH : 0;
-    g.clear();
-
-    /*
-     * The shadow is the state. An idle button casts, a pressed one pulls its
-     * shadow in tight because it has sunk toward the surface, and an
-     * unavailable one casts nothing at all because it is flush with it.
-     */
-    if (elevated && lift > 0) {
-      path(g, 2 + 1.5 * lift).fill({ color: 0x000000, alpha: 0.3 * lift });
+    drawShadow(lift);
+    material.clear();
+    material.visible = customFace === null;
+    if (material.visible) {
+      if (variant === "primary") drawPrimary(material);
+      else drawSecondary(material);
     }
-
-    path(g, depth).fill(fill);
-    // Same lighting as every other surface (§9.6): shadow along the top edge,
-    // rim light along the bottom.
-    g.moveTo(radius, depth + 2)
-      .lineTo(width - radius, depth + 2)
-      .stroke({ width: 2, color: 0x000000, alpha: 0.3 });
-    if (elevated) {
-      g.moveTo(radius, depth + height - 2)
-        .lineTo(width - radius, depth + height - 2)
-        .stroke({ width: 1.5, color: 0xffffff, alpha: 0.14 });
-    }
-    if (outline !== undefined) {
-      path(g, depth).stroke({ width: 2, color: outline });
-    }
-
-    if (material) material.position.set(0, depth);
+    material.position.set(0, depth);
+    if (customFace) customFace.position.set(0, depth);
 
     const midY = depth + height / 2;
     if (mark) {
-      // Label and emblem are centred as one run, so the pair sits where a plain
-      // label would rather than the text drifting left of centre.
       const gap = 4;
       const run = text.width + gap + mark.width;
       text.position.set(width / 2 - run / 2 + text.width / 2, midY);
@@ -197,21 +212,13 @@ export function button(options: ButtonOptions): Container {
 
   paint(0);
 
-  // `disabled` loses presence but keeps its shape and elevation: it is still
-  // here, just not now. `unavailable` keeps full opacity and loses its
-  // elevation instead, so the two never read as the same thing.
+  // Disabled is temporary absence: it keeps the raised material. Unavailable
+  // is spent material at full opacity and sits flush with no contact shadow.
   if (state === "disabled") root.alpha = DIM.alpha;
 
   if (interactive) {
     root.eventMode = "static";
     root.cursor = "pointer";
-
-    /*
-     * PRESSED IS IMMEDIATE. Repainted synchronously inside the pointerdown
-     * handler, with no tween and no frame of delay: a button that animates its
-     * press over 100ms feels broken however good the animation is, because the
-     * one thing a press must communicate is that the machine heard you.
-     */
     root.on("pointerdown", () => paint(PRESS_DEPTH));
     root.on("pointerup", () => {
       paint(0);

@@ -1,6 +1,6 @@
 import { Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
-import { button } from "../renderer/button.js";
+import { button, type ButtonState, type ButtonVariant } from "../renderer/button.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
@@ -170,15 +170,21 @@ export class MapScreen {
     w: number,
     h: number,
     text: string,
-    colour: number,
     onTap?: () => void,
     emblem?: () => Container,
+    options: {
+      readonly variant?: ButtonVariant;
+      readonly state?: ButtonState;
+      readonly armed?: boolean;
+    } = {},
   ): Container {
     const control = button({
       width: w,
       height: h,
       label: text,
-      labelColour: colour,
+      variant: options.variant,
+      state: options.state,
+      armed: options.armed,
       emblem,
       onTap,
     });
@@ -211,18 +217,6 @@ export class MapScreen {
      * `disabled`: a locked level does not become playable by waiting, only by
      * clearing the one before it.
      */
-    const control = button({
-      width: w,
-      height: h,
-      shape: "hex",
-      // The plate's face is the brass casting below; the button supplies the
-      // hit area and the four states, and must not paint over it.
-      label: "",
-      fill: PALETTE.targetPlate,
-      state: level.state === "locked" ? "unavailable" : "idle",
-      onTap: level.state === "locked" ? undefined : () => this.events?.onPlay(level.id),
-    });
-
     /*
      * BRASS, the same casting the lane queues (ART_DIRECTION §5).
      *
@@ -254,7 +248,6 @@ export class MapScreen {
     seat
       .roundRect(-2, -2, w + 4, h + 4, 8)
       .fill({ color: PALETTE.felt, alpha: level.state === "locked" ? 1 : 0.85 });
-    control.addChildAt(seat, 0);
 
     const face = targetPlate(
       w,
@@ -271,7 +264,6 @@ export class MapScreen {
       level.slot,
     );
     if (level.state === "locked") face.alpha = DIM.alpha;
-    control.addChild(face);
 
     // Best-ever stars, which only a cleared plate has.
     if (level.state === "cleared") {
@@ -282,8 +274,21 @@ export class MapScreen {
       const size = 8;
       const stars = emblemMeter("star", level.stars, 3, size);
       stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
-      control.addChild(stars);
+      face.addChild(stars);
     }
+
+    const control = button({
+      width: w,
+      height: h,
+      shape: "hex",
+      // The casting is the body. Supplying it as the face keeps the button
+      // backing transparent and sinks the plaque itself under a press.
+      label: "",
+      face: () => face,
+      state: level.state === "locked" ? "unavailable" : "idle",
+      onTap: level.state === "locked" ? undefined : () => this.events?.onPlay(level.id),
+    });
+    control.addChildAt(seat, 0);
 
     control.position.set(x, y);
     // The one OPEN level lands last: forty plates, and that is the door (§9.0).
@@ -546,9 +551,8 @@ export class MapScreen {
     const cancel = button({
       width: bw,
       height: 32,
-      label: "not yet",
-      labelColour: PALETTE.tray,
-      fill: PALETTE.felt,
+      label: "Cancel",
+      variant: "secondary",
       onTap: () => {
         this.pendingRestore = null;
         this.draw();
@@ -560,9 +564,8 @@ export class MapScreen {
     const buy = button({
       width: bw,
       height: 32,
-      label: affordable ? "restore" : "not enough",
-      labelColour: affordable ? PALETTE.highlight : PALETTE.tray,
-      fill: affordable ? PALETTE.slotFilled : PALETTE.felt,
+      label: affordable ? "Restore" : "Not Enough",
+      variant: "primary",
       // Disabled, not hidden: the price is the point (§6).
       state: affordable ? "idle" : "unavailable",
       onTap: affordable
@@ -573,7 +576,6 @@ export class MapScreen {
         : undefined,
     });
     buy.position.set(inner.x + bw + 12, inner.y + 50);
-    if (!affordable) buy.alpha = DIM.alpha;
     panel.addChild(buy);
 
     panel.position.set(x, y);
@@ -624,8 +626,8 @@ export class MapScreen {
       this.root.addChild(this.entry(lives, MAP_BANDS.header));
     }
 
-    const muteLabel = v.muted ? "sound off" : "sound on";
-    this.chip(DESIGN.width - PAD - 84, PAD + 30, 84, 20, muteLabel, PALETTE.tokenInk, () =>
+    const muteLabel = v.muted ? "Sound Off" : "Sound On";
+    this.chip(DESIGN.width - PAD - 84, PAD + 30, 84, 20, muteLabel, () =>
       this.events?.onToggleMute(),
     );
 
@@ -777,8 +779,7 @@ export class MapScreen {
         y,
         104,
         30,
-        `hints ${v.starsAvailable}`,
-        PALETTE.highlight,
+        `Hints ${v.starsAvailable}`,
         () => this.events?.onOpenShop(),
         () => star(11),
       );
@@ -792,10 +793,11 @@ export class MapScreen {
           y,
           62,
           30,
-          mode,
-          active ? PALETTE.highlight : PALETTE.tokenInk,
+          mode[0]!.toUpperCase() + mode.slice(1),
           () => this.events?.onSelectMode(mode),
-        ).alpha = active ? 1 : DIM.alpha;
+          undefined,
+          { armed: active },
+        );
         footerX += 66;
       }
     }
