@@ -244,7 +244,7 @@ export const TOKEN_SIZE = { min: 46, max: 120 } as const;
 
 /**
  * Left desk reserved for the brass automaton (PE-01 Scout REJECT fix).
- * Preferred companion height ~88 needs ~pool.x>=110 with 14px gutter air.
+ * Preferred companion height ~88 needs ~pool.x>=110 with 14px layout air; sprite uses 20px clearance.
  */
 export const AUTOMATON_DESK = 110;
 

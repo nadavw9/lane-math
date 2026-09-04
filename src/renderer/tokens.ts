@@ -144,7 +144,10 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
   // Well is nudged up; text at (w/2,h/2) parked short digits low vs board cube.
   const wellCX = panelX + panelW / 2;
   const wellCY = panelY + panelH / 2;
-  const numeralY = wellCY - panelH * 0.08;
+  // Short glyphs (esp. 1) read left-heavy in tabular figures — nudge right.
+  const numeralX = wellCX + (value.length === 1 ? panelW * 0.03 : 0);
+  // Cream digits read heavy; mild lift seats like board cube numerals.
+  const numeralY = wellCY - panelH * 0.055;
 
   inset.roundRect(panelX, panelY, panelW, panelH, radius).fill({ color: PALETTE.felt });
 
@@ -167,7 +170,7 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
     .stroke({ width: 1.5, color: 0xffffff, alpha: 0.13 });
 
   panel.addChild(inset);
-  text.position.set(wellCX, numeralY);
+  text.position.set(numeralX, numeralY);
   panel.addChild(text);
   return panel;
 }

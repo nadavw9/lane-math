@@ -38,7 +38,7 @@ const MIN_HEIGHT = 64;
 /** Kept clear of the viewport frame on the left. */
 const INSET_X = 4;
 /** Air between opaque body and pool — 8px still kissed under tile glow (PE-01). */
-const GUTTER_CLEARANCE = 14;
+const GUTTER_CLEARANCE = 20;
 
 /**
  * @param pool The pool band. Feet on its baseline; opaque body clears pool.x.
