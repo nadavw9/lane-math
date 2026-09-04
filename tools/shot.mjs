@@ -233,6 +233,17 @@ if (screen) {
       api.send({ type: "tapTile", id: b.id });
       if (api.state()?.affordance !== "commit") throw new Error("key not armed — nothing to shoot");
     }
+    if (name === "swap-armed") {
+      // Reach the swap arm through the same filled-slot tap a player uses.
+      const s0 = api.state();
+      const [a, b] = s0.tiles.filter((t) => !t.consumed);
+      const op = Object.keys(s0.budget)[0];
+      api.send({ type: "tapTile", id: a.id });
+      api.send({ type: "tapOperator", op });
+      api.send({ type: "tapTile", id: b.id });
+      api.send({ type: "tapSlot", index: 0 });
+      if (api.state()?.swapArmedSlot !== 0) throw new Error("operand not armed — nothing to shoot");
+    }
     if (name === "hint") {
       // A bought hint is the only way the hint line, and its mark, appear.
       api.send({ type: "buyHint", hint: "narrow" });

@@ -21,6 +21,7 @@ import {
   targetSlot,
 } from "./layout.js";
 import { button, type ButtonState } from "./button.js";
+import { armCueFor } from "./arm-cue.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
 import { emblemMeter, hintDiamond, meterWidth, star } from "./emblems.js";
@@ -139,6 +140,8 @@ export class Renderer {
   private readonly rewrites = new Map<number, { from: number; tween: Tween }>();
   /** Stars arriving one at a time on a clear. */
   private starArrivals: Tween[] = [];
+  /** One renderer-clock phase for the currently armed swap operand. */
+  private armCueMs = 0;
   /**
    * Hit-stop (§9.5): the board holds the PRE-commit frame for a beat so the
    * payoff lands. The new state is parked here rather than drawn, which is the
@@ -577,6 +580,8 @@ export class Renderer {
     this.reactToSlots(previous, next);
     this.reactToTransforms(previous, next);
 
+    if (previous.swapArmedSlot !== next.swapArmedSlot) this.armCueMs = 0;
+
     // A target was cleared: the tiles that paid for it shatter into it (§9.3).
     if (next.targetIndex > previous.targetIndex) {
       const consumed = previous.tiles.filter(
@@ -735,6 +740,7 @@ export class Renderer {
     this.laneAdvance = null;
     this.resist = null;
     this.starArrivals = [];
+    this.armCueMs = 0;
     this.hold = null;
   }
 
@@ -932,6 +938,13 @@ export class Renderer {
         this.hold = null;
         this.commitState(next);
       }
+      dirty = true;
+    }
+
+    // The swap cue shares the renderer's clock and review-speed control. It is
+    // intentionally the only continuously redrawn selection state.
+    if (this.state?.swapArmedSlot !== null && this.state?.phase === "playing") {
+      this.armCueMs += deltaMs * effectSpeed();
       dirty = true;
     }
 
@@ -1265,6 +1278,9 @@ export class Renderer {
       }
       // A filled slot keeps the SHAPE of what is in it: circle for the
       // operator, rounded square for a number. The row reads as a sentence.
+      const armCue = index === 0 || index === 2
+        ? armCueFor(index, s.swapArmedSlot, this.armCueMs)
+        : null;
       const token =
         index === 1
           ? operatorToken(Math.min(r.width, r.height), text, {
@@ -1275,18 +1291,22 @@ export class Renderer {
           : numberTile(r.width, r.height, text, {
               fill: PALETTE.tile,
               text: PALETTE.tokenInk,
-              bevel: 1,
+              bevel: armCue ? 1.12 : 1,
+              outline: armCue?.outline,
+              elevation: armCue?.elevation,
             });
-      // §3.5 swap gesture: arm dims the selected operand; the other stays
-      // bold so the second tap reads as the swap target — no new chrome.
-      if (s.swapArmedSlot !== null && (index === 0 || index === 2)) {
-        token.alpha = index === s.swapArmedSlot ? 0.55 : 1;
+      // §3.5 swap gesture: selection is MORE presence (§9.6). The armed
+      // operand lifts under a restrained brass rim; the other stays fully lit
+      // because it is still the swap target.
+      if (armCue) {
+        token.scale.set(armCue.scale);
       }
       this.entry(
         this.place(
           token,
-          r.x + resistDx + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0),
-          r.y,
+          r.x + resistDx + (index === 1 ? (r.width - Math.min(r.width, r.height)) / 2 : 0)
+            - (armCue ? r.width * (armCue.scale - 1) / 2 : 0),
+          r.y - (armCue ? armCue.lift + r.height * (armCue.scale - 1) / 2 : 0),
           tap,
         ),
         BOARD_BANDS.equation,
@@ -2229,8 +2249,31 @@ export class Renderer {
       const gap = 7;
       const buttonW = inner.width - 20;
       const buttonX = innerX + 10;
-      const firstY = innerY + 80;
+      const progressY = innerY + 82;
+      const firstY = innerY + 112;
       const hasNext = this.nextLevelId !== null;
+
+      /*
+       * ART GATE B1: turn the star tally into a visible cause before offering
+       * exits. The total is already banked by the Economy when this state is
+       * rendered, and the shell has already identified the plate it unlocked.
+       * One small star and one line are enough to connect clear → bank → map;
+       * another celebration layer would weaken the deliberate register.
+       */
+      const progress = new Container();
+      const banked = this.text(`${s.economy?.totalStars ?? 0} banked`, 12, PALETTE.tokenInk);
+      const destination = this.text(
+        hasNext ? `next ${this.nextLevelId} now open on map` : "Academy progress waits on map",
+        11,
+        PALETTE.highlight,
+      );
+      const progressStar = star(13);
+      progressStar.position.set(6.5, banked.height / 2);
+      banked.position.set(18, 0);
+      destination.position.set(18 + banked.width + 7, 1);
+      progress.addChild(progressStar, banked, destination);
+      progress.position.set(innerX + (inner.width - progress.width) / 2, progressY);
+      this.root.addChild(this.entry(progress, CLEARED_BANDS.progress, true));
 
       /*
        * NEXT LEVEL IS ABSENT, NOT DISABLED, at the end of the ladder.
