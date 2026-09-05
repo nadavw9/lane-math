@@ -588,6 +588,9 @@ Object.assign(window, {
       if (map.visible) map.show(viewWithRestoration());
     },
     showBoard,
+    endLevelIntro: () => renderer.endLevelIntro(),
+    setLevelIntroHint: (hint: string | null, message: string | null = null) => renderer.setLevelIntroHint(hint, message),
+    preLevelHint: () => director.preLevelHint(),
     mapView: () => mapView(economy, LEVEL_IDS),
     ads: () => ({ available: ads.available }),
     /** The §5.2 refill offer, exposed so the ad path can be exercised. */

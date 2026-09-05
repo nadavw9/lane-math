@@ -91,7 +91,8 @@ await new Promise((resolve, reject) => {
  * needs the shop at 3-6. Reviewing them on a fresh save shows an empty header
  * and proves nothing.
  */
-const seed = process.env["SHOT_SAVE"] ?? "";
+const seedFile = process.env["SHOT_SAVE_FILE"] ?? "";
+const seed = process.env["SHOT_SAVE"] ?? (seedFile ? await (await import("node:fs/promises")).readFile(seedFile, "utf8") : "");
 
 const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
@@ -133,6 +134,7 @@ const screen = process.env["SHOT_SCREEN"] ?? "";
 if (screen) {
   await page.evaluate(async (name) => {
     const api = window.laneMath;
+    if (name === "intro-hint") api.setLevelIntroHint?.(api.preLevelHint?.() ?? "Use one useful piece at this stage.");
     if (name === "map") api.showMap();
     if (name.startsWith("academy-")) {
       const n = Number(name.slice("academy-".length));
@@ -210,6 +212,7 @@ if (screen) {
       if (!api.state()?.warning) throw new Error("no warning on screen — nothing to shoot");
     }
     if (name === "failed") {
+      api.endLevelIntro?.();
       /*
        * THE FAILURE MODAL, which needs the warning OVERRIDDEN to reach.
        *
