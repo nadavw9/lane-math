@@ -6,7 +6,7 @@
 **When:** 2026-09-05 ~10:30 Europe/Athens (UTC+3)
 
 ## PR
-(see draft URL below once opened)
+https://github.com/nadavw9/lane-math/pull/8 (draft)
 
 ## Fixed (P0)
 
