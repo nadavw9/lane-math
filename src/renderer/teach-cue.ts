@@ -25,8 +25,8 @@ export function teachCueSample(target: Rect, elapsedMs: number, surfaceWidth = 4
     scale: 1.055 + breath * 0.015,
     ringAlpha: 0.72 + breath * 0.28,
     shadowAlpha: 0.24 + breath * 0.08,
-    handX: target.x + target.width * 0.78,
-    handY: target.y + target.height * 0.78 - 5 - breath * 5,
+    handX: target.x + target.width * 0.82,
+    handY: target.y + target.height * 0.98 - breath * 5,
     plaque: { x: plaqueX, y: plaqueY, width: plaqueWidth, height: 54 },
   };
 }

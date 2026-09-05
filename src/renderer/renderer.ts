@@ -1264,13 +1264,7 @@ export class Renderer {
       const index = s.tiles.findIndex((tile) => tile.id === id);
       if (index < 0) continue;
       const slot = poolSlot(index, pool, board.grid);
-      const shadow = new Graphics()
-      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
-      .fill({ color: PALETTE.handOutline, alpha: cue.shadowAlpha });
-    shadow.zIndex = BOARD_BANDS.status + 19;
-    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
-
-    const ring = new Graphics()
+      const ring = new Graphics()
         .roundRect(slot.x - 5 * pulse, slot.y - 5 * pulse, slot.width + 10 * pulse, slot.height + 10 * pulse, 10)
         .stroke({ width: 3, color: PALETTE.highlight, alpha: 0.8 });
       ring.eventMode = "none";
@@ -1426,6 +1420,12 @@ export class Renderer {
     if (!rect) return;
 
     const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
+    const shadow = new Graphics()
+      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
+      .fill({ color: PALETTE.handOutline, alpha: cue.shadowAlpha });
+    shadow.zIndex = BOARD_BANDS.status + 19;
+    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
+
     const ring = new Graphics()
       .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
       .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha });
@@ -1434,9 +1434,9 @@ export class Renderer {
 
     // A compact human hand silhouette; the fingertip lands on the live control.
     const hand = new Container();
-    hand.addChild(new Graphics().ellipse(-30, -1, 70, 36).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
+    hand.addChild(new Graphics().ellipse(-20, 0, 32, 18).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
     hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().ellipse(-2, -51, 14, 9).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
+    hand.addChild(new Graphics().ellipse(-2, -51, 7, 4.5).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
     hand.position.set(cue.handX, cue.handY);
     hand.rotation = -0.28;
     hand.zIndex = BOARD_BANDS.status + 22;
