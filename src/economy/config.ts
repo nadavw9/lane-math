@@ -20,7 +20,23 @@ export interface EconomyConfig {
    * gold, ads and connectivity. See `grantHardLockLife`.
    */
   readonly hardLockGraceMinutes: number;
+  /** Star totals required to enter each ten-level world bunch. */
+  readonly worldStarGates: Readonly<Record<number, number>>;
+  readonly cleanRetryUnlockLevelId: string;
+  readonly hintAdUnlockLevelId: string;
 }
+
+/** Product placeholders from the FTUE/monetization brief until tuned totals land. */
+export const STAR_GATE_WORLD_2 = 10;
+export const STAR_GATE_WORLD_3 = 25;
+export const STAR_GATE_WORLD_4 = 40;
+
+export const DEFAULT_WORLD_STAR_GATES: Readonly<Record<number, number>> = {
+  1: 0,
+  2: STAR_GATE_WORLD_2,
+  3: STAR_GATE_WORLD_3,
+  4: STAR_GATE_WORLD_4,
+};
 
 export const DEFAULT_ECONOMY: EconomyConfig = {
   maxLives: 5,
@@ -33,6 +49,9 @@ export const DEFAULT_ECONOMY: EconomyConfig = {
     { maxFailures: Number.POSITIVE_INFINITY, stars: 1 },
   ],
   hardLockGraceMinutes: 30,
+  worldStarGates: DEFAULT_WORLD_STAR_GATES,
+  cleanRetryUnlockLevelId: "2-01",
+  hintAdUnlockLevelId: "2-01",
 };
 
 /** GDD §5.1: 0 failures = 3 stars, 1 = 2 stars, 2+ = 1 star. */

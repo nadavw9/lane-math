@@ -111,6 +111,9 @@ export interface ViewState {
   readonly hints: readonly HintView[];
   readonly shop: readonly ShopEntry[];
   readonly shopOpen: boolean;
+  /* One-line teach-by-doing cue for the first plus board only. */
+  readonly teachingLine?: string | null;
+  readonly hintAd?: HintAdView | null;
 }
 
 export interface EconomyView {
@@ -160,6 +163,12 @@ export interface WarningView {
   readonly line: string;
 }
 
+export interface HintAdView {
+  readonly piece: number;
+  readonly text: string;
+  readonly reward: "bounded-piece";
+}
+
 export interface HintView {
   readonly type: string;
   readonly text: string;
@@ -185,6 +194,8 @@ export interface FailureExit {
   readonly continuesLeft: number;
   /** §5.2: the first failure on a never-cleared level is free. */
   readonly restartCostsLife: boolean;
+  /* Clean retry is the primary rewarded path once monetization is unlocked. */
+  readonly canCleanRetry: boolean;
 }
 
 export type InputEvent =
@@ -205,6 +216,10 @@ export type InputEvent =
   | { readonly type: "exportTelemetry" }
   /** Offer the §5.2 rewarded refill. Handled by the shell, not the Director. */
   | { readonly type: "tapWatchAd" }
+  | { readonly type: "tapCleanRetryAd" }
+  | { readonly type: "cleanRetryFromAd" }
+  | { readonly type: "tapLevelIntroStart" }
+  | { readonly type: "tapLevelIntroHintAd" }
   /** §9.4's Continue. The shell shows the ad; the Director owns the rewind. */
   | { readonly type: "tapContinue" }
   /**

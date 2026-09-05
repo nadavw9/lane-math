@@ -106,3 +106,15 @@ describe("no other level is filtered", () => {
     expect(committed.targetIndex, "and it does not advance the lane").toBe(0);
   });
 });
+
+describe("1-01 teaches by doing", () => {
+  it("moves through one-line cues as the equation is built", () => {
+    const { director, state } = open(CONSTRAINT_LEVEL);
+    expect(state.teachingLine).toBe("Tap a number.");
+    const nine = state.tiles.find((t) => t.value === 9)!;
+    let next = stateOf(director.handle({ type: "tapTile", id: nine.id }));
+    expect(next.teachingLine).toBe("Choose a sign.");
+    next = stateOf(director.handle({ type: "tapOperator", op: "+" }));
+    expect(next.teachingLine).toBe("Make the target.");
+  });
+});

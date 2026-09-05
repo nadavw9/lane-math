@@ -56,6 +56,7 @@ export type TelemetryEvent =
       readonly stars_spent: number;
     }
   | { readonly name: "life_depleted"; readonly level_id: string }
+  | { readonly name: "clean_retry_started"; readonly level_id: string; readonly attempt_number: number }
   /**
    * GDD §9.4: a rewarded continue was taken, and where it rewound to.
    *

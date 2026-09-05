@@ -235,6 +235,7 @@ export class Economy {
       ...before,
       failCount,
       firstFailureUsed: before.firstFailureUsed || exempt,
+      ratingAttempt: "tainted",
     };
 
     this.setProgress(levelId, progress, spend ? { lives: this.save.lives - 1 } : {});
@@ -254,21 +255,40 @@ export class Economy {
    */
   recordClear(levelId: string): ClearOutcome {
     const before = this.progressFor(levelId);
-    const stars = starsFor(before.failCount, this.config);
+    const stars = before.ratingAttempt === "clean" ? 3 : starsFor(before.failCount, this.config);
     const bestStars = Math.max(before.bestStars, stars);
     const improved = bestStars > before.bestStars;
 
     this.setProgress(
       levelId,
-      { ...before, cleared: true, bestStars },
+      { ...before, cleared: true, bestStars, ratingAttempt: "tainted" },
       { totalStars: this.save.totalStars + (bestStars - before.bestStars) },
     );
 
     return { stars, bestStars, improved, totalStars: this.save.totalStars };
   }
 
-  /** Stars available to spend: banked minus already spent (GDD §5.4). */
-  /**
+  /* Rating for the current attempt, including a rewarded clean retry. */
+  starsForAttempt(levelId: string): number {
+    const progress = this.progressFor(levelId);
+    return progress.ratingAttempt === "clean" ? 3 : starsFor(progress.failCount, this.config);
+  }
+
+  canStartCleanRetry(levelId: string): boolean {
+    if (levelId < this.config.cleanRetryUnlockLevelId) return false;
+    const progress = this.progressFor(levelId);
+    return progress.failCount > 0 && progress.ratingAttempt !== "clean";
+  }
+
+  /* Mint the persisted clean-rating token exactly once after a verified ad. */
+  beginCleanRetry(levelId: string): boolean {
+    if (!this.canStartCleanRetry(levelId)) return false;
+    const before = this.progressFor(levelId);
+    this.setProgress(levelId, { ...before, ratingAttempt: "clean" });
+    return true;
+  }
+
+  /***
    * Milliseconds until the next life regenerates, or 0 when already full.
    *
    * The out-of-lives screen must ALWAYS show this, running, whether or not an
