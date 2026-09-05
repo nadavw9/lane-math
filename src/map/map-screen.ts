@@ -400,13 +400,14 @@ export class MapScreen {
     face.alpha = presentation.faceAlpha;
 
     // Best-ever stars, which only a cleared plate has.
-    if (level.state === "cleared") {
+    const plateStars = mapPlateStars(level.state, level.stars, this.view?.totalStars ?? 0);
+    if (level.state === "cleared" && plateStars > 0) {
       // Drawn objects, not glyphs: Outfit has no star, so this used to be
       // whatever dingbat the device shipped (see emblems.ts).
       // 8, and sat low: at 9 the row clipped the numeral's descender, which is
       // the kind of overlap that only shows up once real progress is on screen.
       const size = 8;
-      const stars = emblemMeter("star", mapPlateStars(level.state, level.stars, this.view?.totalStars ?? 0), 3, size);
+      const stars = emblemMeter("star", plateStars, 3, size);
       stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
       face.addChild(stars);
     }

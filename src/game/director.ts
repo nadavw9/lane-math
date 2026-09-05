@@ -21,6 +21,7 @@ import { ALL_UNLOCKED, unlocksFor } from "../economy/unlocks.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import { HINT_COST, HINT_LABEL, generateHint, hintContext, type HintType } from "./hints.js";
 import { WinnabilityService } from "./winnability-service.js";
+import { ftueCue } from "./ftue.js";
 import type {
   Affordance,
   FailureExit,
@@ -657,6 +658,7 @@ export class Director {
       shop: this.shopEntries(),
       shopOpen: this.shopOpen,
       teachingLine: this.teachingLine(),
+      teachingPulse: ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op)?.pulse ?? null,
       hintAd: this.hintAd(),
     };
   }
@@ -676,10 +678,8 @@ export class Director {
   }
 
   private teachingLine(): string | null {
-    if (this.level.id !== CONSTRAINT_LEVEL || this.phase !== "playing" || this.economy?.progressFor(this.level.id).cleared === true) return null;
-    if (this.slots.leftTileId === null) return "Tap a number.";
-    if (this.slots.op === null) return "Choose a sign.";
-    return "Make the target.";
+    if (this.phase !== "playing" || this.economy?.progressFor(this.level.id).cleared === true) return null;
+    return ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op)?.line ?? null;
   }
 
   private render(): Command[] {
