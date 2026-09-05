@@ -569,6 +569,8 @@ Object.assign(window, {
     },
     /** What the feel layer is running right now — see Renderer.feelState. */
     feel: () => renderer.feelState(),
+    /** Proof harness: mute shatter FX so automaton mid-motion is photographable. */
+    clearShatters: () => renderer.clearShatters(),
     /** Every unbounded-growth candidate the renderer holds. */
     diagnostics: () => renderer.diagnostics(),
     sprites: () => ({ missing: missingSprites(), loaded: loadedSprites(), failed: failedAtlases() }),

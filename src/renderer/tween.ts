@@ -156,4 +156,11 @@ export const TIMING = {
   /** Gap between stars arriving, one at a time (§9.5). */
   starGap: 190,
   starArrive: 300,
+  /**
+   * Brass automaton win hop — restrained, not celebratory (~300–500ms).
+   * Weight register: one short hop (not an elastic bounce), no confetti.
+   */
+  automatonJump: 420,
+  /** Brass automaton fail settle/slump — a soft sigh, not a shake. */
+  automatonDroop: 380,
 } as const;
