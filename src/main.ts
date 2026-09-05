@@ -14,6 +14,7 @@ import { WinnabilityService } from "./game/winnability-service.js";
 import { buildExport, deliver } from "./telemetry/export.js";
 import { ConsoleSink, LocalStorageSink, Telemetry } from "./telemetry/telemetry.js";
 import { applyMove, enumerate, enumerateTransforms } from "./solver/index.js";
+import { shouldShowLevelIntro } from "./game/level-intro.js";
 
 /**
  * Mode comes from the save and defaults to Normal (§6). The selector that lets
@@ -111,6 +112,8 @@ const winnability = new WinnabilityService(
 let currentLevel = levels.get(LEVEL_IDS[0]!)!;
 let director: Director;
 let lastState: ViewState | null = null;
+/** First 2-01 opens board-first; subsequent opens keep the intro affordance. */
+const openedLevelIds = new Set<string>();
 
 function apply(commands: readonly Command[]): void {
   for (const command of commands) {
@@ -133,6 +136,8 @@ function nextLevelIdAfter(id: string): string | null {
 
 function open(level: LadderLevel): void {
   currentLevel = level;
+  const showLevelIntro = shouldShowLevelIntro(level.id, openedLevelIds, economy.config.hintAdUnlockLevelId);
+  openedLevelIds.add(level.id);
   // Null on the last level of the ladder, which is what the cleared panel uses
   // to decide between a button and a sentence.
   renderer.setNextLevel(nextLevelIdAfter(level.id));
@@ -143,7 +148,7 @@ function open(level: LadderLevel): void {
   renderer.endLevelIntro();
   renderer.beginEntrance();
   apply(director.firstRender());
-  if (level.id >= economy.config.hintAdUnlockLevelId) renderer.beginLevelIntro();
+  if (showLevelIntro) renderer.beginLevelIntro();
 }
 
 /*
