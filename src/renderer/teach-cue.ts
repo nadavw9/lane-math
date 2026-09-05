@@ -90,7 +90,10 @@ export function queueLookSample(waypoints: readonly Rect[], elapsedMs: number): 
   const handY = from.y + (to.y - from.y) * eased + to.h * 0.42;
   // Fade during the last 18% so the beat ends on "look", not "tap here".
   const handAlpha = progress >= 1 ? 0 : progress > 0.82 ? (1 - progress) / 0.18 : 1;
+  // After the sweep, keep an even soft outline on every plate — never a single
+  // front ring that reads as "tap this".
   const plateAlphas = centers.map((_, i) => {
+    if (progress >= 1) return 0.28;
     const peak = i / segments;
     const dist = Math.abs(progress - peak);
     return Math.max(0, 1 - dist * 2.4) * 0.55;
