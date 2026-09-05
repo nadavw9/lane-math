@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { teachCueSample } from "./teach-cue.js";
+import { queueSweepSample, teachCueSample } from "./teach-cue.js";
 
 describe("shared FTUE teach cue geometry", () => {
   it("lifts and pulses without an opacity field", () => {
@@ -26,5 +26,18 @@ describe("shared FTUE teach cue geometry", () => {
     expect(source).toContain("s.teachingTarget?.kind === \"operator\"");
     expect(source).toContain("const banner = (s.teachingTarget ? null : s.teachingLine)");
     expect(source).not.toContain("const pulseRect = s.teachingPulse");
+  });
+
+  it("sweeps the whole queue before pulsing its first relevant item", () => {
+    const back = { x: 100, y: 80, width: 120, height: 60 };
+    const front = { x: 100, y: 280, width: 120, height: 60 };
+    const start = queueSweepSample(back, front, 0);
+    const middle = queueSweepSample(back, front, 450);
+    const end = queueSweepSample(back, front, 900);
+    expect(start.handY).toBeLessThan(middle.handY);
+    expect(middle.handY).toBeLessThan(end.handY);
+    expect(start.targetAlpha).toBe(0);
+    expect(middle.targetAlpha).toBe(0);
+    expect(end.targetAlpha).toBe(1);
   });
 });

@@ -30,7 +30,7 @@ import {
 } from "./layout.js";
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
-import { teachCueSample } from "./teach-cue.js";
+import { queueSweepSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
@@ -1229,7 +1229,8 @@ export class Renderer {
     const frontY = frontSlot.y + frontSlot.height / 2;
 
     const veil = new Graphics()
-      .rect(lane.x, lane.y - 8, lane.width, pool.y + pool.height - lane.y + 16)
+      .rect(lane.x, lane.y - 8, lane.width, Math.max(0, focusSlot.y - lane.y + 8))
+      .rect(lane.x, focusSlot.y + focusSlot.height, lane.width, Math.max(0, pool.y + pool.height + 8 - focusSlot.y - focusSlot.height))
       .fill({ color: 0x120c08, alpha: 0.12 + sample.focus * 0.12 });
     veil.eventMode = "none";
     // entry-exempt: scripted trap focus veil arrives with the mid-commit beat.
@@ -1239,7 +1240,8 @@ export class Renderer {
     const path = new Graphics()
       .moveTo(equation.x + equation.width / 2, equation.y + equation.height / 2)
       .lineTo(frontX, frontY)
-      .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.4 + sample.focus * 0.35 });
+      .lineTo(focusX, focusY)
+      .stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.68 + sample.focus * 0.25 });
     path.eventMode = "none";
     // entry-exempt: scripted trap focus path arrives with the mid-commit beat.
     this.root.addChild(path);
@@ -1251,6 +1253,21 @@ export class Renderer {
     commitMarker.eventMode = "none";
     // entry-exempt: paused commit marker arrives with the mid-commit beat.
     this.root.addChild(commitMarker);
+
+    const handX = sample.focus < 0.2
+      ? lerp(equation.x + equation.width / 2, frontX, sample.commitProgress)
+      : lerp(frontX, focusX, sample.focus);
+    const handY = sample.focus < 0.2
+      ? lerp(equation.y + equation.height / 2, frontY, sample.commitProgress)
+      : lerp(frontY, focusY, sample.focus);
+    const hand = new Container();
+    hand.addChild(new Graphics().ellipse(-20, 0, 32, 18).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
+    hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
+    hand.addChild(new Graphics().ellipse(-2, -51, 7, 4.5).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
+    hand.position.set(handX + 22, handY + 26);
+    hand.rotation = -0.28;
+    hand.eventMode = "none";
+    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
 
     const pulse = 1 + 0.08 * Math.sin(sample.progress * Math.PI * 4);
     const focusRing = new Graphics()
@@ -1283,7 +1300,7 @@ export class Renderer {
     const later = this.text(String(warning.keystoneTarget ?? s.targets[laterIndex] ?? "?"), 16, PALETTE.tokenInk);
     later.anchor.set(0.5);
     later.position.set(focusX, focusY);
-    later.alpha = 0.82;
+    later.alpha = 1;
     // entry-exempt: later-target value arrives with its focus treatment.
     this.root.addChild(later);
   }
@@ -1414,12 +1431,31 @@ export class Renderer {
     } else if (target.kind === "operator") {
       const index = availableOps.indexOf(target.op);
       if (index >= 0) rect = operatorSlot(index, availableOps.length, board.operators, board.operatorGrid);
+    } else if (target.kind === "queue") {
+      rect = targetSlot(target.offset, board.lane, board.grid);
     } else {
       rect = equationSlot(3, board.equation);
     }
     if (!rect) return;
 
     const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
+    const queueSweep = target.kind === "queue";
+    const routeStart = queueSweep ? targetSlot(Math.max(0, s.targets.length - s.targetIndex - 1), board.lane, board.grid) : rect;
+    const startX = routeStart.x + routeStart.width / 2;
+    const startY = routeStart.y + routeStart.height / 2;
+    const targetX = rect.x + rect.width / 2;
+    const targetY = rect.y + rect.height / 2;
+    const sweep = queueSweep ? queueSweepSample(routeStart, rect, this.teachCueMs) : null;
+    const handX = sweep?.handX ?? cue.handX;
+    const handY = sweep?.handY ?? cue.handY;
+    if (queueSweep) {
+      const route = new Graphics()
+        .moveTo(startX, startY)
+        .lineTo(targetX, targetY)
+        .stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.72 });
+      route.eventMode = "none";
+      this.root.addChild(this.entry(route, BOARD_BANDS.status));
+    }
     const shadow = new Graphics()
       .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
       .fill({ color: PALETTE.handOutline, alpha: cue.shadowAlpha });
@@ -1428,7 +1464,7 @@ export class Renderer {
 
     const ring = new Graphics()
       .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
-      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha });
+      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * (sweep?.targetAlpha ?? 1) });
     ring.zIndex = BOARD_BANDS.status + 20;
     this.root.addChild(this.entry(ring, BOARD_BANDS.status));
 
@@ -1437,20 +1473,25 @@ export class Renderer {
     hand.addChild(new Graphics().ellipse(-20, 0, 32, 18).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
     hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
     hand.addChild(new Graphics().ellipse(-2, -51, 7, 4.5).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
-    hand.position.set(cue.handX, cue.handY);
+    hand.position.set(handX, handY);
     hand.rotation = -0.28;
     hand.zIndex = BOARD_BANDS.status + 22;
     this.root.addChild(this.entry(hand, BOARD_BANDS.status));
 
+    // The queue lesson must leave all three targets visible; seat its caption
+    // over the unused equation row rather than across the queue it names.
+    const plaqueRect = queueSweep
+      ? { ...cue.plaque, y: board.equation.y + 10 }
+      : cue.plaque;
     const plaque = new Graphics()
-      .roundRect(cue.plaque.x, cue.plaque.y, cue.plaque.width, cue.plaque.height, 14)
+      .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
       .fill({ color: PALETTE.felt, alpha: 0.98 })
       .stroke({ width: 4, color: PALETTE.brass });
     plaque.zIndex = BOARD_BANDS.status + 21;
     this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
     const copy = this.text(s.teachingLine, 20, PALETTE.tokenInk);
     copy.anchor.set(0.5);
-    copy.position.set(cue.plaque.x + cue.plaque.width / 2, cue.plaque.y + cue.plaque.height / 2);
+    copy.position.set(plaqueRect.x + plaqueRect.width / 2, plaqueRect.y + plaqueRect.height / 2);
     copy.zIndex = BOARD_BANDS.status + 23;
     this.root.addChild(this.entry(copy, BOARD_BANDS.status));
   }
@@ -1502,6 +1543,9 @@ export class Renderer {
     // §9.5: the queue advances with mass. Mid-advance every plate is drawn one
     // slot higher and falls in, so the column moves as a body.
     const advancing = this.laneAdvance ? 1 - this.laneAdvance.value : 0;
+    const scriptedFocusOffset = this.scriptedTrap?.next.warning?.scripted
+      ? Math.max(1, (this.scriptedTrap.next.warning.keystoneTargetIndex ?? s.targetIndex + 1) - s.targetIndex)
+      : -1;
 
     /*
      * Cleared targets leave a ghost, so the lane does not void out.
@@ -1574,7 +1618,8 @@ export class Renderer {
         slot.x + shove.dx,
         slot.y + shove.dy,
       );
-      if (!front) {
+      const queueTeach = s.teachingTarget?.kind === "queue";
+      if (!front && offset !== scriptedFocusOffset && !queueTeach) {
         // Stronger queue recess so the front carries hierarchy without brighter gold.
         plate.alpha = Math.min(DIM.alpha, 0.7);
       }
@@ -2391,6 +2436,7 @@ export class Renderer {
             32,
             w.scripted ? "Go Back" : "Got It",
             () => this.emit({ type: "dismissWarning" }),
+            { variant: w.scripted ? "primary" : "secondary" },
           ),
         );
       }

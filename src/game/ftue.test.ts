@@ -16,11 +16,15 @@ describe("first-session FTUE cue schedule", () => {
   });
 
   it("introduces the World 1 beats and World 2 multiply once", () => {
-    expect(ftueCue("1-02", state([1, 2]))?.line).toBe("There can be more than one way.");
+    const ways = state([6, 7, 5, 7, 9, 4]);
+    expect(ftueCue("1-02", ways)).toMatchObject({ line: "Try another way to make 13.", target: { kind: "tile", tileId: 0 } });
+    expect(ftueCue("1-02", { ...ways, leftTileId: 0 })).toMatchObject({ line: "Tap + to make 13.", target: { kind: "operator", op: "+" } });
+    expect(ftueCue("1-02", { ...ways, leftTileId: 0, op: "+" })).toMatchObject({ line: "Now choose 7.", target: { kind: "tile", tileId: 1 } });
+    expect(ftueCue("1-02", { ...ways, leftTileId: 0, op: "+", rightTileId: 1 })?.target).toEqual({ kind: "commit" });
     const minus = state([9, 5, 9, 2, 7, 3]);
     expect(ftueCue("1-03", minus)?.target).toEqual({ kind: "operator", op: "-" });
     expect(ftueCue("1-03", { ...minus, op: "-" })?.target).toEqual({ kind: "tile", tileId: 0 });
-    expect(ftueCue("1-06", state([1, 2]))?.line).toBe("Look at the whole queue.");
+    expect(ftueCue("1-06", state([1, 2]))).toMatchObject({ line: "Look at the whole queue.", target: { kind: "queue", offset: 0 } });
     const multiply = state([8, 3, 8, 2, 4, 5, 7, 5]);
     expect(ftueCue("2-01", multiply)?.target).toEqual({ kind: "operator", op: "*" });
     expect(ftueCue("2-01", { ...multiply, op: "+" })?.target).toEqual({ kind: "operator", op: "*" });
@@ -29,7 +33,7 @@ describe("first-session FTUE cue schedule", () => {
   });
 
   it("does not leave tutorial copy on later targets or 1-04", () => {
-    expect(ftueCue("1-02", state([1, 2], { targetIndex: 1 }))).toBeNull();
+    expect(ftueCue("1-02", state([6, 7], { targetIndex: 1 }))).toBeNull();
     expect(ftueCue("1-04", state([1, 2]))).toBeNull();
   });
 });

@@ -12,6 +12,13 @@ export interface TeachCueSample {
   readonly plaque: Rect;
 }
 
+export interface QueueSweepSample {
+  readonly progress: number;
+  readonly handX: number;
+  readonly handY: number;
+  readonly targetAlpha: number;
+}
+
 /** Shared phone-scale geometry for every exact live FTUE action marker. */
 export function teachCueSample(target: Rect, elapsedMs: number, surfaceWidth = 420): TeachCueSample {
   const phase = ((elapsedMs % PERIOD_MS) + PERIOD_MS) % PERIOD_MS / PERIOD_MS;
@@ -28,5 +35,20 @@ export function teachCueSample(target: Rect, elapsedMs: number, surfaceWidth = 4
     handX: target.x + target.width * 0.82,
     handY: target.y + target.height * 0.98 - breath * 5,
     plaque: { x: plaqueX, y: plaqueY, width: plaqueWidth, height: 54 },
+  };
+}
+
+/** Sweep the visible queue first; only then introduce the front-target pulse. */
+export function queueSweepSample(start: Rect, target: Rect, elapsedMs: number): QueueSweepSample {
+  const progress = Math.min(1, Math.max(0, elapsedMs) / 900);
+  const eased = progress * progress * (3 - 2 * progress);
+  const center = (rect: Rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+  const from = center(start);
+  const to = center(target);
+  return {
+    progress,
+    handX: from.x + (to.x - from.x) * eased + target.width * 0.32,
+    handY: from.y + (to.y - from.y) * eased + target.height * 0.5,
+    targetAlpha: progress === 1 ? 1 : 0,
   };
 }
