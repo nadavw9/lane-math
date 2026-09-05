@@ -619,6 +619,7 @@ Object.assign(window, {
     feel: () => renderer.feelState(),
     /** Proof harness: mute shatter FX so automaton mid-motion is photographable. */
     clearShatters: () => renderer.clearShatters(),
+    settleScriptedTrap: () => renderer.settleScriptedTrap(),
     /** Every unbounded-growth candidate the renderer holds. */
     diagnostics: () => renderer.diagnostics(),
     sprites: () => ({ missing: missingSprites(), loaded: loadedSprites(), failed: failedAtlases() }),

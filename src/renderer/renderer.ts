@@ -49,6 +49,7 @@ import {
   type TokenState,
 } from "./sprites.js";
 import { advancesTarget, isRewind } from "./transitions.js";
+import { SCRIPTED_TRAP_BEAT_MS, sampleScriptedTrapBeat, startsScriptedTrapBeat } from "./scripted-trap.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
 import { starsForClear } from "./star-sync.js";
 import {
@@ -171,6 +172,8 @@ export class Renderer {
    * the shatter would show the tiles already gone.
    */
   private hold: { next: ViewState; remainingMs: number } | null = null;
+  /** 1-04 keeps the tempting commit on screen while the later target speaks. */
+  private scriptedTrap: { next: ViewState; elapsedMs: number } | null = null;
 
   /**
    * The sound layer (§9.5 register, applied to audio).
@@ -507,6 +510,9 @@ export class Renderer {
       speed: effectSpeed(),
       holding: this.hold !== null,
       holdRemainingMs: this.hold?.remainingMs ?? 0,
+      scriptedTrap: this.scriptedTrap
+        ? { phase: sampleScriptedTrapBeat(this.scriptedTrap.elapsedMs).phase, progress: Number((this.scriptedTrap.elapsedMs / SCRIPTED_TRAP_BEAT_MS).toFixed(3)) }
+        : null,
       lifts: [...this.lifts.entries()].map(([id, t]) => ({ id, at: Number(t.raw.toFixed(3)) })),
       flights: this.flights.active().map((f) => ({
         kind: f.kind,
@@ -543,6 +549,16 @@ export class Renderer {
     this.fx.removeChildren();
   }
 
+  // Review harness: force the scripted teaching state to its settled warning.
+  settleScriptedTrap(): void {
+    if (this.scriptedTrap) {
+      const { next } = this.scriptedTrap;
+      this.scriptedTrap = null;
+      this.commitState(next);
+    }
+    this.draw();
+  }
+
   apply(commands: readonly Command[]): void {
     const rejected = commands.some((c) => c.type === "reject");
 
@@ -555,6 +571,14 @@ export class Renderer {
       }
       if (command.type === "render") {
         if (!rejected) this.rejection = null;
+
+        // 1-04 is a teaching pause, not a modal that appears after the fact.
+        // Keep the filled equation on screen while the lane focus treatment
+        // explains the reservation; the Director state is adopted afterwards.
+        if (this.state !== null && startsScriptedTrapBeat(this.state, command.state)) {
+          this.scriptedTrap = { next: command.state, elapsedMs: 0 };
+          continue;
+        }
 
         // A cleared target is the one moment worth holding (§9.5). Park the new
         // state; tick() swaps it in once the beat has passed.
@@ -592,7 +616,7 @@ export class Renderer {
    * anyone can act on what they are seeing — so nothing playable is lost.
    */
   private get inputLocked(): boolean {
-    return this.hold !== null;
+    return this.hold !== null || this.scriptedTrap !== null;
   }
 
   /**
@@ -813,6 +837,7 @@ export class Renderer {
     this.automatonFeel = null;
     this.armCueMs = 0;
     this.hold = null;
+    this.scriptedTrap = null;
   }
 
   /**
@@ -1031,6 +1056,17 @@ export class Renderer {
       }
     }
 
+    // The scripted trap owns the longer teaching hold.
+    if (this.scriptedTrap) {
+      this.scriptedTrap.elapsedMs += deltaMs * effectSpeed();
+      if (this.scriptedTrap.elapsedMs >= SCRIPTED_TRAP_BEAT_MS) {
+        const { next } = this.scriptedTrap;
+        this.scriptedTrap = null;
+        this.commitState(next);
+      }
+      dirty = true;
+    }
+
     // The hit-stop runs on the same scaled clock as everything else, so the
     // review harness can slow it down and photograph the held frame (§9.5).
     if (this.hold) {
@@ -1121,6 +1157,118 @@ export class Renderer {
     this.starsSounded = Math.max(this.starsSounded, seated);
 
     return running;
+  }
+
+  private drawScriptedTrapCommitHonesty(s: ViewState, board: Bands): void {
+    const beat = this.scriptedTrap;
+    if (!beat?.next.warning?.scripted) return;
+    const stagedIds = [s.slots.leftTileId, s.slots.rightTileId].filter((id): id is number => id !== null);
+    for (const id of stagedIds) {
+      const index = s.tiles.findIndex((tile) => tile.id === id);
+      if (index < 0) continue;
+      const r = poolSlot(index, board.pool, board.grid);
+      const cover = new Graphics().roundRect(r.x + 1, r.y + 1, r.width - 2, r.height - 2, Math.min(r.width, r.height) * 0.22).fill({ color: PALETTE.felt, alpha: 1 });
+      cover.eventMode = "none";
+      this.root.addChild(this.entry(cover, BOARD_BANDS.pool));
+      const hole = ghostSlot(r.width, r.height);
+      hole.position.set(r.x, r.y);
+      hole.eventMode = "none";
+      this.root.addChild(this.entry(hole, BOARD_BANDS.pool));
+    }
+    const op = s.slots.op;
+    if (op === null) return;
+    const available = [...BINARY.filter((candidate) => s.budget[candidate] !== undefined), ...UNARY.filter((candidate) => s.budget[candidate] !== undefined)];
+    const opIndex = available.indexOf(op);
+    if (opIndex < 0) return;
+    const r = operatorSlot(opIndex, available.length, board.operators, board.operatorGrid);
+    const size = Math.min(r.width, r.height);
+    const disc = operatorToken(size, LABEL[op] ?? op, { fill: PALETTE.operator, text: PALETTE.tokenInk, bevel: 0, elevation: 0 }, "unavailable", 0);
+    disc.alpha = 0.85;
+    disc.addChild(new Graphics().roundRect(size * 0.16, size * 0.46, size * 0.68, 3, 1.5).fill({ color: PALETTE.failed, alpha: 0.85 }));
+    disc.pivot.set(size / 2, size / 2);
+    disc.position.set(r.x + r.width / 2, r.y + size / 2);
+    disc.eventMode = "none";
+    this.root.addChild(this.entry(disc, BOARD_BANDS.operators));
+  }
+
+  /** Draw the 1-04 teach-by-doing beat while the Director state stays pre-rewind. */
+  private drawScriptedTrapBeat(s: ViewState, board: Bands): void {
+    const beat = this.scriptedTrap;
+    const warning = beat?.next.warning;
+    if (!beat || !warning?.scripted) return;
+
+    const sample = sampleScriptedTrapBeat(beat.elapsedMs);
+    this.drawScriptedTrapCommitHonesty(s, board);
+    const lane = board.lane;
+    const equation = board.equation;
+    const pool = board.pool;
+    const laterIndex = Math.max(s.targetIndex + 1, warning.keystoneTargetIndex ?? s.targetIndex + 1);
+    const focusOffset = Math.max(1, laterIndex - s.targetIndex);
+    const focusSlot = targetSlot(focusOffset, lane, board.grid);
+    const frontSlot = targetSlot(0, lane, board.grid);
+    const focusX = focusSlot.x + focusSlot.width / 2;
+    const focusY = focusSlot.y + focusSlot.height / 2;
+    const frontX = frontSlot.x + frontSlot.width / 2;
+    const frontY = frontSlot.y + frontSlot.height / 2;
+
+    const veil = new Graphics()
+      .rect(lane.x, lane.y - 8, lane.width, pool.y + pool.height - lane.y + 16)
+      .fill({ color: 0x120c08, alpha: 0.12 + sample.focus * 0.12 });
+    veil.eventMode = "none";
+    // entry-exempt: scripted trap focus veil arrives with the mid-commit beat.
+    this.root.addChild(veil);
+
+    // The brass path freezes halfway from the tempting equation to the lane.
+    const path = new Graphics()
+      .moveTo(equation.x + equation.width / 2, equation.y + equation.height / 2)
+      .lineTo(frontX, frontY)
+      .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.4 + sample.focus * 0.35 });
+    path.eventMode = "none";
+    // entry-exempt: scripted trap focus path arrives with the mid-commit beat.
+    this.root.addChild(path);
+    const commitMarker = new Graphics()
+      .circle(lerp(equation.x + equation.width / 2, frontX, sample.commitProgress), lerp(equation.y + equation.height / 2, frontY, sample.commitProgress), 11)
+      .fill({ color: PALETTE.highlight, alpha: 0.18 })
+      .circle(lerp(equation.x + equation.width / 2, frontX, sample.commitProgress), lerp(equation.y + equation.height / 2, frontY, sample.commitProgress), 11)
+      .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.9 });
+    commitMarker.eventMode = "none";
+    // entry-exempt: paused commit marker arrives with the mid-commit beat.
+    this.root.addChild(commitMarker);
+
+    const pulse = 1 + 0.08 * Math.sin(sample.progress * Math.PI * 4);
+    const focusRing = new Graphics()
+      .roundRect(focusSlot.x - 7 * pulse, focusSlot.y - 7 * pulse, focusSlot.width + 14 * pulse, focusSlot.height + 14 * pulse, 8)
+      .stroke({ width: 4, color: PALETTE.highlight, alpha: 0.55 + sample.focus * 0.35 });
+    focusRing.eventMode = "none";
+    // entry-exempt: later-target focus ring arrives with the mid-commit beat.
+    this.root.addChild(focusRing);
+
+    for (const id of warning.keystoneTileIds) {
+      const index = s.tiles.findIndex((tile) => tile.id === id);
+      if (index < 0) continue;
+      const slot = poolSlot(index, pool, board.grid);
+      const ring = new Graphics()
+        .roundRect(slot.x - 5 * pulse, slot.y - 5 * pulse, slot.width + 10 * pulse, slot.height + 10 * pulse, 10)
+        .stroke({ width: 3, color: PALETTE.highlight, alpha: 0.8 });
+      ring.eventMode = "none";
+      // entry-exempt: keystone tile pulse arrives with the mid-commit beat.
+      this.root.addChild(ring);
+    }
+
+    const caption = this.text(warning.line, 18, PALETTE.highlight);
+    caption.anchor.set(0.5);
+    caption.position.set(lane.x + lane.width / 2, lane.y + 20);
+    caption.alpha = 0.9;
+    // entry-exempt: scripted trap caption arrives with its focus treatment.
+    this.root.addChild(caption);
+
+    // Keep the later target visually dominant without adding a text wall.
+    const later = this.text(String(warning.keystoneTarget ?? s.targets[laterIndex] ?? "?"), 16, PALETTE.tokenInk);
+    later.anchor.set(0.5);
+    later.position.set(focusX, focusY);
+    later.alpha = 0.82;
+    // entry-exempt: later-target value arrives with its focus treatment.
+    this.root.addChild(later);
   }
 
   private text(value: string, size: number, colour: number): Text {
@@ -2044,6 +2192,8 @@ export class Renderer {
       this.drawOutOfLives(lane, eco);
     }
 
+    this.drawScriptedTrapBeat(s, board);
+
     // --- fatal move: BLOCKED in Casual and at 1-4, WARNED in Normal (§6) ---
     if (s.warning) {
       const w = s.warning;
@@ -2158,7 +2308,7 @@ export class Renderer {
             topY + 98,
             120,
             32,
-            w.scripted ? "Let Me Look" : "Got It",
+            w.scripted ? "Go Back" : "Got It",
             () => this.emit({ type: "dismissWarning" }),
           ),
         );
