@@ -535,6 +535,12 @@ Object.assign(window, {
       forcedStars = n;
       if (map.visible) map.show(viewWithRestoration());
     },
+    /** Review hook: force lives (0 opens the out-of-lives screen on a lives-active level). */
+    setLives: (n: number) => {
+      economy.setLives(n);
+      if (map.visible) map.show(viewWithRestoration());
+      else send({ type: "tick" });
+    },
     /** Review hook: open the restore confirm for a world. */
     tapRestore: (world: number) => map.openRestoreConfirm(world),
     /** Review hook: set every room's restored count (ART_DIRECTION §6). */

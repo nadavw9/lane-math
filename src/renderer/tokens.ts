@@ -150,6 +150,19 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
   const numeralY = wellCY - panelH * 0.055;
 
   inset.roundRect(panelX, panelY, panelW, panelH, radius).fill({ color: PALETTE.felt });
+  if (style.outline !== undefined) {
+    /*
+     * Cool lip on the felt well — the live-target signal when atlas brass and a
+     * Graphics hex cannot share an edge. Seated on the recess the eye already
+     * reads as the answer window.
+     */
+    inset.roundRect(panelX, panelY, panelW, panelH, radius).stroke({
+      width: Math.max(2, (style.outlineWidth ?? 3.5) * 0.55),
+      color: style.outline,
+      alpha: 0.95,
+      alignment: 1,
+    });
+  }
 
   /*
    * What makes it read as CUT rather than painted on: with one light from the
@@ -377,9 +390,19 @@ export function framedPanel(
   return { panel, interior: { x: ix, y: iy, width: iw, height: ih } };
 }
 
+/**
+ * Native plaque atlas top-edge notch as a fraction of frame width.
+ *
+ * Measured on plaques.webp (opaque top span 45..314 of 360). Procedural
+ * `hexPath` uses min(w*0.16, h*0.5), which diverges once the sprite is
+ * stretched away from the atlas aspect — the cool front rim then floats off
+ * the brass edge (OOL phone-eye P0).
+ */
+export const PLAQUE_ART_NOTCH = 45 / 360;
+
 /** Flat-top hexagon path, inset into its box. */
-function hexPath(g: Graphics, w: number, h: number): Graphics {
-  const notch = Math.min(w * 0.16, h * 0.5);
+function hexPath(g: Graphics, w: number, h: number, notchX?: number): Graphics {
+  const notch = notchX ?? Math.min(w * 0.16, h * 0.5);
   return g.poly([
     notch, 0,
     w - notch, 0,
@@ -433,14 +456,11 @@ export function targetPlate(
    */
   const art = spriteBase("plaque", "idle", w, h, Math.abs(variant) % 2);
   if (art) {
-    if (style.outline !== undefined) {
-      art.container.addChild(
-        hexPath(new Graphics(), w, h).stroke({
-          width: style.outlineWidth ?? 3.5,
-          color: style.outline,
-        }),
-      );
-    }
+    /*
+     * No floating Graphics hex over atlas plaques (phone-eye: cool stroke never
+     * shared an edge with the stretched casting). Live-target emphasis is the
+     * cool lip on the felt well inside recessedPanel — geometry that matches.
+     */
     // Felt well + cream numeral, seated on the content centre (not the shadow frame).
     const well = recessedPanel(w, h, value, style);
     well.position.set(art.numeral.x - w / 2, art.numeral.y - h / 2);
@@ -463,7 +483,12 @@ export function targetPlate(
     .stroke({ width: 2, color: 0xffffff, alpha: 0.1 });
 
   if (style.outline !== undefined) {
-    hexPath(g, w, h).stroke({ width: style.outlineWidth ?? 3, color: style.outline });
+    // Inner alignment: the rim is a lip on the plate, not a floating halo.
+    hexPath(g, w, h).stroke({
+      width: style.outlineWidth ?? 3,
+      color: style.outline,
+      alignment: 1,
+    });
   }
   token.addChild(g);
 

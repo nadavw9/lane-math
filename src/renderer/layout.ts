@@ -228,6 +228,14 @@ export interface BoardSize {
 }
 
 const PAD = 12;
+/**
+ * Design-space clearance under phone status / notch chrome.
+ *
+ * CSS `env(safe-area-inset-top)` is often 0 in Android WebView even when the
+ * system status bar overlays the canvas — PAD alone left the OOL cartouche and
+ * top HUD half-eaten. This is the in-canvas floor for top chrome.
+ */
+export const SAFE_TOP = 36;
 const GAP = 8;
 
 /**

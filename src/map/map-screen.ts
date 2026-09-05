@@ -3,7 +3,7 @@ import { Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } fr
 import { button, type ButtonState, type ButtonVariant } from "../renderer/button.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
-import { DESIGN, DIM, PALETTE, TRAY_ALPHA } from "../renderer/layout.js";
+import { DESIGN, DIM, PALETTE, SAFE_TOP, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
 import { OBJECTS, objectsFor, slotsFor, veiled, type Restored } from "./veil.js";
 import type { MapLevel, MapView } from "./model.js";
@@ -598,11 +598,11 @@ export class MapScreen {
      * last paper surface left in the game.
      */
     const header = woodenTray(width, 58, PALETTE.tray, TRAY_ALPHA);
-    header.position.set(PAD, PAD);
+    header.position.set(PAD, SAFE_TOP);
     this.root.addChild(this.entry(header, MAP_BANDS.header));
 
     const title = this.text("LANE MATH", 18, PALETTE.text, "900");
-    title.position.set(PAD + 10, PAD + 9);
+    title.position.set(PAD + 10, SAFE_TOP + 9);
     this.root.addChild(this.entry(title, MAP_BANDS.header));
 
     // Banked total. The map is the only place this belongs (§9.6: gold = earned).
@@ -611,10 +611,10 @@ export class MapScreen {
     const bankedStar = 15;
     const banked = this.text(`${v.starsAvailable}`, 17, PALETTE.highlightInk);
     banked.anchor.set(1, 0);
-    banked.position.set(DESIGN.width - PAD - 10 - bankedStar - 4, PAD + 9);
+    banked.position.set(DESIGN.width - PAD - 10 - bankedStar - 4, SAFE_TOP + 9);
     this.root.addChild(this.entry(banked, MAP_BANDS.header));
     const bankedEmblem = star(bankedStar);
-    bankedEmblem.position.set(DESIGN.width - PAD - 10 - bankedStar / 2, PAD + 9 + bankedStar * 0.62);
+    bankedEmblem.position.set(DESIGN.width - PAD - 10 - bankedStar / 2, SAFE_TOP + 9 + bankedStar * 0.62);
     this.root.addChild(this.entry(bankedEmblem, MAP_BANDS.header));
 
     // §7.6: lives are ABSENT before 2-8, not greyed out.
@@ -622,17 +622,17 @@ export class MapScreen {
       // §8: a brass pocket-watch, not a heart. Lives refill on a timer, so the
       // object that stands for one is a clock.
       const lives = emblemMeter("life", v.lives, v.maxLives, 14);
-      lives.position.set(PAD + 10, PAD + 33);
+      lives.position.set(PAD + 10, SAFE_TOP + 33);
       this.root.addChild(this.entry(lives, MAP_BANDS.header));
     }
 
     const muteLabel = v.muted ? "Sound Off" : "Sound On";
-    this.chip(DESIGN.width - PAD - 84, PAD + 30, 84, 20, muteLabel, () =>
+    this.chip(DESIGN.width - PAD - 84, SAFE_TOP + 30, 84, 20, muteLabel, () =>
       this.events?.onToggleMute(),
     );
 
     // --- the ladder: four worlds, ten levels each ---
-    let y = PAD + 58 + 14;
+    let y = SAFE_TOP + 58 + 14;
     for (const world of v.worlds) {
       const levels = v.levels.filter((l) => l.world === world);
       const rows = Math.ceil(levels.length / COLS);
