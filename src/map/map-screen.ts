@@ -36,6 +36,11 @@ export function academyProgressCopy(restored: number, totalObjects: number, tota
   return totalStars > 0 ? `${restored} of ${totalObjects} restored` : "";
 }
 
+/** Empty stale best ratings when the lifetime bank has been reset. */
+export function mapPlateStars(state: LevelState, stars: number, totalStars: number): number {
+  return state === "cleared" && totalStars > 0 ? stars : 0;
+}
+
 /**
  * The world map (GDD §7.6, unlocked by clearing 1-10).
  *
@@ -401,7 +406,7 @@ export class MapScreen {
       // 8, and sat low: at 9 the row clipped the numeral's descender, which is
       // the kind of overlap that only shows up once real progress is on screen.
       const size = 8;
-      const stars = emblemMeter("star", level.stars, 3, size);
+      const stars = emblemMeter("star", mapPlateStars(level.state, level.stars, this.view?.totalStars ?? 0), 3, size);
       stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
       face.addChild(stars);
     }

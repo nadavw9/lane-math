@@ -23,3 +23,9 @@ Visible in the fresh shortfall shot:
 - Existing `mapProgressCopy` behavior and 1-01 map/board flow remain covered.
 
 DRAFT ONLY — never merge.
+
+## Residual reject fix
+
+The map renderer now empties every cleared plate star well while totalStars is zero, including stale cleared plates in locked later worlds. A non-zero bank keeps the existing best-star meter.
+
+Reproducible review save: tools/map-star-gate-shortfall.json. Fresh evidence has empty star wells on all plates at the 0-star bank; no filled plate stars remain.

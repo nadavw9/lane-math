@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DIM, PALETTE } from "../renderer/layout.js";
-import { academyProgressCopy, mapFocusBeat, mapPlatePresentation, mapProgressCopy, worldGateCopy } from "./map-screen.js";
+import { academyProgressCopy, mapFocusBeat, mapPlatePresentation, mapPlateStars, mapProgressCopy, worldGateCopy } from "./map-screen.js";
 
 
 describe("the map's durable next-level focal", () => {
@@ -77,5 +77,17 @@ describe("Academy progress badge", () => {
 
   it("shows the restored tally once earned stars qualify it", () => {
     expect(academyProgressCopy(10, 16, 10)).toBe("10 of 16 restored");
+  });
+});
+
+
+describe("map plate stars", () => {
+  it("empties stale earned stars while the lifetime bank is zero", () => {
+    expect(mapPlateStars("cleared", 3, 0)).toBe(0);
+    expect(mapPlateStars("locked", 3, 0)).toBe(0);
+  });
+
+  it("keeps earned stars once the bank is non-zero", () => {
+    expect(mapPlateStars("cleared", 3, 10)).toBe(3);
   });
 });
