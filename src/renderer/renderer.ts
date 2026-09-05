@@ -781,7 +781,8 @@ export class Renderer {
      * under phone status chrome — Nadav phone-eye: top star/count half-hidden.
      */
     const border = Math.max(12, Math.min(width, height) * 0.075);
-    const cartoucheClear = border * 0.92 * 0.32 + 6;
+    // Cartouche protrudes border*0.38 above the panel; keep honest air above that.
+    const cartoucheClear = border * 0.38 + 16;
     const minY = SAFE_TOP + cartoucheClear;
     const preferredY = lane.y + lane.height / 2 - height / 2;
     const maxY = Math.max(minY, lane.y + lane.height - height - 4);
@@ -1572,7 +1573,7 @@ export class Renderer {
         // §8: brass pocket-watches, not hearts. Lives refill on a timer.
         const size = 14;
         const watches = emblemMeter("life", eco.lives, eco.maxLives, size);
-        watches.position.set(lane.x + 8, Math.max(lane.y + 10, SAFE_TOP + 4));
+        watches.position.set(lane.x + 8, Math.max(lane.y + 14, SAFE_TOP + 10));
         this.root.addChild(this.entry(watches, BOARD_BANDS.status));
 
         /*
@@ -1595,7 +1596,7 @@ export class Renderer {
          * its vertical middle against the emblems rather than on its top.
          */
         hud.anchor.set(0, 0.5);
-        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 16, Math.max(lane.y + 10, SAFE_TOP + 4) + size / 2);
+        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 16, Math.max(lane.y + 14, SAFE_TOP + 10) + size / 2);
         this.root.addChild(this.entry(hud, BOARD_BANDS.status));
       }
 
@@ -1620,7 +1621,7 @@ export class Renderer {
         // Same clearance at the other end: nothing sits beside the stars, but
         // the row is inset from the lane edge by the same margin so the two
         // meters read as a pair rather than as one tucked tighter than the other.
-        stars.position.set(lane.x + lane.width - 16 - meterWidth(3, size), Math.max(lane.y + 10, SAFE_TOP + 4));
+        stars.position.set(lane.x + lane.width - 16 - meterWidth(3, size), Math.max(lane.y + 14, SAFE_TOP + 10));
         this.root.addChild(this.entry(stars, BOARD_BANDS.status));
       }
 

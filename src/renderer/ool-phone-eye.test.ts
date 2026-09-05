@@ -11,18 +11,23 @@ import { PLAQUE_ART_NOTCH } from "./tokens.js";
  */
 describe("OOL phone-eye safe top", () => {
   it("exports a SAFE_TOP deeper than the old 12px PAD", () => {
-    expect(SAFE_TOP).toBeGreaterThanOrEqual(28);
+    expect(SAFE_TOP).toBeGreaterThanOrEqual(52);
   });
 
-  it("keeps the board HUD at or below SAFE_TOP even when the lane hugs PAD", () => {
+  it("keeps the HUD below SAFE_TOP with honest air inside the lane header", () => {
     for (const board of [
       { targets: 3, tiles: 8, operators: 3, hints: 0 },
       { targets: 8, tiles: 16, operators: 4, hints: 2 },
       { targets: 1, tiles: 4, operators: 2, hints: 0 },
+      { targets: 5, tiles: 10, operators: 3, hints: 0 },
     ]) {
       const b = bands(board);
-      const hudY = Math.max(b.lane.y + 10, SAFE_TOP + 4);
-      expect(hudY, `hudY for ${board.targets}/${board.tiles}`).toBeGreaterThanOrEqual(SAFE_TOP);
+      const hudY = Math.max(b.lane.y + 14, SAFE_TOP + 10);
+      expect(hudY, `hudY for ${board.targets}/${board.tiles}`).toBeGreaterThanOrEqual(SAFE_TOP + 10);
+      // Star tips (size 15) stay inside the 72px lane header.
+      expect(hudY + 15, `star bottom for ${board.targets}/${board.tiles}`).toBeLessThanOrEqual(
+        b.lane.y + 72 + 1e-9,
+      );
     }
   });
 
@@ -30,11 +35,11 @@ describe("OOL phone-eye safe top", () => {
     const width = DESIGN.width - 24;
     const height = 264;
     const border = Math.max(12, Math.min(width, height) * 0.075);
-    const cartoucheClear = border * 0.92 * 0.32 + 6;
+    const cartoucheClear = border * 0.38 + 16;
     const minY = SAFE_TOP + cartoucheClear;
-    // Cartouche top = panelY - protrusion; minY guarantees that >= SAFE_TOP.
-    const protrusion = border * 0.92 * 0.32;
-    expect(minY - protrusion).toBeGreaterThanOrEqual(SAFE_TOP - 1e-9);
+    // Cartouche top = panelY - protrusion; minY guarantees air above SAFE_TOP.
+    const protrusion = border * 0.38;
+    expect(minY - protrusion).toBeGreaterThanOrEqual(SAFE_TOP + 15);
   });
 });
 

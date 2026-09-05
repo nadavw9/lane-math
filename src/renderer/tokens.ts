@@ -362,19 +362,26 @@ export function framedPanel(
   }
   panel.addChild(studs);
 
-  // The centre cartouche, carrying the gold mark the hint line already uses.
+  /*
+   * Centre cartouche + gem. Must fully bridge the brass frame into the felt
+   * opening — a short pill left a pale rim stroke visible under the diamond
+   * (Scout REJECT PR #8: "white slivers under the diamond tab", same class as
+   * Nadav's half-clipped cartouche numeral).
+   */
   const cartouche = new Graphics();
-  const cw = border * 2.4;
-  const ch = border * 0.92;
+  const cw = border * 2.6;
+  const ch = border * 1.35;
+  const cartoucheTop = -border * 0.38;
   cartouche
-    .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch, ch * 0.42)
+    .roundRect(w / 2 - cw / 2, cartoucheTop, cw, ch, ch * 0.36)
     .fill({ color: PALETTE.brass });
   cartouche
-    .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch * 0.5, ch * 0.42)
-    .fill({ color: 0xffe9a8, alpha: 0.3 });
+    .roundRect(w / 2 - cw / 2, cartoucheTop, cw, ch * 0.48, ch * 0.36)
+    .fill({ color: 0xffe9a8, alpha: 0.28 });
   panel.addChild(cartouche);
-  const gem = hintDiamond(border * 0.72);
-  gem.position.set(w / 2, ch * 0.16);
+  const gem = hintDiamond(border * 0.78);
+  // Seat the gem in the cartouche body, clear of the felt-opening rim below.
+  gem.position.set(w / 2, cartoucheTop + ch * 0.42);
   panel.addChild(gem);
 
   /*
