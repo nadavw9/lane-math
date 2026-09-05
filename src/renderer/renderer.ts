@@ -2,7 +2,14 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, type
 
 import type { BinaryOp, UnaryOp } from "../solver/index.js";
 import type { Command, InputEvent, ViewState } from "../game/types.js";
-import { automaton, automatonState, THINKING_AFTER_MS } from "./automaton.js";
+import {
+  automaton,
+  automatonMotionOnEnter,
+  automatonState,
+  sampleAutomatonMotion,
+  THINKING_AFTER_MS,
+  type AutomatonMotionKind,
+} from "./automaton.js";
 import {
   DESIGN,
   DIM,
@@ -141,6 +148,11 @@ export class Renderer {
   private readonly rewrites = new Map<number, { from: number; tween: Tween }>();
   /** Stars arriving one at a time on a clear. */
   private starArrivals: Tween[] = [];
+  /**
+   * Brass automaton one-shot win/fail motion. Progress only — draw() samples
+   * it onto a fresh sprite each frame (same pattern as lifts / laneAdvance).
+   */
+  private automatonFeel: { kind: AutomatonMotionKind; tween: Tween } | null = null;
   /** One renderer-clock phase for the currently armed swap operand. */
   private armCueMs = 0;
   /**
@@ -484,6 +496,9 @@ export class Renderer {
       laneAdvance: this.laneAdvance ? Number(this.laneAdvance.raw.toFixed(3)) : null,
       resist: this.resist ? Number(this.resist.raw.toFixed(3)) : null,
       stars: this.starArrivals.map((s) => Number(s.raw.toFixed(3))),
+      automaton: this.automatonFeel
+        ? { kind: this.automatonFeel.kind, at: Number(this.automatonFeel.tween.raw.toFixed(3)) }
+        : null,
       shatters: this.shatters.length,
     };
   }
@@ -637,6 +652,15 @@ export class Renderer {
       );
     }
 
+    // Brass companion: one restrained hop on win, one soft droop on fail.
+    // Pose still comes from automatonState; this is the physical beat only.
+    const companionMotion = automatonMotionOnEnter(this.lastPhase, next.phase);
+    if (companionMotion === "jump") {
+      this.automatonFeel = { kind: "jump", tween: new Tween(TIMING.automatonJump, (t) => t) };
+    } else if (companionMotion === "droop") {
+      this.automatonFeel = { kind: "droop", tween: new Tween(TIMING.automatonDroop, (t) => t) };
+    }
+
     this.lastPhase = next.phase;
   }
 
@@ -744,6 +768,7 @@ export class Renderer {
     this.laneAdvance = null;
     this.resist = null;
     this.starArrivals = [];
+    this.automatonFeel = null;
     this.armCueMs = 0;
     this.hold = null;
   }
@@ -1007,6 +1032,10 @@ export class Renderer {
     if (this.resist) {
       if (this.resist.advance(deltaMs)) running = true;
       else this.resist = null;
+    }
+    if (this.automatonFeel) {
+      if (this.automatonFeel.tween.advance(deltaMs)) running = true;
+      else this.automatonFeel = null;
     }
     for (const star of this.starArrivals) {
       if (star.advance(deltaMs)) running = true;
@@ -2367,7 +2396,10 @@ export class Renderer {
     this.root.sortableChildren = true;
     {
       const mood = automatonState(s, this.idleMs);
-      const friend = automaton(mood, pool);
+      const motion = this.automatonFeel
+        ? sampleAutomatonMotion(this.automatonFeel.kind, this.automatonFeel.tween.raw)
+        : null;
+      const friend = automaton(mood, pool, motion);
       if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
     }
   }
