@@ -1653,9 +1653,12 @@ export class Renderer {
        * is second; the cool rim is third. WCAG 2.2 SC 1.4.11 exempts information
        * available in another form.
        */
+      // Look-at-queue beat: equal chrome on every plate so front 4 does not read as tap-this.
+      const queueTeach = s.teachingTarget?.kind === "queue";
+      const liveFront = front && !queueTeach;
       const plate = this.place(
         targetPlate(slot.width, slot.height, String(s.targets[i]), {
-          fill: front
+          fill: liveFront
             ? this.rejecting
               ? PALETTE.failed
               : PALETTE.targetFront
@@ -1663,19 +1666,18 @@ export class Renderer {
           text: PALETTE.tokenInk,
           bevel: 0, // recessed: targets are spent ON, not picked up
           // Cool rim on the live target — gold-on-brass failed the phone glance.
-          outline: front
+          outline: liveFront
             ? this.rejecting
               ? PALETTE.failed
               : PALETTE.targetFrontRim
             : undefined,
-          outlineWidth: front ? 4 : undefined,
+          outlineWidth: liveFront ? 4 : undefined,
         // Two plaque castings, picked from the target's position in the queue
         // so a column does not repeat one of them down its length.
         }, i),
         slot.x + shove.dx,
         slot.y + shove.dy,
       );
-      const queueTeach = s.teachingTarget?.kind === "queue";
       if (!front && offset !== scriptedFocusOffset && !queueTeach) {
         // Stronger queue recess so the front carries hierarchy without brighter gold.
         plate.alpha = Math.min(DIM.alpha, 0.7);
@@ -1684,7 +1686,7 @@ export class Renderer {
       this.entry(
         plate,
         // The FRONT target lands last: it is the focal point (§9.0).
-        front ? BOARD_BANDS.front : BOARD_BANDS.queue,
+        liveFront ? BOARD_BANDS.front : BOARD_BANDS.queue,
       );
     }
 
