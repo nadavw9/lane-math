@@ -1,4 +1,5 @@
-import type { RecordedEvent, TelemetryEvent } from "./events.js";
+import type { FtueCueKey } from "../game/ftue.js";
+import type { AdPlacement, LevelAbandonReason, MoveCommitPayload, RecordedEvent, TelemetryEvent } from "./events.js";
 
 /**
  * Where events go. Phase 4C ships the local sink only; the remote sink plugs in
@@ -84,6 +85,7 @@ export class Telemetry {
   private boardRenderedAt: number | null = null;
   private levelStartedAt: number | null = null;
   private currentLevel: string | null = null;
+  private activeAttempt: { levelId: string; attemptNumber: number } | null = null;
   private readonly completedWorlds = new Set<number>();
   private opened = false;
 
@@ -129,6 +131,7 @@ export class Telemetry {
     this.currentLevel = levelId;
     this.levelStartedAt = this.now();
     this.boardRenderedAt = null;
+    this.activeAttempt = { levelId, attemptNumber };
     this.record({ name: "level_start", level_id: levelId, attempt_number: attemptNumber, mode });
   }
 
@@ -152,10 +155,29 @@ export class Telemetry {
     this.record({ name: "first_tap_latency", level_id: this.currentLevel, ms });
   }
 
+  /** Emit the GDD event first, then its byte-for-byte compatibility alias. */
+  moveCommit(payload: MoveCommitPayload): void {
+    this.record({ name: "move_commit", ...payload });
+    this.record({ name: "equation_commit", ...payload });
+  }
+
   levelClear(levelId: string, stars: number): void {
     this.record({ name: "level_clear", level_id: levelId, stars });
     const match = /^([0-9]+)-10$/.exec(levelId);
     if (match) this.worldComplete(Number(match[1]));
+  }
+
+  levelFail(levelId: string, targetIndex: number, attemptNumber: number): void {
+    this.record({ name: "level_fail", level_id: levelId, target_index_of_failure: targetIndex, attempt_number: attemptNumber });
+    this.activeAttempt = null;
+  }
+
+  levelAbandon(levelId: string, attemptNumber: number, reason?: LevelAbandonReason): void {
+    if (this.activeAttempt?.levelId !== levelId || this.activeAttempt.attemptNumber !== attemptNumber) return;
+    this.record(reason === undefined
+      ? { name: "level_abandon", level_id: levelId, attempt_number: attemptNumber }
+      : { name: "level_abandon", level_id: levelId, attempt_number: attemptNumber, reason });
+    this.activeAttempt = null;
   }
 
   worldComplete(world: number): void {
@@ -168,16 +190,16 @@ export class Telemetry {
     this.record(focusLevelId === null ? { name: "map_open" } : { name: "map_open", focus_level_id: focusLevelId });
   }
 
-  adOfferShown(placement: string): void { this.record({ name: "ad_offer_shown", placement }); }
-  adCompleted(placement: string): void { this.record({ name: "ad_completed", placement }); }
-  adDismissed(placement: string): void { this.record({ name: "ad_dismissed", placement }); }
-  adFailed(placement: string): void { this.record({ name: "ad_failed", placement }); }
+  adOfferShown(placement: AdPlacement): void { this.record({ name: "ad_offer_shown", placement }); }
+  adCompleted(placement: AdPlacement): void { this.record({ name: "ad_completed", placement }); }
+  adDismissed(placement: AdPlacement): void { this.record({ name: "ad_dismissed", placement }); }
+  adFailed(placement: AdPlacement): void { this.record({ name: "ad_failed", placement }); }
 
   starBankUpdate(totalStars: number, delta: number, reason: string): void {
     this.record({ name: "star_bank_update", total_stars: totalStars, delta, reason });
   }
 
-  cueShown(levelId: string, cue: string): void {
+  cueShown(levelId: string, cue: FtueCueKey): void {
     this.record({ name: "ftue_cue_shown", level_id: levelId, cue });
   }
 
@@ -190,5 +212,6 @@ export class Telemetry {
       attempts,
       duration_ms: duration,
     });
+    this.activeAttempt = null;
   }
 }

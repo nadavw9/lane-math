@@ -21,6 +21,7 @@ export interface FunnelSummary {
   readonly firstTapMedianByWorld: Record<string, number>;
   readonly firstTapSamplesByWorld: Record<string, number>;
   readonly levelsStarted: number;
+  /** Count of GDD-canonical `level_complete`; compatibility `level_clear` is ignored. */
   readonly levelsCompleted: number;
   readonly levelsFailed: number;
   readonly sessions: number;
@@ -69,6 +70,8 @@ export function summarise(events: readonly RecordedEvent[]): FunnelSummary {
       byWorld.set(world, list);
     }
     if (event.name === "level_start") started++;
+    // `level_clear` is a compatibility convenience emitted beside the
+    // GDD-canonical event. Counting both would double every completion.
     if (event.name === "level_complete") completed++;
     if (event.name === "level_fail") failed++;
   }

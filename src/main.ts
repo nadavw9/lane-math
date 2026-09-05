@@ -13,6 +13,7 @@ import { setEffectSpeed } from "./renderer/effects.js";
 import { WinnabilityService } from "./game/winnability-service.js";
 import { buildExport, deliver } from "./telemetry/export.js";
 import { ConsoleSink, LocalStorageSink, Telemetry } from "./telemetry/telemetry.js";
+import type { AdPlacement } from "./telemetry/events.js";
 import { applyMove, enumerate, enumerateTransforms } from "./solver/index.js";
 import { shouldShowLevelIntro } from "./game/level-intro.js";
 
@@ -111,6 +112,7 @@ const winnability = new WinnabilityService(
 
 let currentLevel = levels.get(LEVEL_IDS[0]!)!;
 let director: Director;
+let directorReady = false;
 let lastState: ViewState | null = null;
 /** First 2-01 opens board-first; subsequent opens keep the intro affordance. */
 const openedLevelIds = new Set<string>();
@@ -135,6 +137,7 @@ function nextLevelIdAfter(id: string): string | null {
 }
 
 function open(level: LadderLevel): void {
+  if (directorReady) director.abandon("level_change");
   currentLevel = level;
   const showLevelIntro = shouldShowLevelIntro(level.id, openedLevelIds, economy.config.hintAdUnlockLevelId);
   openedLevelIds.add(level.id);
@@ -142,6 +145,7 @@ function open(level: LadderLevel): void {
   // to decide between a button and a sentence.
   renderer.setNextLevel(nextLevelIdAfter(level.id));
   director = new Director(level, economy.selectedMode, economy, telemetry, winnability);
+  directorReady = true;
   void renderer.setWorld(level.world);
   // The board arrives (§9.0). Every open, including a replay of the same level.
   renderer.setAdMessage(null);
@@ -211,6 +215,7 @@ function viewWithRestoration(): ReturnType<typeof mapView> {
 }
 
 function showMap(focusLevelId: string | null = null): void {
+  director.abandon("map");
   telemetry.mapOpen(focusLevelId);
   renderer.setBoardVisible(false);
   map.show(viewWithRestoration(), focusLevelId);
@@ -263,7 +268,7 @@ map.attach({
 const ads = new Ads(await loadAdMob());
 void ads.initialize();
 
-async function showTrackedAd(placement: string, offer: () => Promise<AdOutcome>): Promise<AdOutcome> {
+async function showTrackedAd(placement: AdPlacement, offer: () => Promise<AdOutcome>): Promise<AdOutcome> {
   telemetry.adOfferShown(placement);
   const outcome = await offer();
   if (outcome === "rewarded") telemetry.adCompleted(placement);
@@ -374,6 +379,10 @@ renderer.onInput((input) => {
   send(input);
 });
 open(currentLevel);
+
+// `pagehide` covers navigation, tab close and native-webview teardown. It is
+// synchronous because sinks must receive the terminal attempt before teardown.
+window.addEventListener("pagehide", () => director.abandon("app_exit"));
 
 // Lives regenerate on a timer, so the HUD has to notice without an input event.
 // Lives regenerate on a timer, so the HUD notices without an input event. Once
