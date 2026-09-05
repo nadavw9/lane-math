@@ -29,3 +29,14 @@ DRAFT ONLY — never merge.
 The map renderer now empties every cleared plate star well while totalStars is zero, including stale cleared plates in locked later worlds. A non-zero bank keeps the existing best-star meter.
 
 Reproducible review save: tools/map-star-gate-shortfall.json. Fresh evidence has empty star wells on all plates at the 0-star bank; no filled plate stars remain.
+
+## PR #18 — clear-to-map mid-handoff freeze
+
+The review harness now has `SHOT_SCREEN=map-handoff-mid`, using `tools/ftue-map-handoff-mid.json` (1-01..1-09 cleared, 1-10 live). It solves 1-10, opens the map, runs the entrance for 300ms, then freezes the frame.
+
+- Evidence: `docs/review/18-map-handoff-mid-201.png`
+- Settled comparison retained: `docs/review/17-map-library-201.png`
+- The freeze catches Library plate `1` for 2-01 while its open-plate alpha clamp is active; `mapPlateEntryAlpha` remains covered by the map presentation test at `>= 0.72`.
+- Capture: `SHOT_SAVE_FILE=tools/ftue-map-handoff-mid.json SHOT_LEVEL=1-10 SHOT_SCREEN=map-handoff-mid SHOT_QUERY=?sprites=1 node tools/shot.mjs 18-map-handoff-mid-201.png`
+
+DRAFT ONLY — never merge.
