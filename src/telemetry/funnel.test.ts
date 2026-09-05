@@ -41,6 +41,27 @@ describe("FTUE funnel lifecycle", () => {
     ]);
   });
 
+  it("closes one live attempt on abandon and ignores later duplicate exits", () => {
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink]);
+    telemetry.levelStart("1-04", 2, "normal");
+    telemetry.levelAbandon("1-04", 2, "map");
+    telemetry.levelAbandon("1-04", 2, "app_exit");
+    expect(sink.events.map((event) => event.event)).toEqual([
+      { name: "level_start", level_id: "1-04", attempt_number: 2, mode: "normal" },
+      { name: "level_abandon", level_id: "1-04", attempt_number: 2, reason: "map" },
+    ]);
+  });
+
+  it("does not abandon an attempt after its canonical terminal event", () => {
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink]);
+    telemetry.levelStart("1-04", 1, "normal");
+    telemetry.levelFail("1-04", 2, 1);
+    telemetry.levelAbandon("1-04", 1, "map");
+    expect(sink.events.map((event) => event.event.name)).toEqual(["level_start", "level_fail"]);
+  });
+
   it("emits world_complete once when level 10 clears", () => {
     const sink = new MemorySink();
     const telemetry = new Telemetry([sink]);

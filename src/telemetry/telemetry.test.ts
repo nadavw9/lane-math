@@ -135,6 +135,9 @@ describe("the funnel records every §7.8 event", () => {
     expect(names(sink).filter((n) => n === "first_tap")).toHaveLength(1);
 
     expect(sink.events.filter((e) => e.event.name === "equation_commit")).toHaveLength(level.targets.length);
+    const canonical = sink.events.filter((e) => e.event.name === "move_commit").map((e) => e.event);
+    const aliases = sink.events.filter((e) => e.event.name === "equation_commit").map(({ event: { name: _name, ...payload } }) => payload);
+    expect(aliases).toEqual(canonical.map(({ name: _name, ...event }) => event));
     expect(sink.events.filter((e) => e.event.name === "level_clear")).toHaveLength(1);
 
     const complete = find(sink, "level_complete")!;
@@ -155,12 +158,56 @@ describe("the funnel records every §7.8 event", () => {
     stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
     stateOf(director.handle({ type: "tick" }));
     expect(sink.events.filter((e) => e.event.name === "ftue_cue_shown")).toHaveLength(1);
+    expect(find(sink, "ftue_cue_shown")?.cue).toBe("tap_number");
 
     const state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
     c.advance(10);
     stateOf(director.handle({ type: "tapTile", id: state.tiles[0]!.id }));
     stateOf(director.handle({ type: "tick" }));
     expect(sink.events.filter((e) => e.event.name === "first_tap")).toHaveLength(1);
+  });
+
+  it("records the scripted trap when it is shown and its Go Back dismissal", () => {
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const director = new Director(load("1-04"), "normal", new Economy(new MemoryStore()), telemetry);
+    let state = stateOf(director.firstRender());
+    const idOf = (value: number) => state.tiles.find((tile) => tile.value === value && !tile.consumed)!.id;
+
+    state = stateOf(director.handle({ type: "tapTile", id: idOf(3) }));
+    state = stateOf(director.handle({ type: "tapOperator", op: "+" }));
+    state = stateOf(director.handle({ type: "tapTile", id: idOf(1) }));
+    state = stateOf(director.handle({ type: "tapCommit" }));
+    expect(state.warning?.scripted).toBe(true);
+    expect(find(sink, "ftue_trap_shown")).toEqual({ name: "ftue_trap_shown", level_id: "1-04", scripted: true });
+
+    stateOf(director.handle({ type: "dismissWarning" }));
+    expect(find(sink, "ftue_goback_dismiss")).toEqual({
+      name: "ftue_goback_dismiss",
+      level_id: "1-04",
+      scripted: true,
+      overridable: false,
+    });
+  });
+
+  it("marks an in-progress restart as an abandoned attempt before starting the next", () => {
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const director = new Director(load("1-01"), "normal", new Economy(new MemoryStore()), telemetry);
+    director.firstRender();
+    director.handle({ type: "tapRestart" });
+    expect(sink.events.map((event) => event.event.name)).toEqual([
+      "level_start",
+      "ftue_cue_shown",
+      "level_abandon",
+      "level_start",
+    ]);
+    expect(find(sink, "level_abandon")).toEqual({
+      name: "level_abandon",
+      level_id: "1-01",
+      attempt_number: 1,
+      reason: "restart",
+    });
   });
 
   it("records shell funnel names and de-duplicates world completion", () => {

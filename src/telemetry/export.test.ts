@@ -61,6 +61,7 @@ describe("the rest of the funnel", () => {
     const summary = summarise([
       { at: 0, session: 1, event: { name: "level_start", level_id: "1-01", attempt: 1, mode: "normal" } },
       { at: 1, session: 1, event: { name: "level_complete", level_id: "1-01", stars: 3, ms: 40 } },
+      { at: 1, session: 1, event: { name: "level_clear", level_id: "1-01", stars: 3 } },
       { at: 2, session: 2, event: { name: "level_start", level_id: "1-02", attempt: 1, mode: "normal" } },
       { at: 3, session: 2, event: { name: "level_fail", level_id: "1-02", target_index: 1, moves: 2 } },
     ] as unknown as RecordedEvent[]);

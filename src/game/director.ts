@@ -19,6 +19,8 @@ import { livesActiveFor } from "../economy/config.js";
 import type { Economy } from "../economy/economy.js";
 import { ALL_UNLOCKED, unlocksFor } from "../economy/unlocks.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
+import type { LevelAbandonReason } from "../telemetry/events.js";
+import type { FtueCueKey } from "./ftue.js";
 import { HINT_COST, HINT_LABEL, generateHint, hintContext, type HintType } from "./hints.js";
 import { WinnabilityService } from "./winnability-service.js";
 import { ftueCue } from "./ftue.js";
@@ -146,7 +148,7 @@ export class Director {
   /** GDD §9.4: at most two per attempt, so a level cannot be bought outright. */
   private continuesUsed = 0;
   /** Cues are emitted once per level/session, even when render is called repeatedly. */
-  private readonly shownFtueCues = new Set<string>();
+  private readonly shownFtueCues = new Set<FtueCueKey>();
 
   constructor(
     level: LadderLevel,
@@ -174,6 +176,11 @@ export class Director {
     // The board is on screen as soon as the first render lands, which is the
     // same turn as construction — so the first_tap stopwatch starts here.
     this.telemetry?.boardRendered();
+  }
+
+  /** Shell lifecycle hook; ignored by Telemetry once this attempt is terminal. */
+  abandon(reason: LevelAbandonReason): void {
+    this.telemetry?.levelAbandon(this.level.id, this.failures + 1, reason);
   }
 
   /**
@@ -631,9 +638,9 @@ export class Director {
 
   private state(): ViewState {
     const cue = ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op);
-    if (cue !== null && !this.shownFtueCues.has(cue.line)) {
-      this.shownFtueCues.add(cue.line);
-      this.telemetry?.cueShown(this.level.id, cue.line);
+    if (cue !== null && !this.shownFtueCues.has(cue.key)) {
+      this.shownFtueCues.add(cue.key);
+      this.telemetry?.cueShown(this.level.id, cue.key);
     }
     return {
       levelId: this.level.id,
@@ -715,7 +722,16 @@ export class Director {
       //
       // On an overridable warning the equation was left standing so the
       // override could replay it, so "go back" has to take it down here.
-      if (this.warning?.overridable || this.warning?.scripted) {
+      const warning = this.warning;
+      if (warning) {
+        this.telemetry?.record({
+          name: "ftue_goback_dismiss",
+          level_id: this.level.id,
+          scripted: warning.scripted,
+          overridable: warning.overridable,
+        });
+      }
+      if (warning?.overridable || warning?.scripted) {
         this.slots = { leftTileId: null, op: null, rightTileId: null };
         this.swapArmed = null;
       }
@@ -761,6 +777,7 @@ export class Director {
       return this.buyHint(input.hint as HintType);
     }
     if (input.type === "tapRestart") {
+      this.abandon("restart");
       // A cleared level replays fresh (§5.1); anything else keeps its counter.
       if (this.phase === "won" && this.economy?.progressFor(this.level.id).cleared) {
         return this.replay();
@@ -990,17 +1007,9 @@ export class Director {
       return this.reject(`${left.value} ${op} ${right.value} is not allowed here`);
     }
     if (result !== target) {
-      this.telemetry?.record({
-        name: "move_commit",
+      this.telemetry?.moveCommit({
         level_id: this.level.id,
         expression: `${left.value} ${op} ${right.value}`,
-        correct: false,
-        target_index: this.targetIndex,
-      });
-      this.telemetry?.record({
-        name: "equation_commit",
-        level_id: this.level.id,
-        expression: left.value + " " + op + " " + right.value,
         correct: false,
         target_index: this.targetIndex,
       });
@@ -1012,17 +1021,9 @@ export class Director {
     const blocked = this.checkFatalMove(left, right, op);
     if (blocked) return blocked;
 
-    this.telemetry?.record({
-      name: "move_commit",
+    this.telemetry?.moveCommit({
       level_id: this.level.id,
       expression: `${left.value} ${op} ${right.value}`,
-      correct: true,
-      target_index: this.targetIndex,
-    });
-    this.telemetry?.record({
-      name: "equation_commit",
-      level_id: this.level.id,
-      expression: left.value + " " + op + " " + right.value,
       correct: true,
       target_index: this.targetIndex,
     });
@@ -1109,6 +1110,9 @@ export class Director {
       this.pendingFatal = { kind: "binary", leftId: left.id, rightId: right.id, op };
     }
     this.warning = this.warningView(`${left.value} ${op} ${right.value}`, !blocks);
+    if (this.warning.scripted) {
+      this.telemetry?.record({ name: "ftue_trap_shown", level_id: this.level.id, scripted: true });
+    }
     if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;
     this.message = null;
     return this.render();
@@ -1206,6 +1210,9 @@ export class Director {
     this.transformOp = null;
     this.pendingFatal = blocks ? null : { kind: "unary", tileId: tile.id, op };
     this.warning = this.warningView(`${op} ${tile.value} → ${to}`, !blocks);
+    if (this.warning.scripted) {
+      this.telemetry?.record({ name: "ftue_trap_shown", level_id: this.level.id, scripted: true });
+    }
     if (this.scriptedTrapLevel) this.scriptedRewindUsed = true;
     return this.render();
   }
@@ -1259,12 +1266,7 @@ export class Director {
       this.failures = outcome?.failCount ?? this.failures + 1;
       this.lastFailureExempt = outcome?.firstFailureExempt ?? false;
       this.message = `${target} cannot be made from what is left`;
-      this.telemetry?.record({
-        name: "level_fail",
-        level_id: this.level.id,
-        target_index_of_failure: this.targetIndex,
-        attempt_number: this.failures,
-      });
+      this.telemetry?.levelFail(this.level.id, this.targetIndex, this.failures);
       if (outcome?.lifeSpent && outcome.livesRemaining === 0) {
         this.telemetry?.record({ name: "life_depleted", level_id: this.level.id });
       }

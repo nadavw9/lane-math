@@ -4,6 +4,23 @@
  * Read as a step-by-step funnel, not an average — "a single averaged retention
  * number hides exactly where players leave."
  */
+import type { FtueCueKey } from "../game/ftue.js";
+
+export type AdPlacement = "ftue_hint" | "clean_retry" | "continue" | "life_refill";
+export type LevelAbandonReason = "map" | "restart" | "level_change" | "app_exit";
+
+export interface MoveCommitPayload {
+  readonly level_id: string;
+  readonly expression: string;
+  readonly correct: boolean;
+  readonly target_index: number;
+}
+
+/** Canonical equation attempt event from GDD §7.8. */
+export type MoveCommitEvent = { readonly name: "move_commit" } & MoveCommitPayload;
+/** Compatibility alias for consumers that predate the canonical name. */
+export type EquationCommitEvent = { readonly name: "equation_commit" } & MoveCommitPayload;
+
 export type TelemetryEvent =
   | { readonly name: "app_open"; readonly first_open: boolean; readonly session_index: number }
   | {
@@ -23,13 +40,7 @@ export type TelemetryEvent =
    * telemetry long before it reaches reviews or churn.
    */
   | { readonly name: "first_tap_latency"; readonly level_id: string; readonly ms: number }
-  | {
-      readonly name: "move_commit";
-      readonly level_id: string;
-      readonly expression: string;
-      readonly correct: boolean;
-      readonly target_index: number;
-    }
+  | MoveCommitEvent
   | {
       readonly name: "unary_transform";
       readonly level_id: string;
@@ -57,16 +68,20 @@ export type TelemetryEvent =
     }
   | { readonly name: "life_depleted"; readonly level_id: string }
   | { readonly name: "first_tap"; readonly level_id: string }
-  | { readonly name: "equation_commit"; readonly level_id: string; readonly expression: string; readonly correct: boolean; readonly target_index: number }
+  | EquationCommitEvent
+  /** Convenience clear signal retained for existing dashboards; not GDD-canonical. */
   | { readonly name: "level_clear"; readonly level_id: string; readonly stars: number }
-  | { readonly name: "ftue_cue_shown"; readonly level_id: string; readonly cue: string }
+  | { readonly name: "ftue_cue_shown"; readonly level_id: string; readonly cue: FtueCueKey }
+  | { readonly name: "ftue_trap_shown"; readonly level_id: string; readonly scripted: boolean }
+  | { readonly name: "ftue_goback_dismiss"; readonly level_id: string; readonly scripted: boolean; readonly overridable: boolean }
+  | { readonly name: "level_abandon"; readonly level_id: string; readonly attempt_number: number; readonly reason?: LevelAbandonReason }
   | { readonly name: "star_bank_update"; readonly total_stars: number; readonly delta: number; readonly reason: string }
   | { readonly name: "map_open"; readonly focus_level_id?: string }
   | { readonly name: "world_complete"; readonly world: number }
-  | { readonly name: "ad_offer_shown"; readonly placement: string }
-  | { readonly name: "ad_completed"; readonly placement: string }
-  | { readonly name: "ad_dismissed"; readonly placement: string }
-  | { readonly name: "ad_failed"; readonly placement: string }
+  | { readonly name: "ad_offer_shown"; readonly placement: AdPlacement }
+  | { readonly name: "ad_completed"; readonly placement: AdPlacement }
+  | { readonly name: "ad_dismissed"; readonly placement: AdPlacement }
+  | { readonly name: "ad_failed"; readonly placement: AdPlacement }
   | { readonly name: "clean_retry_started"; readonly level_id: string; readonly attempt_number: number }
   /**
    * GDD §9.4: a rewarded continue was taken, and where it rewound to.
