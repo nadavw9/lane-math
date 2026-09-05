@@ -195,11 +195,6 @@ if (screen) {
       if (api.state()?.phase !== "won") throw new Error("1-10 did not reach the won phase");
       api.showMapAfterClear?.();
       api.setEffectSpeed?.(1);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      api.setEffectSpeed?.(0);
-      const next = api.mapView?.()?.levels?.find((level) => level.id === "2-01");
-      if (!next || next.state !== "open") throw new Error("Library 2-01 is not open during handoff");
-      settleWait = 280;
     }
     if (name === "cleared") {
       /*
