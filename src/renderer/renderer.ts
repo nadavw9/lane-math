@@ -1444,9 +1444,12 @@ export class Renderer {
     shadow.zIndex = BOARD_BANDS.status + 19;
     this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
 
+    const pulseColor = cue.crest > 0.72 ? PALETTE.brassPulseHot : PALETTE.brassPulse;
     const ring = new Graphics()
+      .roundRect(rect.x - 5, rect.y - cue.lift - 5, rect.width + 10, rect.height + 10, 14)
+      .stroke({ width: 3, color: PALETTE.brassPulseDeep, alpha: 0.55 * ringAlphaScale })
       .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
-      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * ringAlphaScale });
+      .stroke({ width: 5, color: pulseColor, alpha: cue.ringAlpha * ringAlphaScale });
     ring.zIndex = BOARD_BANDS.status + 20;
     this.root.addChild(this.entry(ring, BOARD_BANDS.status));
 
@@ -1518,7 +1521,7 @@ export class Renderer {
         if (alpha <= 0.05) continue;
         const ring = new Graphics()
           .roundRect(plate.x - 5, plate.y - 5, plate.width + 10, plate.height + 10, 12)
-          .stroke({ width: 4, color: PALETTE.brassLit, alpha });
+          .stroke({ width: 4, color: PALETTE.brassPulse, alpha });
         ring.zIndex = BOARD_BANDS.status + 20;
         ring.eventMode = "none";
         this.root.addChild(this.entry(ring, BOARD_BANDS.status));
@@ -1835,7 +1838,7 @@ export class Renderer {
         text: PALETTE.tokenInk,
         bevel: lit ? 1 : DIM.bevel,
         elevation: taught ? 2.5 : lit ? 1 : DIM.elevation,
-        outline: taught || s.transformOp === op ? PALETTE.brassLit : undefined,
+        outline: taught ? PALETTE.brassPulse : s.transformOp === op ? PALETTE.brassLit : undefined,
         outlineWidth: taught ? 6 : undefined,
         /*
          * GDD §7.6: the count appears with counted operators at 3-3, and NEVER
@@ -1968,7 +1971,7 @@ export class Renderer {
         elevation: dimmed ? DIM.elevation : taught ? 2.5 : 1 + rise * 1.6,
         outline:
           taught || transformable || pulsed.has(tile.id) || hinted.has(tile.id)
-            ? taught ? PALETTE.brassLit : PALETTE.highlight
+            ? taught ? PALETTE.brassPulse : PALETTE.highlight
             : undefined,
         outlineWidth: taught ? 6 : undefined,
       }, "idle", tile.id);
