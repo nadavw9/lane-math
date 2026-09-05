@@ -3,6 +3,7 @@ import { Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } fr
 import { button, type ButtonState, type ButtonVariant } from "../renderer/button.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
+import { EASE, TIMING, Tween } from "../renderer/tween.js";
 import { DESIGN, DIM, PALETTE, SAFE_TOP, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
 import { OBJECTS, objectsFor, slotsFor, veiled, type Restored } from "./veil.js";
@@ -98,12 +99,29 @@ export function mapPlatePresentation(state: LevelState): MapPlatePresentation {
   };
 }
 
+export interface MapFocusSample {
+  readonly scale: number;
+  readonly dy: number;
+}
+
+/** A small set-down beat for the newly opened map plate: weight, not energy. */
+export function mapFocusBeat(progress: number): MapFocusSample {
+  const t = Math.max(0, Math.min(1, progress));
+  return {
+    scale: 1 + Math.sin(Math.PI * t) * 0.025,
+    dy: -6 * (1 - EASE.settle(t)),
+  };
+}
+
 export class MapScreen {
   readonly root = new Container();
   private view: MapView | null = null;
   private events: MapEvents | null = null;
   /** The map ARRIVES (§9.0), it does not appear. */
   private entrance: Entrance | null = null;
+  /** The plate unlocked by the clear-to-map handoff, if this map open has one. */
+  private focusLevelId: string | null = null;
+  private focusBeat: Tween | null = null;
 
   /**
    * The four rooms, keyed by world (ART_DIRECTION §5, §6).
@@ -153,7 +171,7 @@ export class MapScreen {
     return this.root.visible;
   }
 
-  show(view: MapView): void {
+  show(view: MapView, focusLevelId: string | null = null): void {
     const before = this.view;
     if (before) {
       const was = [1, 2, 3, 4].reduce((t, w) => t + (before.restored[w] ?? 0), 0);
@@ -164,6 +182,11 @@ export class MapScreen {
     this.view = view;
     this.root.visible = true;
     this.entrance = new Entrance(Object.keys(MAP_BANDS).length);
+    const focus = focusLevelId && view.levels.some((level) => level.id === focusLevelId && level.state === "open")
+      ? focusLevelId
+      : null;
+    this.focusLevelId = focus;
+    this.focusBeat = focus ? new Tween(TIMING.clearProgressBeat, EASE.settle) : null;
     this.draw();
   }
 
@@ -178,20 +201,31 @@ export class MapScreen {
   private static readonly COMPLETION_MS = 900;
 
   advance(deltaMs: number): boolean {
+    let running = false;
+    let dirty = false;
+
     if (this.completion !== null) {
       this.completion += deltaMs / MapScreen.COMPLETION_MS;
       if (this.completion >= 1) this.completion = null;
-      this.draw();
-      return true;
+      else running = true;
+      dirty = true;
     }
-    if (!this.entrance) return false;
-    if (this.entrance.advance(deltaMs)) {
-      this.draw();
-      return true;
+    if (this.entrance) {
+      if (this.entrance.advance(deltaMs)) running = true;
+      else this.entrance = null;
+      dirty = true;
     }
-    this.entrance = null;
-    this.draw();
-    return false;
+    if (this.focusBeat) {
+      if (this.focusBeat.advance(deltaMs)) running = true;
+      else {
+        this.focusBeat = null;
+        this.focusLevelId = null;
+      }
+      dirty = true;
+    }
+
+    if (dirty) this.draw();
+    return running;
   }
 
   /** Offset a node for its arrival band. */
@@ -265,6 +299,9 @@ export class MapScreen {
     const w = CELL;
     const h = CELL * 0.66;
     const presentation = mapPlatePresentation(level.state);
+    const focus = level.id === this.focusLevelId && this.focusBeat
+      ? mapFocusBeat(this.focusBeat.raw)
+      : { scale: 1, dy: 0 };
 
     /*
      * A REAL BUTTON, not a bare hit area with a listener.
@@ -359,10 +396,11 @@ export class MapScreen {
      * Scale around the plate's centre, not its top-left. Without the offset the
      * focal drifts down-right as it grows and stops lining up with its ladder.
      */
-    control.scale.set(presentation.scale);
+    const scale = presentation.scale * focus.scale;
+    control.scale.set(scale);
     control.position.set(
-      x - (w * (presentation.scale - 1)) / 2,
-      y - (h * (presentation.scale - 1)) / 2,
+      x - (w * (scale - 1)) / 2,
+      y + focus.dy - (h * (scale - 1)) / 2,
     );
     // The one OPEN level lands last: forty plates, and that is the door (§9.0).
     this.root.addChild(this.entry(control, level.state === "open" ? MAP_BANDS.open : band));

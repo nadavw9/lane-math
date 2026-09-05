@@ -109,6 +109,7 @@ const page = await browser.newPage({
   hasTouch: true,
 });
 const level = process.env["SHOT_LEVEL"] ?? "";
+let settleWait = 3000;
 if (seed) {
   await page.addInitScript((save) => {
     try {
@@ -176,6 +177,12 @@ if (screen) {
        * screen.
        */
       await new Promise((r) => setTimeout(r, 1200));
+    }
+    if (name === "map-handoff") {
+      api.showBoard();
+      await api.winLevel?.();
+      api.showMapAfterClear?.();
+      settleWait = 280;
     }
     if (name === "cleared") {
       /*
@@ -266,7 +273,7 @@ if (screen) {
   // footer is one of the last, so a short wait photographs a half-arrived
   // screen and the missing element looks like a bug rather than a shutter
   // fired early — which is exactly how it read the first time.
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(settleWait);
 }
 
 // Say what was actually photographed, so a fallback render is never mistaken

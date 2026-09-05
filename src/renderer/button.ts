@@ -118,14 +118,15 @@ export function button(options: ButtonOptions): Container {
     shadow.clear();
     shadow.visible = elevated && lift > 0;
     if (!shadow.visible) return;
-    // Secondary CTAs need a heavier contact shadow so they read as instruments,
-    // not outlined labels, at phone distance next to glass cubes.
-    const weight = variant === "secondary" ? 1.35 : 1;
+    // Secondary CTAs keep a contact shadow, but at a lower luminance and shorter
+    // reach than primary keys. The shadow supplies weight without stealing the
+    // action hierarchy from the brass face.
+    const weight = variant === "secondary" ? 0.72 : 1;
     for (let i = 4; i >= 1; i--) {
       path(shadow, shape, width, height, i * 0.4)
         .fill({ color: 0x1a0f08, alpha: (0.05 + i * 0.014) * lift * weight });
     }
-    shadow.position.set(0, 2.8 + lift * 2.2 * weight);
+    shadow.position.set(0, variant === "secondary" ? 2.4 + lift * 1.6 : 2.8 + lift * 2.2);
   };
 
   const grain = (g: Graphics, inset: number, colour: number, alpha: number): void => {
@@ -165,36 +166,38 @@ export function button(options: ButtonOptions): Container {
   const drawSecondary = (g: Graphics): void => {
     const spent = state === "unavailable";
     const armed = state === "armed";
-    const rim = spent ? 0x67583b : (armed ? PALETTE.highlight : PALETTE.brass);
+    const rim = spent ? 0x67583b : (armed ? PALETTE.highlight : PALETTE.brassQuiet);
     const rimDeep = spent ? 0x493e2d : PALETTE.brassDeep;
+    const rimLight = spent ? 0x9b855d : PALETTE.brassQuietLit;
     const felt = spent ? 0x2a231d : PALETTE.felt;
-    // Thicker brass lip + deeper felt well — phone-eye secondary weight pass.
+    // A thicker lip and deeper felt well keep the quiet chip tactile.
     const inset = Math.max(4, Math.min(7, height * 0.2));
 
     path(g, shape, width, height).fill({ color: rimDeep });
     path(g, shape, width, height - Math.max(2, height * 0.08)).fill({ color: rim });
     path(g, shape, width, height, 1.25)
-      .stroke({ width: 2.5, color: spent ? 0x9b855d : PALETTE.brassLit, alpha: spent ? 0.2 : 0.55 });
+      .stroke({ width: 2.25, color: rimLight, alpha: spent ? 0.2 : 0.48 });
     path(g, shape, width, height, inset).fill({ color: felt });
+    // A broad, upper-left sheen gives the quiet chip a real surface and light direction.
+    g.ellipse(inset + width * 0.2, inset + height * 0.18, width * 0.17, Math.max(1, height * 0.06))
+      .fill({ color: rimLight, alpha: spent ? 0.025 : 0.09 });
     path(g, shape, width, height, inset)
-      .stroke({ width: 3, color: 0x000000, alpha: 0.42 });
+      .stroke({ width: 2.5, color: 0x000000, alpha: 0.42 });
     g.moveTo(radius + inset, inset + 1.5)
       .lineTo(width - radius - inset, inset + 1.5)
       .stroke({ width: 2.5, color: 0x000000, alpha: 0.4 });
     g.moveTo(radius + inset, height - inset - 1)
       .lineTo(width - radius - inset, height - inset - 1)
-      .stroke({ width: 1.5, color: 0xffffff, alpha: spent ? 0.04 : 0.1 });
+      .stroke({ width: 1.5, color: 0xffffff, alpha: spent ? 0.04 : 0.08 });
     g.moveTo(radius, 1.5).lineTo(width - radius, 1.5)
       .stroke({
         width: 2.5,
-        color: spent ? 0x9b855d : PALETTE.brassLit,
-        alpha: spent ? 0.2 : 0.62,
+        color: rimLight,
+        alpha: spent ? 0.2 : 0.52,
       });
     g.moveTo(radius, height - 1.5).lineTo(width - radius, height - 1.5)
-      .stroke({ width: 2.5, color: 0x2b1608, alpha: 0.45 });
-    g.ellipse(width * 0.2, height * 0.14, width * 0.14, Math.max(1, height * 0.055))
-      .fill({ color: 0xffffff, alpha: spent ? 0.03 : 0.12 });
-    grain(g, inset + 2, 0xd6b36a, spent ? 0.03 : 0.07);
+      .stroke({ width: 2.5, color: 0x2b1608, alpha: 0.42 });
+    grain(g, inset + 2, PALETTE.brassQuietLit, spent ? 0.03 : 0.055);
   };
 
   /** Redraw at a given press depth. Called synchronously on pointerdown. */

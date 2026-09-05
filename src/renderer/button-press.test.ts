@@ -191,3 +191,16 @@ describe("the brass and glass CTA material", () => {
     expect(armed.alpha).not.toBe(DIM.alpha);
   });
 });
+
+
+describe("secondary CTA hierarchy", () => {
+  it("keeps a quiet inset face, sheen and contact shadow", () => {
+    const secondary = button({ width: WIDTH, height: HEIGHT, label: "Map", variant: "secondary" });
+    const primary = button({ width: WIDTH, height: HEIGHT, label: "Next", variant: "primary" });
+
+    expect(coloursOf(secondary, "button-secondary")).toContain(PALETTE.felt);
+    expect(coloursOf(secondary, "button-secondary")).toContain(PALETTE.brassQuietLit);
+    expect(coloursOf(primary, "button-primary")).not.toContain(PALETTE.brassQuietLit);
+    expect(named(secondary, "button-contact-shadow").visible).toBe(true);
+  });
+});
