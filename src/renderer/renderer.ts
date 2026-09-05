@@ -784,6 +784,11 @@ export class Renderer {
           tween: new Tween(TIMING.place, EASE.settle),
         });
       } else if (before !== null) {
+        // The scripted trap's teaching beat already showed the staged equation;
+        // its settled warning is the rewind destination, not a second tile
+        // flight underneath the Go Back panel.
+        if (next.warning?.scripted) continue;
+
         const tile = next.tiles.find((t) => t.id === before);
 
         /*

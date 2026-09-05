@@ -824,7 +824,11 @@ export class MapScreen {
       const name = this.text(`${world}  ${WORLD_NAMES[world] ?? ""}`.toUpperCase(), 11, PALETTE.tokenInk, "900");
       name.position.set(PAD + 10, y + 7);
       this.root.addChild(this.entry(name, MAP_BANDS.header + world));
-      const blocked = levels.find((level) => level.state === "locked");
+      // Only a locked first plate owns the bunch-level gate copy. Once the
+      // previous bunch is complete, its first plate is the next focal and the
+      // remaining locked plates must not make an open bunch say "Clear the
+      // previous bunch" over its doorway.
+      const blocked = levels[0]?.state === "locked" ? levels[0] : undefined;
       if (world > 1 && blocked) {
         const gateLine = worldGateCopy(blocked.lockReason ?? "not-reached", v.worldGates[world] ?? 0, v.totalStars);
         const gate = this.text(gateLine, 9, PALETTE.tokenInk);
