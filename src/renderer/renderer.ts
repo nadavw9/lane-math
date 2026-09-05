@@ -503,6 +503,19 @@ export class Renderer {
     };
   }
 
+  /**
+   * Review / proof harness only: drop live shatter debris so the brass
+   * companion stays readable mid-hop / mid-slump. Does not touch automatonFeel
+   * or motion timing — production play is unchanged.
+   */
+  clearShatters(): void {
+    for (const shatter of this.shatters) {
+      shatter.container.destroy({ children: true });
+    }
+    this.shatters.length = 0;
+    this.fx.removeChildren();
+  }
+
   apply(commands: readonly Command[]): void {
     const rejected = commands.some((c) => c.type === "reject");
 
