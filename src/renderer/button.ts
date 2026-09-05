@@ -171,7 +171,7 @@ export function button(options: ButtonOptions): Container {
     const rimLight = spent ? 0x9b855d : PALETTE.brassQuietLit;
     const felt = spent ? 0x2a231d : PALETTE.felt;
     // A narrow casting around a broad felt face: furniture, not an outline chip.
-    const inset = Math.max(3, Math.min(4.5, height * 0.13));
+    const inset = Math.max(2.5, Math.min(3.5, height * 0.1));
 
     path(g, shape, width, height).fill({ color: rimDeep });
     path(g, shape, width, height - Math.max(2, height * 0.08)).fill({ color: rim });
@@ -183,11 +183,19 @@ export function button(options: ButtonOptions): Container {
     g.moveTo(radius + inset, height - inset - 1)
       .lineTo(width - radius - inset, height - inset - 1)
       .stroke({ width: 1, color: rimLight, alpha: spent ? 0.04 : 0.12 });
-    // One asymmetric upper-left sheen establishes the shared studio light.
+    // The felt face still catches the shared upper-left studio light. Keeping
+    // this inside the casting (rather than only on the outer rim) gives a
+    // quiet secondary chip the weight of a small instrument, not an outlined
+    // UI control.
+    g.moveTo(inset + radius * 0.35, inset + 2.2)
+      .lineTo(width * 0.62, inset + 2.2)
+      .stroke({ width: 2.2, color: rimLight, alpha: spent ? 0.08 : 0.24 });
+    g.ellipse(inset + width * 0.18, inset + height * 0.22, width * 0.2, Math.max(1.2, height * 0.08))
+      .fill({ color: rimLight, alpha: spent ? 0.025 : 0.1 });
+    // A restrained rim glint keeps the brass casting legible without making
+    // Replay/Map compete with the primary Next Level / Continue key.
     g.moveTo(radius + 1, 1.6).lineTo(width * 0.58, 1.6)
-      .stroke({ width: 1.8, color: rimLight, alpha: spent ? 0.12 : 0.55 });
-    g.ellipse(width * 0.2, 2.1, width * 0.13, Math.max(0.8, height * 0.045))
-      .fill({ color: rimLight, alpha: spent ? 0.03 : 0.13 });
+      .stroke({ width: 1.4, color: rimLight, alpha: spent ? 0.08 : 0.28 });
     grain(g, inset + 2, PALETTE.brassQuietLit, spent ? 0.03 : 0.055);
   };
 

@@ -53,6 +53,18 @@ function coloursOf(root: Container, name: string): number[] {
   });
 }
 
+function strokeWidthsOf(root: Container, name: string): number[] {
+  const graphics = named(root, name) as Container & {
+    context: {
+      instructions: Array<{ data?: { style?: { width?: number } } }>;
+    };
+  };
+  return graphics.context.instructions.flatMap((instruction) => {
+    const width = instruction.data?.style?.width;
+    return width === undefined ? [] : [width];
+  });
+}
+
 /** The label, which moves by exactly the press depth. */
 function labelOf(root: Container): Text {
   const body = root.children[0] as Container;
@@ -208,5 +220,16 @@ describe("secondary CTA hierarchy", () => {
     expect(coloursOf(primary, "button-primary")).not.toContain(PALETTE.brassQuietLit);
     expect(shadow.visible).toBe(true);
     expect(shadow.y).toBeLessThan(4.5);
+  });
+
+  it("puts the upper-left sheen on the felt face, not just the brass rim", () => {
+    const secondary = button({ width: WIDTH, height: HEIGHT, label: "Replay", variant: "secondary" });
+    const widths = strokeWidthsOf(secondary, "button-secondary");
+
+    // The 2.2px face stroke is the broad, low-alpha instrument sheen. The
+    // separate 1.4px rim glint stays quieter than the primary treatment.
+    expect(widths).toContain(2.2);
+    expect(widths).toContain(1.4);
+    expect(widths).not.toContain(1.8);
   });
 });
