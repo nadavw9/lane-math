@@ -8,6 +8,13 @@ export interface TelemetrySink {
   send(event: RecordedEvent): void;
 }
 
+/** Explicit no-op for builds or tests that do not want collection. */
+export class NoopSink implements TelemetrySink {
+  send(_event: RecordedEvent): void {
+    // Intentionally empty.
+  }
+}
+
 /** Console sink — the one you actually read during a playtest. */
 export class ConsoleSink implements TelemetrySink {
   send({ event }: RecordedEvent): void {
@@ -77,6 +84,8 @@ export class Telemetry {
   private boardRenderedAt: number | null = null;
   private levelStartedAt: number | null = null;
   private currentLevel: string | null = null;
+  private readonly completedWorlds = new Set<number>();
+  private opened = false;
 
   constructor(sinks: TelemetrySink[], now: () => number = () => Date.now()) {
     this.sinks = sinks;
@@ -85,6 +94,8 @@ export class Telemetry {
 
   /** GDD §7.8 `app_open`. Session index is persisted so it counts returns. */
   open(): void {
+    if (this.opened) return;
+    this.opened = true;
     let previous = 0;
     try {
       previous = Number(globalThis.localStorage?.getItem(SESSION_KEY) ?? 0);
@@ -137,7 +148,37 @@ export class Telemetry {
     if (this.boardRenderedAt === null || this.currentLevel === null) return;
     const ms = this.now() - this.boardRenderedAt;
     this.boardRenderedAt = null;
+    this.record({ name: "first_tap", level_id: this.currentLevel });
     this.record({ name: "first_tap_latency", level_id: this.currentLevel, ms });
+  }
+
+  levelClear(levelId: string, stars: number): void {
+    this.record({ name: "level_clear", level_id: levelId, stars });
+    const match = /^([0-9]+)-10$/.exec(levelId);
+    if (match) this.worldComplete(Number(match[1]));
+  }
+
+  worldComplete(world: number): void {
+    if (this.completedWorlds.has(world)) return;
+    this.completedWorlds.add(world);
+    this.record({ name: "world_complete", world });
+  }
+
+  mapOpen(focusLevelId: string | null = null): void {
+    this.record(focusLevelId === null ? { name: "map_open" } : { name: "map_open", focus_level_id: focusLevelId });
+  }
+
+  adOfferShown(placement: string): void { this.record({ name: "ad_offer_shown", placement }); }
+  adCompleted(placement: string): void { this.record({ name: "ad_completed", placement }); }
+  adDismissed(placement: string): void { this.record({ name: "ad_dismissed", placement }); }
+  adFailed(placement: string): void { this.record({ name: "ad_failed", placement }); }
+
+  starBankUpdate(totalStars: number, delta: number, reason: string): void {
+    this.record({ name: "star_bank_update", total_stars: totalStars, delta, reason });
+  }
+
+  cueShown(levelId: string, cue: string): void {
+    this.record({ name: "ftue_cue_shown", level_id: levelId, cue });
   }
 
   levelComplete(levelId: string, stars: number, attempts: number): void {

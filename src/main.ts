@@ -1,5 +1,5 @@
 import runtimeLevels from "./generated/levels.json";
-import { Ads, loadAdMob } from "./ads/ads.js";
+import { Ads, loadAdMob, type AdOutcome } from "./ads/ads.js";
 import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
 import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
@@ -109,7 +109,7 @@ const winnability = new WinnabilityService(
 );
 
 let currentLevel = levels.get(LEVEL_IDS[0]!)!;
-let director = new Director(currentLevel, economy.selectedMode, economy, telemetry, winnability);
+let director: Director;
 let lastState: ViewState | null = null;
 
 function apply(commands: readonly Command[]): void {
@@ -206,6 +206,7 @@ function viewWithRestoration(): ReturnType<typeof mapView> {
 }
 
 function showMap(focusLevelId: string | null = null): void {
+  telemetry.mapOpen(focusLevelId);
   renderer.setBoardVisible(false);
   map.show(viewWithRestoration(), focusLevelId);
 }
@@ -257,6 +258,15 @@ map.attach({
 const ads = new Ads(await loadAdMob());
 void ads.initialize();
 
+async function showTrackedAd(placement: string, offer: () => Promise<AdOutcome>): Promise<AdOutcome> {
+  telemetry.adOfferShown(placement);
+  const outcome = await offer();
+  if (outcome === "rewarded") telemetry.adCompleted(placement);
+  else if (outcome === "dismissed") telemetry.adDismissed(placement);
+  else telemetry.adFailed(placement);
+  return outcome;
+}
+
 renderer.onInput((input) => {
   // §7.6: the map is absent until 1-10 is cleared, so the way back is too.
   if (input.type === "tapLevelIntroStart") {
@@ -266,7 +276,7 @@ renderer.onInput((input) => {
   if (input.type === "tapLevelIntroHintAd") {
     void (async () => {
       renderer.setLevelIntroHint(null, "opening…");
-      const outcome = await ads.offerHintAd();
+      const outcome = await showTrackedAd("ftue_hint", () => ads.offerHintAd());
       if (outcome === "rewarded") {
         renderer.setLevelIntroHint(director.preLevelHint() ?? "Use one useful piece at this stage.");
       } else {
@@ -310,7 +320,7 @@ renderer.onInput((input) => {
   if (input.type === "tapCleanRetryAd") {
     void (async () => {
       renderer.setAdMessage("opening…");
-      const outcome = await ads.offerCleanRetryAd();
+      const outcome = await showTrackedAd("clean_retry", () => ads.offerCleanRetryAd());
       if (outcome === "rewarded") {
         renderer.setAdMessage(null);
         apply(director.handle({ type: "cleanRetryFromAd" }));
@@ -325,7 +335,7 @@ renderer.onInput((input) => {
   if (input.type === "tapContinue") {
     void (async () => {
       renderer.setAdMessage("opening…");
-      const outcome = await ads.showRewarded();
+      const outcome = await showTrackedAd("continue", () => ads.showRewarded());
       if (outcome === "rewarded") {
         renderer.setAdMessage("rewound to where it was still winnable");
         apply(director.handle({ type: "continueFromBranch" }));
@@ -344,7 +354,7 @@ renderer.onInput((input) => {
   if (input.type === "tapWatchAd") {
     void (async () => {
       renderer.setAdMessage("opening…");
-      const outcome = await ads.offerLifeForAd(economy);
+      const outcome = await showTrackedAd("life_refill", () => ads.offerLifeForAd(economy));
       renderer.setAdMessage(
         outcome === "rewarded"
           ? "a life is yours — back to it"
