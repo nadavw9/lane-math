@@ -115,6 +115,7 @@ export interface ViewState {
   /** One-line teach-by-doing cue plus the visual channel it should pulse. */
   readonly teachingLine?: string | null;
   readonly teachingPulse?: FtuePulse;
+  readonly teachingTarget?: import("./ftue.js").FtueCueTarget | null;
   readonly hintAd?: HintAdView | null;
 }
 
