@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { queueSweepSample, teachCueSample } from "./teach-cue.js";
+import { queueLookSample, queueSweepSample, teachCueSample } from "./teach-cue.js";
 
 describe("shared FTUE teach cue geometry", () => {
   it("lifts and pulses without an opacity field", () => {
@@ -39,5 +39,18 @@ describe("shared FTUE teach cue geometry", () => {
     expect(start.targetAlpha).toBe(0);
     expect(middle.targetAlpha).toBe(0);
     expect(end.targetAlpha).toBe(1);
+  });
+
+  it("looks across the whole queue without parking a tap pulse on the front", () => {
+    const two = { x: 100, y: 80, width: 120, height: 60 };
+    const seventeen = { x: 100, y: 180, width: 120, height: 60 };
+    const four = { x: 100, y: 280, width: 120, height: 60 };
+    const start = queueLookSample([two, seventeen, four], 0);
+    const mid = queueLookSample([two, seventeen, four], 700);
+    const end = queueLookSample([two, seventeen, four], 1400);
+    expect(start.handY).toBeLessThan(mid.handY);
+    expect(mid.handY).toBeLessThan(end.handY);
+    expect(end.handAlpha).toBe(0);
+    expect(end.progress).toBe(1);
   });
 });

@@ -1,6 +1,7 @@
 import type { Rect } from "./layout.js";
 
 const PERIOD_MS = 1_600;
+const QUEUE_LOOK_MS = 1_400;
 
 export interface TeachCueSample {
   readonly lift: number;
@@ -51,4 +52,48 @@ export function queueSweepSample(start: Rect, target: Rect, elapsedMs: number): 
     handY: from.y + (to.y - from.y) * eased + target.height * 0.5,
     targetAlpha: progress === 1 ? 1 : 0,
   };
+}
+
+export interface QueueLookSample {
+  readonly progress: number;
+  readonly handX: number;
+  readonly handY: number;
+  /** Look-only: fade the hand out so it never parks as a tap cue. */
+  readonly handAlpha: number;
+  /** Soft brass attention on each plate as the sweep passes (not a tap pulse). */
+  readonly plateAlphas: readonly number[];
+}
+
+/**
+ * Look-at-the-whole-queue beat: polyline sweep back→front (e.g. 2→17→4).
+ * Never settles a tap-style pulse on the front plate.
+ */
+export function queueLookSample(waypoints: readonly Rect[], elapsedMs: number): QueueLookSample {
+  if (waypoints.length === 0) {
+    return { progress: 1, handX: 0, handY: 0, handAlpha: 0, plateAlphas: [] };
+  }
+  const centers = waypoints.map((rect) => ({
+    x: rect.x + rect.width / 2,
+    y: rect.y + rect.height / 2,
+    w: rect.width,
+    h: rect.height,
+  }));
+  const progress = Math.min(1, Math.max(0, elapsedMs) / QUEUE_LOOK_MS);
+  const segments = Math.max(1, centers.length - 1);
+  const scaled = progress * segments;
+  const index = Math.min(segments - 1, Math.floor(scaled));
+  const local = Math.min(1, scaled - index);
+  const eased = local * local * (3 - 2 * local);
+  const from = centers[index]!;
+  const to = centers[Math.min(centers.length - 1, index + 1)]!;
+  const handX = from.x + (to.x - from.x) * eased + to.w * 0.28;
+  const handY = from.y + (to.y - from.y) * eased + to.h * 0.42;
+  // Fade during the last 18% so the beat ends on "look", not "tap here".
+  const handAlpha = progress >= 1 ? 0 : progress > 0.82 ? (1 - progress) / 0.18 : 1;
+  const plateAlphas = centers.map((_, i) => {
+    const peak = i / segments;
+    const dist = Math.abs(progress - peak);
+    return Math.max(0, 1 - dist * 2.4) * 0.55;
+  });
+  return { progress, handX, handY, handAlpha, plateAlphas };
 }

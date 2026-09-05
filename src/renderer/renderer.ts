@@ -30,7 +30,7 @@ import {
 } from "./layout.js";
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
-import { queueSweepSample, teachCueSample } from "./teach-cue.js";
+import { queueLookSample, queueSweepSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
@@ -1494,37 +1494,47 @@ export class Renderer {
 
     const queueSweep = target.kind === "queue";
     if (queueSweep) {
-      const routeStart = targetSlot(Math.max(0, s.targets.length - s.targetIndex - 1), board.lane, board.grid);
-      const startX = routeStart.x + routeStart.width / 2;
-      const startY = routeStart.y + routeStart.height / 2;
-      const targetX = rect.x + rect.width / 2;
-      const targetY = rect.y + rect.height / 2;
-      const route = new Graphics()
-        .moveTo(startX, startY)
-        .lineTo(targetX, targetY)
-        .stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.72 });
+      // Look-only: sweep back→front (e.g. 2→17→4). Never park a tap pulse on the front plate.
+      const remaining = Math.max(1, s.targets.length - s.targetIndex);
+      const waypoints = [];
+      for (let offset = remaining - 1; offset >= 0; offset -= 1) {
+        waypoints.push(targetSlot(offset, board.lane, board.grid));
+      }
+      const look = queueLookSample(waypoints, this.teachCueMs);
+      const route = new Graphics();
+      for (let i = 0; i < waypoints.length; i += 1) {
+        const plate = waypoints[i]!;
+        const x = plate.x + plate.width / 2;
+        const y = plate.y + plate.height / 2;
+        if (i === 0) route.moveTo(x, y);
+        else route.lineTo(x, y);
+      }
+      route.stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.72 });
       route.eventMode = "none";
       this.root.addChild(this.entry(route, BOARD_BANDS.status));
-      const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
-      const sweep = queueSweepSample(routeStart, rect, this.teachCueMs);
-      const shadow = new Graphics()
-        .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
-        .fill({ color: PALETTE.text, alpha: cue.shadowAlpha });
-      shadow.zIndex = BOARD_BANDS.status + 19;
-      this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
-      const ring = new Graphics()
-        .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
-        .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * (sweep.targetAlpha || 0.35) });
-      ring.zIndex = BOARD_BANDS.status + 20;
-      this.root.addChild(this.entry(ring, BOARD_BANDS.status));
-      const hand = new Sprite(this.ftueHandTexture);
-      hand.anchor.set(0.31, 0.77);
-      hand.position.set(sweep.handX, sweep.handY);
-      hand.scale.set(0.22);
-      hand.rotation = -0.28;
-      hand.zIndex = BOARD_BANDS.status + 22;
-      hand.eventMode = "none";
-      this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+      for (let i = 0; i < waypoints.length; i += 1) {
+        const plate = waypoints[i]!;
+        const alpha = look.plateAlphas[i] ?? 0;
+        if (alpha <= 0.05) continue;
+        const ring = new Graphics()
+          .roundRect(plate.x - 5, plate.y - 5, plate.width + 10, plate.height + 10, 12)
+          .stroke({ width: 4, color: PALETTE.brassLit, alpha });
+        ring.zIndex = BOARD_BANDS.status + 20;
+        ring.eventMode = "none";
+        this.root.addChild(this.entry(ring, BOARD_BANDS.status));
+      }
+      if (look.handAlpha > 0.05) {
+        const hand = new Sprite(this.ftueHandTexture);
+        hand.anchor.set(0.31, 0.77);
+        hand.position.set(look.handX, look.handY);
+        hand.scale.set(0.22);
+        hand.rotation = -0.28;
+        hand.alpha = look.handAlpha;
+        hand.zIndex = BOARD_BANDS.status + 22;
+        hand.eventMode = "none";
+        this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+      }
+      const cue = teachCueSample(waypoints[0] ?? rect, this.teachCueMs, DESIGN.width);
       const plaqueRect = { ...cue.plaque, y: board.equation.y + 10 };
       const plaque = new Graphics()
         .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
