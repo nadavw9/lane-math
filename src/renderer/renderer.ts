@@ -50,6 +50,7 @@ import {
 } from "./sprites.js";
 import { advancesTarget, isRewind } from "./transitions.js";
 import { EASE, TIMING, Tween, effectSpeed, lerp, shudder } from "./tween.js";
+import { starsForClear } from "./star-sync.js";
 import {
   emptySlot,
   framedPanel,
@@ -149,6 +150,8 @@ export class Renderer {
   private readonly rewrites = new Map<number, { from: number; tween: Tween }>();
   /** Stars arriving one at a time on a clear. */
   private starArrivals: Tween[] = [];
+  /** One physical beat connecting the clear tally to meta progress. */
+  private clearProgressBeat: Tween | null = null;
   /**
    * Brass automaton one-shot win/fail motion. Progress only — draw() samples
    * it onto a fresh sprite each frame (same pattern as lifts / laneAdvance).
@@ -497,6 +500,7 @@ export class Renderer {
       laneAdvance: this.laneAdvance ? Number(this.laneAdvance.raw.toFixed(3)) : null,
       resist: this.resist ? Number(this.resist.raw.toFixed(3)) : null,
       stars: this.starArrivals.map((s) => Number(s.raw.toFixed(3))),
+      clearProgressBeat: this.clearProgressBeat ? Number(this.clearProgressBeat.raw.toFixed(3)) : null,
       automaton: this.automatonFeel
         ? { kind: this.automatonFeel.kind, at: Number(this.automatonFeel.tween.raw.toFixed(3)) }
         : null,
@@ -658,8 +662,9 @@ export class Renderer {
     // a burst — three stars landing together is a spray, which is the register
     // this game does not use.
     if (next.phase === "won" && this.lastPhase !== "won") {
-      const earned = next.economy?.starsIfCleared ?? 0;
+      const earned = starsForClear(next.economy);
       this.clearedEntrance = new Entrance(Object.keys(CLEARED_BANDS).length);
+      this.clearProgressBeat = new Tween(TIMING.clearProgressBeat, (t) => t);
       this.starArrivals = Array.from(
         { length: earned },
         (_, i) => new Tween(TIMING.starArrive, EASE.settle, i * TIMING.starGap),
@@ -782,6 +787,7 @@ export class Renderer {
     this.laneAdvance = null;
     this.resist = null;
     this.starArrivals = [];
+    this.clearProgressBeat = null;
     this.automatonFeel = null;
     this.armCueMs = 0;
     this.hold = null;
@@ -1076,6 +1082,9 @@ export class Renderer {
       if (this.automatonFeel.tween.advance(deltaMs)) running = true;
       else this.automatonFeel = null;
     }
+    if (this.clearProgressBeat && !this.clearProgressBeat.advance(deltaMs)) this.clearProgressBeat = null;
+    if (this.clearProgressBeat) running = true;
+
     for (const star of this.starArrivals) {
       if (star.advance(deltaMs)) running = true;
     }
@@ -1658,7 +1667,7 @@ export class Renderer {
        * gives gold to "earned" and this is the earning in progress.
        */
       if (u.starCounter) {
-        const earned = s.phase === "won" ? eco.bestStars : eco.starsIfCleared;
+        const earned = starsForClear(eco);
         const size = 15;
         const stars = emblemMeter("star", earned, 3, size);
         // Same clearance at the other end: nothing sits beside the stars, but
@@ -1675,10 +1684,11 @@ export class Renderer {
         this.root.addChild(this.entry(exempt, BOARD_BANDS.status));
       }
 
-      // Out of lives (GDD §5.2, §13). A designed screen, not a line of text.
-      if (eco.lockedOut) this.drawOutOfLives(lane, eco);
     }
 
+    const outcomeOwnsMoment = s.phase === "won" || s.phase === "failed" || eco?.lockedOut === true;
+
+    if (!outcomeOwnsMoment) {
     /*
      * A RAIL UNDER THE CONTROLS (§9.0).
      *
@@ -1707,7 +1717,7 @@ export class Renderer {
     // --- status line + restart ---
     // §9.4: no "no solution exists" text. During play this line carries
     // rejections and confirmations; on failure the board has already said it.
-    const banner = s.phase === "failed" ? "" : (this.rejection ?? s.message ?? "");
+    const banner = this.rejection ?? s.message ?? "";
     /*
      * CREAM AND GOLD, because this band is FELT now.
      *
@@ -1716,7 +1726,7 @@ export class Renderer {
      * the band moved the ground without moving the choice. On felt they measure
      * 3.03:1 and 2.92:1; cream and gold measure 14.50:1 and 12.50:1.
      */
-    const colour = s.phase === "won" ? PALETTE.highlight : PALETTE.tokenInk;
+    const colour = PALETTE.tokenInk;
 
     const statusText = this.text(banner, 15, colour);
     statusText.position.set(status.x, rows.message);
@@ -1808,7 +1818,7 @@ export class Renderer {
         {
           // §9.4 forbids a banner, not a designed way out. After failure this
           // becomes a genuinely armed recovery action, not gold-coloured text.
-          armed: s.phase === "failed",
+          armed: false,
         },
       ),
     );
@@ -1950,6 +1960,8 @@ export class Renderer {
       }
     }
 
+    }
+
     /*
      * THE MODE SELECTOR IS NOT ON THE BOARD ANY MORE.
      *
@@ -1960,6 +1972,16 @@ export class Renderer {
      * putting it on the board meant it could only appear once the board had
      * room, which is why it was gated at 3-10 in the first place.
      */
+
+    if (eco?.lockedOut) {
+      // The board recedes before the out-of-lives panel owns the moment.
+      const veil = new Graphics()
+        .rect(0, 0, DESIGN.width, DESIGN.height)
+        .fill({ color: 0x120c08, alpha: 0.55 });
+      veil.eventMode = "static";
+      this.root.addChild(this.entry(veil, BOARD_BANDS.equation));
+      this.drawOutOfLives(lane, eco);
+    }
 
     // --- fatal move: BLOCKED in Casual and at 1-4, WARNED in Normal (§6) ---
     if (s.warning) {
@@ -2317,6 +2339,8 @@ export class Renderer {
         PALETTE.highlight,
       );
       const progressStar = star(13);
+      const beat = this.clearProgressBeat ? Math.sin(Math.PI * this.clearProgressBeat.raw) : 0;
+      progressStar.scale.set(1 + beat * 0.18);
       progressStar.position.set(6.5, banked.height / 2);
       banked.position.set(18, 0);
       destination.position.set(18 + banked.width + 7, 1);
