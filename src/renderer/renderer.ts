@@ -30,6 +30,7 @@ import {
 } from "./layout.js";
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
+import { teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
@@ -165,6 +166,7 @@ export class Renderer {
   private automatonFeel: { kind: AutomatonMotionKind; tween: Tween } | null = null;
   /** One renderer-clock phase for the currently armed swap operand. */
   private armCueMs = 0;
+  private teachCueMs = 0;
   /**
    * Hit-stop (§9.5): the board holds the PRE-commit frame for a beat so the
    * payoff lands. The new state is parked here rather than drawn, which is the
@@ -1096,6 +1098,10 @@ export class Renderer {
       this.armCueMs += deltaMs * effectSpeed();
       dirty = true;
     }
+    if (this.state?.teachingTarget && this.state.phase === "playing") {
+      this.teachCueMs += deltaMs * effectSpeed();
+      dirty = true;
+    }
 
     if (this.advanceAll(deltaMs)) dirty = true;
 
@@ -1258,12 +1264,18 @@ export class Renderer {
       const index = s.tiles.findIndex((tile) => tile.id === id);
       if (index < 0) continue;
       const slot = poolSlot(index, pool, board.grid);
-      const ring = new Graphics()
+      const shadow = new Graphics()
+      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
+      .fill({ color: PALETTE.handOutline, alpha: cue.shadowAlpha });
+    shadow.zIndex = BOARD_BANDS.status + 19;
+    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
+
+    const ring = new Graphics()
         .roundRect(slot.x - 5 * pulse, slot.y - 5 * pulse, slot.width + 10 * pulse, slot.height + 10 * pulse, 10)
         .stroke({ width: 3, color: PALETTE.highlight, alpha: 0.8 });
       ring.eventMode = "none";
       // entry-exempt: keystone tile pulse arrives with the mid-commit beat.
-      this.root.addChild(ring);
+      this.root.addChild(this.entry(ring, BOARD_BANDS.status));
     }
 
     const caption = this.text(warning.line, 18, PALETTE.highlight);
@@ -1394,6 +1406,53 @@ export class Renderer {
     this.root.addChild(bounded); }
     // entry-exempt: level intro start control.
     this.root.addChild(this.box(center - 145, top + 160, 290, 38, "Start Level", () => this.emit({ type: "tapLevelIntroStart" }), { variant: "primary" }));
+  }
+
+  /** Shared exact-action marker: live target, brass breath, hand, contextual plaque. */
+  private drawTeachCue(s: ViewState, board: Bands, availableOps: readonly (BinaryOp | UnaryOp)[]): void {
+    const target = s.teachingTarget;
+    if (!target || !s.teachingLine || s.phase !== "playing") return;
+
+    let rect: Rect | null = null;
+    if (target.kind === "tile") {
+      const index = s.tiles.findIndex((tile) => tile.id === target.tileId);
+      if (index >= 0) rect = poolSlot(index, board.pool, board.grid);
+    } else if (target.kind === "operator") {
+      const index = availableOps.indexOf(target.op);
+      if (index >= 0) rect = operatorSlot(index, availableOps.length, board.operators, board.operatorGrid);
+    } else {
+      rect = equationSlot(3, board.equation);
+    }
+    if (!rect) return;
+
+    const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
+    const ring = new Graphics()
+      .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
+      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha });
+    ring.zIndex = BOARD_BANDS.status + 20;
+    this.root.addChild(this.entry(ring, BOARD_BANDS.status));
+
+    // A compact human hand silhouette; the fingertip lands on the live control.
+    const hand = new Container();
+    hand.addChild(new Graphics().ellipse(-30, -1, 70, 36).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
+    hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
+    hand.addChild(new Graphics().ellipse(-2, -51, 14, 9).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
+    hand.position.set(cue.handX, cue.handY);
+    hand.rotation = -0.28;
+    hand.zIndex = BOARD_BANDS.status + 22;
+    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+
+    const plaque = new Graphics()
+      .roundRect(cue.plaque.x, cue.plaque.y, cue.plaque.width, cue.plaque.height, 14)
+      .fill({ color: PALETTE.felt, alpha: 0.98 })
+      .stroke({ width: 4, color: PALETTE.brass });
+    plaque.zIndex = BOARD_BANDS.status + 21;
+    this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
+    const copy = this.text(s.teachingLine, 20, PALETTE.tokenInk);
+    copy.anchor.set(0.5);
+    copy.position.set(cue.plaque.x + cue.plaque.width / 2, cue.plaque.y + cue.plaque.height / 2);
+    copy.zIndex = BOARD_BANDS.status + 23;
+    this.root.addChild(this.entry(copy, BOARD_BANDS.status));
   }
 
   private draw(): void {
@@ -1616,6 +1675,7 @@ export class Renderer {
      * Brass, through the button component's material face, so the key keeps
      * all four interaction states and sinks as one object under a press.
      */
+    const commitTeach = s.teachingTarget?.kind === "commit" ? teachCueSample(commitRect, this.teachCueMs) : null;
     const commit = button({
       width: commitRect.width,
       height: commitRect.height,
@@ -1627,7 +1687,8 @@ export class Renderer {
       state: this.inputLocked || !canCommit ? "disabled" : "armed",
       onTap: this.inputLocked || !canCommit ? undefined : () => this.emit({ type: "tapCommit" }),
     });
-    commit.position.set(commitRect.x + resistDx, commitRect.y);
+    commit.position.set(commitRect.x + resistDx, commitRect.y - (commitTeach?.lift ?? 0));
+    if (commitTeach) commit.scale.set(commitTeach.scale);
     this.root.addChild(this.entry(commit, BOARD_BANDS.equation));
 
     // --- operators. Affordance rule (§3.5): bold-active paired with dim-inactive.
@@ -1643,14 +1704,17 @@ export class Renderer {
       const active = isUnary
         ? s.affordance !== "transform" || s.transformOp === op
         : s.affordance === "operators";
-      const enabled = !spent && (isUnary ? true : s.affordance === "operators");
+      const taught = s.teachingTarget?.kind === "operator" && s.teachingTarget.op === op;
+      const teachingOperatorBeat = s.teachingTarget?.kind === "operator";
+      const enabled = !spent && (taught || (isUnary ? true : s.affordance === "operators"));
 
       // §3.5: bold-active is ALWAYS paired with dim-inactive. Weight change
       // alone is easy to miss and poor for low-vision players.
       const size = Math.min(r.width, r.height);
-      const lit = enabled && active;
+      const lit = taught || (enabled && active);
       const opLift = this.lifts.get(OPERATOR_LIFT_KEY);
-      const opRise = opLift && s.slots.op === op ? Math.sin(Math.PI * opLift.value) : 0;
+      const taughtSample = taught ? teachCueSample(r, this.teachCueMs) : null;
+      const opRise = taughtSample?.lift ?? (opLift && s.slots.op === op ? Math.sin(Math.PI * opLift.value) : 0);
       /*
        * SPENT is not the same as inactive (§9.6, ART_DIRECTION §5).
        *
@@ -1666,8 +1730,9 @@ export class Renderer {
         fill: PALETTE.operator,
         text: PALETTE.tokenInk,
         bevel: lit ? 1 : DIM.bevel,
-        elevation: lit ? 1 : DIM.elevation,
-        outline: s.transformOp === op ? PALETTE.highlight : undefined,
+        elevation: taught ? 2.5 : lit ? 1 : DIM.elevation,
+        outline: taught || s.transformOp === op ? PALETTE.brassLit : undefined,
+        outlineWidth: taught ? 6 : undefined,
         /*
          * GDD §7.6: the count appears with counted operators at 3-3, and NEVER
          * in Casual. `budget[op]` is undefined exactly when the mode does not
@@ -1682,7 +1747,7 @@ export class Renderer {
       }, tokenState, remaining ?? undefined);
       // Spent keeps full opacity and loses its light; disabled keeps its light
       // and loses presence. Two different signals, never the same treatment.
-      if (tokenState === "disabled") disc.alpha = DIM.alpha;
+      if (tokenState === "disabled" && !teachingOperatorBeat) disc.alpha = DIM.alpha;
       if (tokenState === "unavailable") {
         disc.alpha = 0.85;
         disc.addChild(
@@ -1693,7 +1758,7 @@ export class Renderer {
       }
 
       disc.pivot.set(size / 2, size / 2);
-      disc.scale.set(1 + opRise * 0.07);
+      disc.scale.set(taughtSample?.scale ?? (1 + opRise * 0.07));
       this.entry(this.place(
         disc,
         r.x + r.width / 2,
@@ -1757,10 +1822,12 @@ export class Renderer {
        * driven by legality.
        */
       const illegal = s.constrainedTileIds !== null && !s.constrainedTileIds.includes(tile.id);
+      const taught = s.teachingTarget?.kind === "tile" && s.teachingTarget.tileId === tile.id;
+      const taughtSample = taught ? teachCueSample(r, this.teachCueMs) : null;
       const dimmed =
         s.affordance === "transform"
           ? !transformable
-          : illegal || s.affordance === "operators" || inSlot.has(tile.id);
+          : illegal || (!s.teachingTarget && s.affordance === "operators") || inSlot.has(tile.id);
 
       /*
        * §9.5: the tile REWRITES ITSELF under a unary operator.
@@ -1794,17 +1861,18 @@ export class Renderer {
         text: PALETTE.tokenInk,
         bevel: dimmed ? DIM.bevel : 1,
         // A lifted tile sits above the surface, so its shadow grows with it.
-        elevation: dimmed ? DIM.elevation : 1 + rise * 1.6,
+        elevation: dimmed ? DIM.elevation : taught ? 2.5 : 1 + rise * 1.6,
         outline:
-          transformable || pulsed.has(tile.id) || hinted.has(tile.id)
-            ? PALETTE.highlight
+          taught || transformable || pulsed.has(tile.id) || hinted.has(tile.id)
+            ? taught ? PALETTE.brassLit : PALETTE.highlight
             : undefined,
+        outlineWidth: taught ? 6 : undefined,
       }, "idle", tile.id);
       if (dimmed) token.alpha = DIM.alpha;
 
       // Scale about the tile's own centre so it grows in place rather than
       // drifting toward its bottom-right corner.
-      const grow = 1 + rise * 0.07;
+      const grow = taughtSample?.scale ?? (1 + rise * 0.07);
       token.pivot.set(r.width / 2, r.height / 2);
       token.scale.set(grow * turned, grow);
 
@@ -1812,7 +1880,7 @@ export class Renderer {
         this.place(
           token,
           r.x + r.width / 2,
-          r.y + r.height / 2 - rise * 5,
+          r.y + r.height / 2 - (taughtSample?.lift ?? rise * 5),
           // A constrained-out tile carries no tap. It is dim rather than
           // silent, so the absence reads as unavailable and not as broken.
           illegal ? undefined : () => this.emit({ type: "tapTile", id: tile.id }),
@@ -1822,12 +1890,7 @@ export class Renderer {
       this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
     }
 
-    const pulseRect = s.teachingPulse === "pool" ? board.pool : s.teachingPulse === "minus" || s.teachingPulse === "multiply" ? board.operators : s.teachingPulse === "queue" ? lane : null;
-    if (pulseRect && s.phase === "playing") {
-      const pulse = new Graphics().roundRect(pulseRect.x - 3, pulseRect.y - 3, pulseRect.width + 6, pulseRect.height + 6, 10).stroke({ width: 2, color: PALETTE.highlight, alpha: 0.72 });
-      // One quiet brass outline is enough: the board still teaches by doing.
-      this.root.addChild(this.entry(pulse, BOARD_BANDS.status));
-    }
+    this.drawTeachCue(s, board, available);
 
     this.drawFlights();
 
@@ -1940,7 +2003,7 @@ export class Renderer {
     // --- status line + restart ---
     // §9.4: no "no solution exists" text. During play this line carries
     // rejections and confirmations; on failure the board has already said it.
-    const banner = s.teachingLine ?? this.rejection ?? s.message ?? "";
+    const banner = (s.teachingTarget ? null : s.teachingLine) ?? this.rejection ?? s.message ?? "";
     /*
      * CREAM AND GOLD, because this band is FELT now.
      *

@@ -110,11 +110,27 @@ describe("no other level is filtered", () => {
 describe("1-01 teaches by doing", () => {
   it("moves through one-line cues as the equation is built", () => {
     const { director, state } = open(CONSTRAINT_LEVEL);
-    expect(state.teachingLine).toBe("Tap a number.");
+    expect(state.teachingLine).toBe("Tap the 9.");
     const nine = state.tiles.find((t) => t.value === 9)!;
     let next = stateOf(director.handle({ type: "tapTile", id: nine.id }));
-    expect(next.teachingLine).toBe("Choose a sign.");
+    expect(next.teachingLine).toBe("Tap +.");
     next = stateOf(director.handle({ type: "tapOperator", op: "+" }));
-    expect(next.teachingLine).toBe("Make the target.");
+    expect(next.teachingLine).toBe("Now tap the 5.");
+  });
+});
+
+describe("operator-first P0 lessons", () => {
+  it.each([["1-03", "-"], ["2-01", "*"]] as const)("lets %s perform its marked operator first", (id, op) => {
+    const { director, state } = open(id);
+    expect(state.teachingTarget).toEqual({ kind: "operator", op });
+    const next = stateOf(director.handle({ type: "tapOperator", op }));
+    expect(next.slots.op).toBe(op);
+    expect(next.teachingTarget?.kind).toBe("tile");
+  });
+
+  it("does not unlock operator-first input outside the exact marked action", () => {
+    const { director } = open("2-01");
+    const next = stateOf(director.handle({ type: "tapOperator", op: "+" }));
+    expect(next.slots.op).toBeNull();
   });
 });

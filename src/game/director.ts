@@ -637,7 +637,8 @@ export class Director {
   }
 
   private state(): ViewState {
-    const cue = ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op);
+    const cueState = { targetIndex: this.targetIndex, tiles: this.tiles.map((t) => ({ ...t, consumed: this.consumed.has(t.id) })), ...this.slots };
+    const cue = ftueCue(this.level.id, cueState);
     if (cue !== null && !this.shownFtueCues.has(cue.key)) {
       this.shownFtueCues.add(cue.key);
       this.telemetry?.cueShown(this.level.id, cue.key);
@@ -672,7 +673,8 @@ export class Director {
       shop: this.shopEntries(),
       shopOpen: this.shopOpen,
       teachingLine: this.teachingLine(),
-      teachingPulse: ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op)?.pulse ?? null,
+      teachingPulse: cue?.pulse ?? null,
+      teachingTarget: cue?.target ?? null,
       hintAd: this.hintAd(),
     };
   }
@@ -693,7 +695,7 @@ export class Director {
 
   private teachingLine(): string | null {
     if (this.phase !== "playing" || this.economy?.progressFor(this.level.id).cleared === true) return null;
-    return ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op)?.line ?? null;
+    return ftueCue(this.level.id, { targetIndex: this.targetIndex, tiles: this.tiles.map((t) => ({ ...t, consumed: this.consumed.has(t.id) })), ...this.slots })?.line ?? null;
   }
 
   private render(): Command[] {
@@ -876,7 +878,10 @@ export class Director {
   private tapOperator(op: BinaryOp): Command[] {
     this.swapArmed = null;
     if (this.transformOp !== null) return this.reject("finish or cancel the transform first");
-    if (this.slots.leftTileId === null) return this.reject("pick a number first");
+    const cue = ftueCue(this.level.id, { targetIndex: this.targetIndex, tiles: this.tiles.map((t) => ({ ...t, consumed: this.consumed.has(t.id) })), ...this.slots });
+    if (this.slots.leftTileId === null && cue?.target?.kind === "operator" && cue.target.op !== op) return this.reject(cue.line);
+    const operatorFirstTeach = cue?.target?.kind === "operator" && (this.level.id === "1-03" || this.level.id === "2-01");
+    if (this.slots.leftTileId === null && !operatorFirstTeach) return this.reject("pick a number first");
     if (this.slots.op !== null) return this.reject("operator already chosen");
     if (!hasBudget(this.budget, op)) return this.reject(`no ${op} left`);
     this.slots = { ...this.slots, op };
