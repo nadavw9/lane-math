@@ -1816,6 +1816,7 @@ export class Renderer {
         "Restart",
         () => this.emit({ type: "tapRestart" }),
         {
+          variant: "secondary",
           // §9.4 forbids a banner, not a designed way out. After failure this
           // becomes a genuinely armed recovery action, not gold-coloured text.
           armed: false,
@@ -1847,6 +1848,7 @@ export class Renderer {
           rows.controlH,
           "Map",
           () => this.emit({ type: "tapMap" }),
+          { variant: "secondary" },
         ),
       );
     }
@@ -2238,6 +2240,7 @@ export class Renderer {
             buttonH,
             "Restart",
             () => this.emit({ type: "tapRestart" }),
+            { variant: "secondary" },
           ),
           BOARD_BANDS.equation,
         ),
@@ -2251,6 +2254,7 @@ export class Renderer {
             buttonH,
             "Map",
             () => this.emit({ type: "tapMap" }),
+            { variant: "secondary" },
           ),
           BOARD_BANDS.equation,
         ),
@@ -2396,6 +2400,7 @@ export class Renderer {
             buttonH,
             "Replay",
             () => this.emit({ type: "tapRestart" }),
+            { variant: "secondary" },
           ),
           CLEARED_BANDS.actions,
           true,
@@ -2410,6 +2415,7 @@ export class Renderer {
             buttonH,
             "Map",
             () => this.emit({ type: "tapMap" }),
+            { variant: "secondary" },
           ),
           CLEARED_BANDS.actions,
           true,

@@ -110,9 +110,9 @@ export const PALETTE = {
   brass: 0xc9a227,
   brassDeep: 0x8a6d1f,
   brassLit: 0xffe9a8,
-  /** Quieter brass for secondary controls: same metal, lower value. */
-  brassQuiet: 0x9f7d2a,
-  brassQuietLit: 0xd6b36a,
+  /** Quieter, aged brass for secondary controls: same metal, lower value. */
+  brassQuiet: 0x765c28,
+  brassQuietLit: 0xa88a4c,
   /** An unlit brass object — §5's spent state, not a grey (§9.6). */
   brassSpent: 0x4f4526,
 

@@ -170,33 +170,24 @@ export function button(options: ButtonOptions): Container {
     const rimDeep = spent ? 0x493e2d : PALETTE.brassDeep;
     const rimLight = spent ? 0x9b855d : PALETTE.brassQuietLit;
     const felt = spent ? 0x2a231d : PALETTE.felt;
-    // A thicker lip and deeper felt well keep the quiet chip tactile.
-    const inset = Math.max(4, Math.min(7, height * 0.2));
+    // A narrow casting around a broad felt face: furniture, not an outline chip.
+    const inset = Math.max(3, Math.min(4.5, height * 0.13));
 
     path(g, shape, width, height).fill({ color: rimDeep });
     path(g, shape, width, height - Math.max(2, height * 0.08)).fill({ color: rim });
-    path(g, shape, width, height, 1.25)
-      .stroke({ width: 2.25, color: rimLight, alpha: spent ? 0.2 : 0.48 });
     path(g, shape, width, height, inset).fill({ color: felt });
-    // A broad, upper-left sheen gives the quiet chip a real surface and light direction.
-    g.ellipse(inset + width * 0.2, inset + height * 0.18, width * 0.17, Math.max(1, height * 0.06))
-      .fill({ color: rimLight, alpha: spent ? 0.025 : 0.09 });
-    path(g, shape, width, height, inset)
-      .stroke({ width: 2.5, color: 0x000000, alpha: 0.42 });
+    // The face is recessed by two lit edges, never by a perimeter outline.
     g.moveTo(radius + inset, inset + 1.5)
       .lineTo(width - radius - inset, inset + 1.5)
-      .stroke({ width: 2.5, color: 0x000000, alpha: 0.4 });
+      .stroke({ width: 2, color: 0x000000, alpha: 0.42 });
     g.moveTo(radius + inset, height - inset - 1)
       .lineTo(width - radius - inset, height - inset - 1)
-      .stroke({ width: 1.5, color: 0xffffff, alpha: spent ? 0.04 : 0.08 });
-    g.moveTo(radius, 1.5).lineTo(width - radius, 1.5)
-      .stroke({
-        width: 2.5,
-        color: rimLight,
-        alpha: spent ? 0.2 : 0.52,
-      });
-    g.moveTo(radius, height - 1.5).lineTo(width - radius, height - 1.5)
-      .stroke({ width: 2.5, color: 0x2b1608, alpha: 0.42 });
+      .stroke({ width: 1, color: rimLight, alpha: spent ? 0.04 : 0.12 });
+    // One asymmetric upper-left sheen establishes the shared studio light.
+    g.moveTo(radius + 1, 1.6).lineTo(width * 0.58, 1.6)
+      .stroke({ width: 1.8, color: rimLight, alpha: spent ? 0.12 : 0.55 });
+    g.ellipse(width * 0.2, 2.1, width * 0.13, Math.max(0.8, height * 0.045))
+      .fill({ color: rimLight, alpha: spent ? 0.03 : 0.13 });
     grain(g, inset + 2, PALETTE.brassQuietLit, spent ? 0.03 : 0.055);
   };
 
