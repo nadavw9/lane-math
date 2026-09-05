@@ -29,6 +29,7 @@ import {
   targetSlot,
 } from "./layout.js";
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
+import { loadCtaChrome } from "./cta-chrome.js";
 import { armCueFor } from "./arm-cue.js";
 import { queueLookSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
@@ -312,6 +313,7 @@ export class Renderer {
     this.ftueHandTexture = await Assets.load<Texture>(
       `${import.meta.env.BASE_URL}assets/ui/ftue-pointing-hand@2x.png`,
     );
+    await loadCtaChrome(import.meta.env.BASE_URL);
 
     /*
      * The sprite path (ART_DIRECTION §5), off unless asked for.
