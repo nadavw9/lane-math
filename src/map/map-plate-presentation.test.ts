@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import { DIM, PALETTE } from "../renderer/layout.js";
-import { academyProgressCopy, mapFocusBeat, mapPlatePresentation, mapPlateStars, mapProgressCopy, worldGateCopy } from "./map-screen.js";
+import { academyProgressCopy, mapFocusBeat, mapPlateEntryAlpha, mapPlateGridPosition, mapPlatePresentation, mapPlateStars, mapProgressCopy, worldGateCopy } from "./map-screen.js";
 
 
 describe("the map's durable next-level focal", () => {
+  it("keeps the newly unlocked plate visible during the handoff arrival", () => {
+    expect(mapPlateEntryAlpha("open", 0.04)).toBeGreaterThan(0.7);
+    expect(mapPlateEntryAlpha("locked", 0.04)).toBe(0.04);
+  });
+
+  it("anchors Library plate 1 to the first cell by slot, not array position", () => {
+    const first = mapPlateGridPosition(1, 24, 200);
+    const second = mapPlateGridPosition(2, 24, 200);
+    expect(first).toEqual({ x: 24, y: 200 });
+    expect(second.x).toBeGreaterThan(first.x);
+    expect(second.y).toBe(first.y);
+  });
   it("keeps the open plate elevated after entrance motion settles", () => {
     const open = mapPlatePresentation("open");
     const cleared = mapPlatePresentation("cleared");
