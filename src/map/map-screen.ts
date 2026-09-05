@@ -12,8 +12,18 @@ import type { LevelState, LockReason, MapLevel, MapView } from "./model.js";
 /* Keep the two lock causes in the same quiet, plain register as the map. */
 export function worldGateCopy(reason: LockReason, gate: number, totalStars: number): string {
   return reason === "not-enough-stars"
-    ? "Earn " + gate + " stars to open this bunch. You have " + totalStars + "."
+    ? "Need " + gate + " stars to open this bunch. You have " + totalStars + "."
     : "Clear the previous bunch to reach this one.";
+}
+
+/**
+ * The footer must not turn an impossible seeded/legacy state into a second
+ * economy story. A clear with no earned stars cannot be counted beside the
+ * gate's zero-star shortfall: keep the useful star total and omit the clear
+ * tally until there is an earned-star total to qualify it.
+ */
+export function mapProgressCopy(cleared: number, totalLevels: number, totalStars: number): string {
+  return totalStars > 0 ? `${cleared} of ${totalLevels} cleared` : "";
 }
 
 /**
@@ -846,15 +856,24 @@ export class MapScreen {
      * screen used to have. Measured against the desk it read 1.92:1; cream
      * takes it to 6.49:1.
      */
-    const head = this.text(`${cleared} of ${v.levels.length} cleared`, 12, PALETTE.tokenInk);
+    const headCopy = mapProgressCopy(cleared, v.levels.length, v.totalStars);
+    const head = headCopy ? this.text(headCopy, 12, PALETTE.tokenInk) : null;
     const mark = star(size);
     const earned = this.text(`${v.totalStars} stars earned`, 12, PALETTE.tokenInk);
     const gap = 4;
-    head.position.set(0, 0);
-    mark.position.set(head.width + gap + size / 2, head.height / 2);
-    earned.position.set(head.width + gap + size + gap, 0);
-    progress.addChild(head, mark, earned);
-    progress.position.set(DESIGN.width / 2 - (head.width + earned.width + size + gap * 2) / 2, y + 44);
+    const headWidth = head?.width ?? 0;
+    if (head) {
+      head.position.set(0, 0);
+      mark.position.set(head.width + gap + size / 2, head.height / 2);
+      earned.position.set(head.width + gap + size + gap, 0);
+      progress.addChild(head, mark, earned);
+    } else {
+      mark.position.set(size / 2, earned.height / 2);
+      earned.position.set(size + gap, 0);
+      progress.addChild(mark, earned);
+    }
+    const progressWidth = headWidth + size + gap * (head ? 2 : 1) + earned.width;
+    progress.position.set(DESIGN.width / 2 - progressWidth / 2, y + 44);
     progress.alpha = 0.9;
     this.root.addChild(this.entry(progress, MAP_BANDS.footer));
 

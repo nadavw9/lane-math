@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DIM, PALETTE } from "../renderer/layout.js";
-import { mapFocusBeat, mapPlatePresentation, worldGateCopy } from "./map-screen.js";
+import { mapFocusBeat, mapPlatePresentation, mapProgressCopy, worldGateCopy } from "./map-screen.js";
 
 
 describe("the map's durable next-level focal", () => {
@@ -49,10 +49,21 @@ describe("the clear-to-map handoff beat", () => {
 
 describe("map gate copy", () => {
   it("states the star shortfall without implying cleared levels are stars", () => {
-    expect(worldGateCopy("not-enough-stars", 10, 0)).toBe("Earn 10 stars to open this bunch. You have 0.");
+    expect(worldGateCopy("not-enough-stars", 10, 0)).toBe("Need 10 stars to open this bunch. You have 0.");
   });
 
   it("keeps an unreached bunch separate from a star shortfall", () => {
     expect(worldGateCopy("not-reached", 10, 0)).toBe("Clear the previous bunch to reach this one.");
+  });
+});
+
+
+describe("map progress footer", () => {
+  it("does not pair cleared levels with a zero-star gate shortfall", () => {
+    expect(mapProgressCopy(10, 40, 0)).toBe("");
+  });
+
+  it("shows the clear tally once earned stars qualify it", () => {
+    expect(mapProgressCopy(10, 40, 10)).toBe("10 of 40 cleared");
   });
 });
