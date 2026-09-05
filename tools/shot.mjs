@@ -314,7 +314,7 @@ if (screen) {
     }
   }, screen);
   if (screen === "map-handoff-mid") {
-    await page.waitForTimeout(2200);
+    await page.waitForTimeout(2600);
     await page.evaluate(() => window.laneMath?.setEffectSpeed?.(0));
     settleWait = 0;
   }
