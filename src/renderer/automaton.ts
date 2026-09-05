@@ -37,8 +37,8 @@ export const AUTOMATON_JUMP_MS = TIMING.automatonJump;
 /** Soft settle into disappointment — not a shake. */
 export const AUTOMATON_DROOP_MS = TIMING.automatonDroop;
 
-/** Peak lift in design pixels. Small: brass has mass. */
-const JUMP_PX = 10;
+/** Peak lift in design pixels. Phone-readable, but still a single heavy arc. */
+const JUMP_PX = 22;
 /** Soft downward settle when the level fails. */
 const DROOP_PX = 5;
 /** Soft vertical squash on the fail settle — feet stay planted via bottom pivot. */

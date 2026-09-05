@@ -156,6 +156,8 @@ export const TIMING = {
   /** Gap between stars arriving, one at a time (§9.5). */
   starGap: 190,
   starArrive: 300,
+  /** A short physical beat that hands the banked clear into meta progress. */
+  clearProgressBeat: 520,
   /**
    * Brass automaton win hop — restrained, not celebratory (~300–500ms).
    * Weight register: one short hop (not an elastic bounce), no confetti.

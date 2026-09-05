@@ -117,8 +117,10 @@ describe("sampleAutomatonMotion (weight, not energy)", () => {
 
   it("peaks a hop upward mid-flight — one arc, not a bounce chain", () => {
     const mid = sampleAutomatonMotion("jump", 0.5);
-    expect(mid.dy).toBeLessThan(-5);
+    expect(mid.dy).toBeLessThan(-20);
     expect(mid.scaleY).toBeCloseTo(1, 6);
+    // The larger arc is readable at phone distance without squash/stretch.
+    expect(Math.abs(mid.dy)).toBeGreaterThanOrEqual(22);
     // Monotone rise then fall: no second peak (elastic bounce would re-rise).
     const early = sampleAutomatonMotion("jump", 0.25).dy;
     const late = sampleAutomatonMotion("jump", 0.75).dy;

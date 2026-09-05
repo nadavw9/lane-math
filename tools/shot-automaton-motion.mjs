@@ -203,7 +203,7 @@ writeFileSync(
     "",
     "Scout REJECT fix: mid-hop / mid-slump shutter calls `laneMath.clearShatters()`",
     "(proof harness only) so orange shatter debris does not bury the brass companion.",
-    "Motion timings unchanged (hop 420ms / droop 380ms).",
+    "Hop remains 420ms with a phone-readable 22px peak; droop remains 380ms.",
     "",
     `- win mid-hop feel: ${JSON.stringify(wonFeel)}`,
     `- fail mid-slump feel: ${JSON.stringify(failFeel)}`,
@@ -216,7 +216,7 @@ writeFileSync(
 writeFileSync(
   "docs/review/00-labels.txt",
   [
-    "Automaton win/fail motion (feat/automaton-win-fail-motion) — morning pack",
+    "Lane Math fluency P0 — automaton win/fail motion (feat/fluency-p0-motion-overlays) — morning pack",
     "Athens 2026-09-05. DRAFT ONLY — do not merge.",
     "Scout REJECT fix: mid-motion shots mute shatter FX at shutter (proof only).",
     "",
