@@ -56,6 +56,17 @@ export type TelemetryEvent =
       readonly stars_spent: number;
     }
   | { readonly name: "life_depleted"; readonly level_id: string }
+  | { readonly name: "first_tap"; readonly level_id: string }
+  | { readonly name: "equation_commit"; readonly level_id: string; readonly expression: string; readonly correct: boolean; readonly target_index: number }
+  | { readonly name: "level_clear"; readonly level_id: string; readonly stars: number }
+  | { readonly name: "ftue_cue_shown"; readonly level_id: string; readonly cue: string }
+  | { readonly name: "star_bank_update"; readonly total_stars: number; readonly delta: number; readonly reason: string }
+  | { readonly name: "map_open"; readonly focus_level_id?: string }
+  | { readonly name: "world_complete"; readonly world: number }
+  | { readonly name: "ad_offer_shown"; readonly placement: string }
+  | { readonly name: "ad_completed"; readonly placement: string }
+  | { readonly name: "ad_dismissed"; readonly placement: string }
+  | { readonly name: "ad_failed"; readonly placement: string }
   | { readonly name: "clean_retry_started"; readonly level_id: string; readonly attempt_number: number }
   /**
    * GDD §9.4: a rewarded continue was taken, and where it rewound to.

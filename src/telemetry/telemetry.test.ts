@@ -130,6 +130,12 @@ describe("the funnel records every §7.8 event", () => {
     expect(names(sink)).toContain("level_start");
     expect(names(sink)).toContain("move_commit");
     expect(names(sink)).toContain("level_complete");
+    expect(names(sink)).toContain("level_clear");
+    expect(names(sink)).toContain("equation_commit");
+    expect(names(sink).filter((n) => n === "first_tap")).toHaveLength(1);
+
+    expect(sink.events.filter((e) => e.event.name === "equation_commit")).toHaveLength(level.targets.length);
+    expect(sink.events.filter((e) => e.event.name === "level_clear")).toHaveLength(1);
 
     const complete = find(sink, "level_complete")!;
     expect(complete.stars).toBe(3);
@@ -138,6 +144,49 @@ describe("the funnel records every §7.8 event", () => {
     const commits = sink.events.filter((e) => e.event.name === "move_commit");
     expect(commits).toHaveLength(level.targets.length);
     expect(commits.every((e) => (e.event as { correct: boolean }).correct)).toBe(true);
+  });
+
+  it("emits each FTUE cue once despite repeated renders", () => {
+    const sink = new MemorySink();
+    const c = clock();
+    const telemetry = new Telemetry([sink], c.now);
+    const director = new Director(load("1-01"), "normal", new Economy(new MemoryStore(), c.now), telemetry);
+
+    stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    stateOf(director.handle({ type: "tick" }));
+    expect(sink.events.filter((e) => e.event.name === "ftue_cue_shown")).toHaveLength(1);
+
+    const state = stateOf(director.handle({ type: "loadLevel", id: "1-01" }));
+    c.advance(10);
+    stateOf(director.handle({ type: "tapTile", id: state.tiles[0]!.id }));
+    stateOf(director.handle({ type: "tick" }));
+    expect(sink.events.filter((e) => e.event.name === "first_tap")).toHaveLength(1);
+  });
+
+  it("records shell funnel names and de-duplicates world completion", () => {
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+
+    telemetry.open();
+    telemetry.mapOpen("1-02");
+    telemetry.worldComplete(1);
+    telemetry.worldComplete(1);
+    telemetry.adOfferShown("ftue_hint");
+    telemetry.adCompleted("ftue_hint");
+    telemetry.adDismissed("continue");
+    telemetry.adFailed("life_refill");
+    telemetry.starBankUpdate(3, 3, "level_clear");
+
+    expect(names(sink)).toEqual([
+      "app_open",
+      "map_open",
+      "world_complete",
+      "ad_offer_shown",
+      "ad_completed",
+      "ad_dismissed",
+      "ad_failed",
+      "star_bank_update",
+    ]);
   });
 
   it("records an incorrect commit as correct:false without failing the level", () => {

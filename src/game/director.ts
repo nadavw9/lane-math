@@ -145,6 +145,8 @@ export class Director {
   private history: Snapshot[] = [];
   /** GDD §9.4: at most two per attempt, so a level cannot be bought outright. */
   private continuesUsed = 0;
+  /** Cues are emitted once per level/session, even when render is called repeatedly. */
+  private readonly shownFtueCues = new Set<string>();
 
   constructor(
     level: LadderLevel,
@@ -628,6 +630,11 @@ export class Director {
   }
 
   private state(): ViewState {
+    const cue = ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op);
+    if (cue !== null && !this.shownFtueCues.has(cue.line)) {
+      this.shownFtueCues.add(cue.line);
+      this.telemetry?.cueShown(this.level.id, cue.line);
+    }
     return {
       levelId: this.level.id,
       run: this.run,
@@ -990,6 +997,13 @@ export class Director {
         correct: false,
         target_index: this.targetIndex,
       });
+      this.telemetry?.record({
+        name: "equation_commit",
+        level_id: this.level.id,
+        expression: left.value + " " + op + " " + right.value,
+        correct: false,
+        target_index: this.targetIndex,
+      });
       return this.reject(`${left.value} ${op} ${right.value} = ${result}, not ${target}`);
     }
 
@@ -1002,6 +1016,13 @@ export class Director {
       name: "move_commit",
       level_id: this.level.id,
       expression: `${left.value} ${op} ${right.value}`,
+      correct: true,
+      target_index: this.targetIndex,
+    });
+    this.telemetry?.record({
+      name: "equation_commit",
+      level_id: this.level.id,
+      expression: left.value + " " + op + " " + right.value,
       correct: true,
       target_index: this.targetIndex,
     });
@@ -1022,8 +1043,13 @@ export class Director {
 
     if (this.targetIndex >= this.level.targets.length) {
       this.phase = "won";
+      const starsBefore = this.economy?.state.totalStars;
       const award = this.economy?.recordClear(this.level.id);
       this.telemetry?.levelComplete(this.level.id, award?.stars ?? 0, this.failures + 1);
+      this.telemetry?.levelClear(this.level.id, award?.stars ?? 0);
+      if (award && starsBefore !== undefined) {
+        this.telemetry?.starBankUpdate(award.totalStars, award.totalStars - starsBefore, "level_clear");
+      }
       this.message = award ? `cleared — ${award.stars} star${award.stars === 1 ? "" : "s"}` : "cleared";
       return this.render();
     }
