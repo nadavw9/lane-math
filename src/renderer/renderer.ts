@@ -70,6 +70,11 @@ const BINARY: readonly BinaryOp[] = ["+", "-", "*", "/"];
 const UNARY: readonly UnaryOp[] = ["sqrt", "sq"];
 /** Tile ids are non-negative, so a negative key can never collide with one. */
 const OPERATOR_LIFT_KEY = -1;
+/** Keep the first board focused on the lane until its first clear. */
+export function isFirstClearTeach(levelId: string, cleared: boolean): boolean {
+  return levelId === "1-01" && !cleared;
+}
+
 
 /**
  * Display forms for the operator codes.
@@ -1738,6 +1743,7 @@ export class Renderer {
     }
 
     const outcomeOwnsMoment = s.phase === "won" || s.phase === "failed" || eco?.lockedOut === true;
+    const firstTeach = isFirstClearTeach(s.levelId, eco?.cleared ?? false);
 
     if (!outcomeOwnsMoment) {
     /*
@@ -1857,6 +1863,7 @@ export class Renderer {
     this.root.addChild(build);
     }
 
+    if (!firstTeach) {
     // entry-exempt: the dev build label's hit area
     this.root.addChild(
       this.box(
@@ -2011,6 +2018,7 @@ export class Renderer {
           this.root.addChild(this.entry(row, BOARD_BANDS.equation));
         });
       }
+    }
     }
 
     }
