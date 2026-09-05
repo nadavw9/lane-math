@@ -126,10 +126,11 @@ describe("tokens scale to board size (§9.2)", () => {
     }
   });
 
-  it("settles sparse World 1 at 106px parity", () => {
+  it("settles sparse World 1 at shared token parity", () => {
+    // Was 106 before LANE_HEADER grew for SAFE_TOP HUD air (Scout REJECT PR #8).
     const layout = bands({ targets: 3, tiles: 6, hints: 0, operators: 2 });
-    expect(layout.grid.size).toBe(106);
-    expect(layout.operatorGrid.size).toBe(106);
+    expect(layout.grid.size).toBe(102);
+    expect(layout.operatorGrid.size).toBe(102);
   });
 });
 
@@ -152,24 +153,15 @@ describe("the stack fits and sits low (§9.1)", () => {
      * HINT_LINE_H went 16 -> 22 so the hint mark could read as a cut gem rather
      * than a gold dot. On the densest board those 6px come out of the pool.
      *
-     * THE TEST USED TO CLAIM "both 12px anchors" AND THAT WAS NEVER TRUE. The
-     * bottom edge is anchored at 888 for every board, which is §9.1's "sits
-     * low" and is what the suite should defend. The top was 12 only for THIS
-     * configuration and only by luck: the stack is bottom-anchored, token size
-     * is quantised to whole pixels, and whatever does not divide evenly falls
-     * out as slack at the top. At the previously shipped HINT_LINE_H the same
-     * board with three hints already sat at 20, not 12 — so the "anchor" the
-     * name promised did not exist even before this change.
-     *
-     * Measured across 16..22, the bottom stayed 888 at every value and only the
-     * top slack moved. So the bottom is asserted as an invariant, and the top
-     * is pinned as an observation with its reason attached.
+     * Moved 2026-09-05 (Scout REJECT PR #8): SAFE_TOP 36 -> 56 and LANE_HEADER
+     * 44 -> 72 so HUD stars clear status chrome with honest air inside the lane.
+     * Bottom edge stays 888 (§9.1); top slack is incidental.
      */
     const layout = bands({ targets: 6, tiles: 14, hints: 1, operators: 5 });
-    expect(layout.grid.size).toBe(58);
+    expect(layout.grid.size).toBe(55);
     expect(layout.status.y + layout.status.height).toBe(888);
-    // Incidental, not an anchor — see above.
-    expect(layout.lane.y).toBe(16);
+    // Incidental top slack — not an anchor.
+    expect(layout.lane.y).toBe(18);
   });
 
   it("bottom-anchors every board at 888, whatever the hint count (§9.1)", () => {

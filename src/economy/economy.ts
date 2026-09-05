@@ -195,7 +195,17 @@ export class Economy {
    * the anchor would silently cancel the refill the player was already waiting
    * for, charging them an ad for something they had nearly earned.
    */
-  grantAdLife(): boolean {
+  /**
+   * Review/harness only — force the life count (and lockout when zero).
+   * Resets the regen anchor so a forced zero stays visible for screenshots.
+   */
+  setLives(n: number): void {
+    const lives = Math.max(0, Math.min(this.config.maxLives, Math.floor(n)));
+    const now = Math.max(this.now(), this.save.clockHighWater);
+    this.commit({ ...this.save, lives, lastLifeGrantedAt: now, clockHighWater: now });
+  }
+
+    grantAdLife(): boolean {
     this.regenerate();
     if (this.save.lives >= this.config.maxLives) return false;
     this.commit({ ...this.save, lives: this.save.lives + 1 });

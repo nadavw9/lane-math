@@ -150,6 +150,19 @@ function recessedPanel(w: number, h: number, value: string, style: TokenStyle): 
   const numeralY = wellCY - panelH * 0.055;
 
   inset.roundRect(panelX, panelY, panelW, panelH, radius).fill({ color: PALETTE.felt });
+  if (style.outline !== undefined) {
+    /*
+     * Cool lip on the felt well — the live-target signal when atlas brass and a
+     * Graphics hex cannot share an edge. Seated on the recess the eye already
+     * reads as the answer window.
+     */
+    inset.roundRect(panelX, panelY, panelW, panelH, radius).stroke({
+      width: Math.max(2, (style.outlineWidth ?? 3.5) * 0.55),
+      color: style.outline,
+      alpha: 0.95,
+      alignment: 1,
+    });
+  }
 
   /*
    * What makes it read as CUT rather than painted on: with one light from the
@@ -349,19 +362,26 @@ export function framedPanel(
   }
   panel.addChild(studs);
 
-  // The centre cartouche, carrying the gold mark the hint line already uses.
+  /*
+   * Centre cartouche + gem. Must fully bridge the brass frame into the felt
+   * opening — a short pill left a pale rim stroke visible under the diamond
+   * (Scout REJECT PR #8: "white slivers under the diamond tab", same class as
+   * Nadav's half-clipped cartouche numeral).
+   */
   const cartouche = new Graphics();
-  const cw = border * 2.4;
-  const ch = border * 0.92;
+  const cw = border * 2.6;
+  const ch = border * 1.35;
+  const cartoucheTop = -border * 0.38;
   cartouche
-    .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch, ch * 0.42)
+    .roundRect(w / 2 - cw / 2, cartoucheTop, cw, ch, ch * 0.36)
     .fill({ color: PALETTE.brass });
   cartouche
-    .roundRect(w / 2 - cw / 2, -ch * 0.32, cw, ch * 0.5, ch * 0.42)
-    .fill({ color: 0xffe9a8, alpha: 0.3 });
+    .roundRect(w / 2 - cw / 2, cartoucheTop, cw, ch * 0.48, ch * 0.36)
+    .fill({ color: 0xffe9a8, alpha: 0.28 });
   panel.addChild(cartouche);
-  const gem = hintDiamond(border * 0.72);
-  gem.position.set(w / 2, ch * 0.16);
+  const gem = hintDiamond(border * 0.78);
+  // Seat the gem in the cartouche body, clear of the felt-opening rim below.
+  gem.position.set(w / 2, cartoucheTop + ch * 0.42);
   panel.addChild(gem);
 
   /*
@@ -377,9 +397,19 @@ export function framedPanel(
   return { panel, interior: { x: ix, y: iy, width: iw, height: ih } };
 }
 
+/**
+ * Native plaque atlas top-edge notch as a fraction of frame width.
+ *
+ * Measured on plaques.webp (opaque top span 45..314 of 360). Procedural
+ * `hexPath` uses min(w*0.16, h*0.5), which diverges once the sprite is
+ * stretched away from the atlas aspect — the cool front rim then floats off
+ * the brass edge (OOL phone-eye P0).
+ */
+export const PLAQUE_ART_NOTCH = 45 / 360;
+
 /** Flat-top hexagon path, inset into its box. */
-function hexPath(g: Graphics, w: number, h: number): Graphics {
-  const notch = Math.min(w * 0.16, h * 0.5);
+function hexPath(g: Graphics, w: number, h: number, notchX?: number): Graphics {
+  const notch = notchX ?? Math.min(w * 0.16, h * 0.5);
   return g.poly([
     notch, 0,
     w - notch, 0,
@@ -433,14 +463,11 @@ export function targetPlate(
    */
   const art = spriteBase("plaque", "idle", w, h, Math.abs(variant) % 2);
   if (art) {
-    if (style.outline !== undefined) {
-      art.container.addChild(
-        hexPath(new Graphics(), w, h).stroke({
-          width: style.outlineWidth ?? 3.5,
-          color: style.outline,
-        }),
-      );
-    }
+    /*
+     * No floating Graphics hex over atlas plaques (phone-eye: cool stroke never
+     * shared an edge with the stretched casting). Live-target emphasis is the
+     * cool lip on the felt well inside recessedPanel — geometry that matches.
+     */
     // Felt well + cream numeral, seated on the content centre (not the shadow frame).
     const well = recessedPanel(w, h, value, style);
     well.position.set(art.numeral.x - w / 2, art.numeral.y - h / 2);
@@ -463,7 +490,12 @@ export function targetPlate(
     .stroke({ width: 2, color: 0xffffff, alpha: 0.1 });
 
   if (style.outline !== undefined) {
-    hexPath(g, w, h).stroke({ width: style.outlineWidth ?? 3, color: style.outline });
+    // Inner alignment: the rim is a lip on the plate, not a floating halo.
+    hexPath(g, w, h).stroke({
+      width: style.outlineWidth ?? 3,
+      color: style.outline,
+      alignment: 1,
+    });
   }
   token.addChild(g);
 

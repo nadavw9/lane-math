@@ -17,6 +17,7 @@ import {
   LANE_FELT_ALPHA,
   HINT_LINE_H,
   PALETTE,
+  SAFE_TOP,
   TRAY_ALPHA,
   type Bands,
   type Rect,
@@ -808,10 +809,22 @@ export class Renderer {
    */
   private drawOutOfLives(lane: Rect, eco: NonNullable<ViewState["economy"]>): void {
     const width = lane.width - 24;
-    // Taller so the concerned automaton can sit at brand scale (PE-04), not postage.
-    const height = 248;
+    // Taller so the concerned automaton can sit at brand scale (PE-04), and so
+    // the wait line stays inside the felt well above the brass frame.
+    const height = 264;
     const x = lane.x + 12;
-    const y = lane.y + lane.height / 2 - height / 2;
+    /*
+     * The framedPanel cartouche protrudes ABOVE the outer edge. Preferred seat
+     * is lane-centred, but never so high that the cartouche (star gem) sits
+     * under phone status chrome — Nadav phone-eye: top star/count half-hidden.
+     */
+    const border = Math.max(12, Math.min(width, height) * 0.075);
+    // Cartouche protrudes border*0.38 above the panel; keep honest air above that.
+    const cartoucheClear = border * 0.38 + 16;
+    const minY = SAFE_TOP + cartoucheClear;
+    const preferredY = lane.y + lane.height / 2 - height / 2;
+    const maxY = Math.max(minY, lane.y + lane.height - height - 4);
+    const y = Math.min(Math.max(preferredY, minY), maxY);
 
     /*
      * BRASS OVER FELT, like every other panel (§9.0).
@@ -825,6 +838,13 @@ export class Renderer {
     framed.panel.position.set(x, y);
     this.root.addChild(this.entry(framed.panel, BOARD_BANDS.furniture));
 
+    // Content against the OPENING, not the outer brass — keeps copy off the frame.
+    const inner = framed.interior;
+    const contentLeft = x + inner.x;
+    const contentTop = y + inner.y;
+    const contentW = inner.width;
+    const contentBottom = y + inner.y + inner.height;
+
     /*
      * THE AUTOMATON'S SEAT (ART_DIRECTION §2, concerned state).
      *
@@ -835,8 +855,8 @@ export class Renderer {
      */
     // PE-04: brand-scale concerned pose beside the copy — not a postage stamp.
     const seat = 96;
-    const seatX = x + 16;
-    const seatY = y + 18;
+    const seatX = contentLeft + 8;
+    const seatY = contentTop + 10;
     // §2's table calls this state "Concerned"; the sheet ships it as `worried`.
     const placeholder = spriteFor("automaton-worried");
     if (placeholder) {
@@ -880,9 +900,9 @@ export class Renderer {
     this.root.addChild(
       this.entry(
         this.box(
-          x + 20,
+          contentLeft + 10,
           actionY,
-          width - 40,
+          contentW - 20,
           44,
           "Watch to Continue",
           () => this.emit({ type: "tapWatchAd" }),
@@ -906,9 +926,14 @@ export class Renderer {
       this.root.addChild(this.entry(note, BOARD_BANDS.equation));
     }
 
+    /*
+     * Wait copy stays FULLY inside the felt opening (phone-eye: it used to sit
+     * on y+height-26 and straddle the brass border). Bottom-anchored into the
+     * interior with a clear margin above the frame.
+     */
     const wait = this.text("or wait — the timer is always running", 11, PALETTE.tokenInk);
-    wait.anchor.set(0.5, 0);
-    wait.position.set(DESIGN.width / 2, y + height - 26);
+    wait.anchor.set(0.5, 1);
+    wait.position.set(x + inner.x + inner.width / 2, contentBottom - 18);
     wait.alpha = 0.6;
     this.root.addChild(this.entry(wait, BOARD_BANDS.status));
   }
@@ -1590,7 +1615,7 @@ export class Renderer {
         // §8: brass pocket-watches, not hearts. Lives refill on a timer.
         const size = 14;
         const watches = emblemMeter("life", eco.lives, eco.maxLives, size);
-        watches.position.set(lane.x + 8, lane.y + 6);
+        watches.position.set(lane.x + 8, Math.max(lane.y + 14, SAFE_TOP + 10));
         this.root.addChild(this.entry(watches, BOARD_BANDS.status));
 
         /*
@@ -1613,7 +1638,7 @@ export class Renderer {
          * its vertical middle against the emblems rather than on its top.
          */
         hud.anchor.set(0, 0.5);
-        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 16, lane.y + 6 + size / 2);
+        hud.position.set(lane.x + 8 + meterWidth(eco.maxLives, size) + 16, Math.max(lane.y + 14, SAFE_TOP + 10) + size / 2);
         this.root.addChild(this.entry(hud, BOARD_BANDS.status));
       }
 
@@ -1638,7 +1663,7 @@ export class Renderer {
         // Same clearance at the other end: nothing sits beside the stars, but
         // the row is inset from the lane edge by the same margin so the two
         // meters read as a pair rather than as one tucked tighter than the other.
-        stars.position.set(lane.x + lane.width - 16 - meterWidth(3, size), lane.y + 6);
+        stars.position.set(lane.x + lane.width - 16 - meterWidth(3, size), Math.max(lane.y + 14, SAFE_TOP + 10));
         this.root.addChild(this.entry(stars, BOARD_BANDS.status));
       }
 

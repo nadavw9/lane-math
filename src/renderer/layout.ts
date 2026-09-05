@@ -228,6 +228,18 @@ export interface BoardSize {
 }
 
 const PAD = 12;
+/**
+ * Design-space clearance under phone status / notch chrome.
+ *
+ * CSS `env(safe-area-inset-top)` is often 0 in Android WebView even when the
+ * system status bar overlays the canvas — PAD alone left the OOL cartouche and
+ * top HUD half-eaten. This is the in-canvas floor for top chrome.
+ *
+ * Scout REJECT on draft PR #8: SAFE_TOP=36 still left OOL cartouche/stars
+ * kissing the top edge (same class as Nadav's half-clipped cartouche "13").
+ * 56 gives honest air above HUD stars and the framedPanel cartouche gem.
+ */
+export const SAFE_TOP = 56;
 const GAP = 8;
 
 /**
@@ -283,8 +295,13 @@ export function statusRows(status: Rect): {
   const message = status.y + 7;
   return { message, controlsY: status.y + status.height - controlH - 4, controlH };
 }
-/** Room for the lives/stars HUD along the top of the lane. */
-const LANE_HEADER = 44;
+/**
+ * Room for the lives/stars HUD along the top of the lane.
+ *
+ * Scout REJECT PR #8: must clear SAFE_TOP with honest air above the star tips
+ * even when the lane hugs PAD (dense 2-08 OOL). 44 left stars kissing the rim.
+ */
+const LANE_HEADER = 72;
 
 /** How the pool's tiles are arranged, and how big every board token is. */
 export interface Grid {

@@ -147,6 +147,19 @@ if (screen) {
       api.showMap();
       api.tapRestore?.(1);
     }
+    if (name === "ool") {
+      /*
+       * Out-of-lives modal. Lives unlock at 2-08; force zero so the designed
+       * screen is on camera without failing through a full life bank.
+       */
+      api.setLives?.(0);
+      api.load?.("2-08");
+      api.showBoard?.();
+      await new Promise((r) => setTimeout(r, 800));
+      if (!api.state()?.economy?.lockedOut) {
+        throw new Error("not locked out — nothing to shoot");
+      }
+    }
     if (name === "shop") {
       api.send({ type: "toggleShop" });
     }
