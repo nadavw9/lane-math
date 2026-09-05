@@ -418,6 +418,7 @@ export class Director {
       maxLives: this.economy.config.maxLives,
       livesActive: livesActiveFor(this.level.id, this.economy.config),
       bestStars: progress.bestStars,
+      cleared: progress.cleared,
       starsIfCleared: this.economy.starsForAttempt(this.level.id),
       totalStars: this.economy.state.totalStars,
       firstFailureExempt: this.lastFailureExempt,
@@ -675,7 +676,7 @@ export class Director {
   }
 
   private teachingLine(): string | null {
-    if (this.level.id !== CONSTRAINT_LEVEL || this.phase !== "playing") return null;
+    if (this.level.id !== CONSTRAINT_LEVEL || this.phase !== "playing" || this.economy?.progressFor(this.level.id).cleared === true) return null;
     if (this.slots.leftTileId === null) return "Tap a number.";
     if (this.slots.op === null) return "Choose a sign.";
     return "Make the target.";

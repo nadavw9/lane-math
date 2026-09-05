@@ -122,6 +122,7 @@ export interface EconomyView {
   /** False in World 1 and before the 2-08 unlock (GDD §7.2, §7.6). */
   readonly livesActive: boolean;
   readonly bestStars: number;
+  readonly cleared: boolean;
   /** Stars this attempt would earn if cleared now. */
   readonly starsIfCleared: number;
   readonly totalStars: number;

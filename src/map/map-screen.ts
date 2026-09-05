@@ -7,7 +7,14 @@ import { EASE, TIMING, Tween } from "../renderer/tween.js";
 import { DESIGN, DIM, PALETTE, SAFE_TOP, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
 import { OBJECTS, objectsFor, slotsFor, veiled, type Restored } from "./veil.js";
-import type { LevelState, MapLevel, MapView } from "./model.js";
+import type { LevelState, LockReason, MapLevel, MapView } from "./model.js";
+
+/* Keep the two lock causes in the same quiet, plain register as the map. */
+export function worldGateCopy(reason: LockReason, gate: number, totalStars: number): string {
+  return reason === "not-enough-stars"
+    ? "Earn " + gate + " stars to open this bunch. You have " + totalStars + "."
+    : "Clear the previous bunch to reach this one.";
+}
 
 /**
  * The world map (GDD §7.6, unlocked by clearing 1-10).
@@ -720,7 +727,7 @@ export class MapScreen {
     // The count reads as text and the star reads as an object, so the emblem is
     // placed after the number rather than being a character inside it.
     const bankedStar = 15;
-    const banked = this.text(`${v.starsAvailable}`, 17, PALETTE.highlightInk);
+    const banked = this.text(`${v.totalStars}`, 17, PALETTE.highlightInk);
     banked.anchor.set(1, 0);
     banked.position.set(DESIGN.width - PAD - 10 - bankedStar - 4, SAFE_TOP + 9);
     this.root.addChild(this.entry(banked, MAP_BANDS.header));
@@ -794,9 +801,7 @@ export class MapScreen {
       this.root.addChild(this.entry(name, MAP_BANDS.header + world));
       const blocked = levels.find((level) => level.state === "locked");
       if (world > 1 && blocked) {
-        const gateLine = blocked.lockReason === "not-enough-stars"
-          ? "Earn " + (v.worldGates[world] ?? 0) + " stars to open this bunch. You have " + v.totalStars + "."
-          : "Clear the previous bunch to reach this one.";
+        const gateLine = worldGateCopy(blocked.lockReason ?? "not-reached", v.worldGates[world] ?? 0, v.totalStars);
         const gate = this.text(gateLine, 9, PALETTE.tokenInk);
         gate.position.set(PAD + 10, y + 17);
         gate.alpha = 0.9;
@@ -809,7 +814,7 @@ export class MapScreen {
         this.plate(
           level,
           left + (i % COLS) * (CELL + GAP),
-          y + 24 + Math.floor(i / COLS) * (CELL * 0.66 + GAP),
+          y + 30 + Math.floor(i / COLS) * (CELL * 0.66 + GAP),
           MAP_BANDS.header + world,
         );
       });
@@ -841,15 +846,15 @@ export class MapScreen {
      * screen used to have. Measured against the desk it read 1.92:1; cream
      * takes it to 6.49:1.
      */
-    const head = this.text(`${cleared} of ${v.levels.length} cleared · ${v.totalStars}`, 12, PALETTE.tokenInk);
+    const head = this.text(`${cleared} of ${v.levels.length} cleared`, 12, PALETTE.tokenInk);
     const mark = star(size);
-    const tail = this.text("earned", 12, PALETTE.tokenInk);
+    const earned = this.text(`${v.totalStars} stars earned`, 12, PALETTE.tokenInk);
     const gap = 4;
     head.position.set(0, 0);
     mark.position.set(head.width + gap + size / 2, head.height / 2);
-    tail.position.set(head.width + gap + size + gap, 0);
-    progress.addChild(head, mark, tail);
-    progress.position.set(DESIGN.width / 2 - (head.width + tail.width + size + gap * 2) / 2, y + 44);
+    earned.position.set(head.width + gap + size + gap, 0);
+    progress.addChild(head, mark, earned);
+    progress.position.set(DESIGN.width / 2 - (head.width + earned.width + size + gap * 2) / 2, y + 44);
     progress.alpha = 0.9;
     this.root.addChild(this.entry(progress, MAP_BANDS.footer));
 

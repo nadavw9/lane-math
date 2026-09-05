@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { DIM, PALETTE } from "../renderer/layout.js";
-import { mapFocusBeat, mapPlatePresentation } from "./map-screen.js";
+import { mapFocusBeat, mapPlatePresentation, worldGateCopy } from "./map-screen.js";
+
 
 describe("the map's durable next-level focal", () => {
   it("keeps the open plate elevated after entrance motion settles", () => {
@@ -42,5 +43,16 @@ describe("the clear-to-map handoff beat", () => {
     expect(end.dy).toBeCloseTo(0);
     expect(end.scale).toBeCloseTo(1);
     expect(middle.scale).toBeLessThan(1.04);
+  });
+});
+
+
+describe("map gate copy", () => {
+  it("states the star shortfall without implying cleared levels are stars", () => {
+    expect(worldGateCopy("not-enough-stars", 10, 0)).toBe("Earn 10 stars to open this bunch. You have 0.");
+  });
+
+  it("keeps an unreached bunch separate from a star shortfall", () => {
+    expect(worldGateCopy("not-reached", 10, 0)).toBe("Clear the previous bunch to reach this one.");
   });
 });
