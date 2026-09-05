@@ -910,23 +910,34 @@ export function emptySlot(w: number, h: number, shape: "square" | "circle"): Con
   const token = new Container();
   const g = new Graphics();
 
-  // PE-05: lighter felt recess that still invites the next tap. Alpha-0.14
-  // black holes read too dead beside glass cubes at phone distance.
-  const inset = { color: 0x3a2a1c, alpha: 0.72 };
-  const edge = { width: 2.5, color: PALETTE.brassLit, alpha: 0.42 };
+  /*
+   * PE-05: A LIGHTER FELT RECESS, not a dark hole.
+   *
+   * The first pass lifted the old near-black fill, but at phone distance it
+   * still collapsed into the equation tray. This warm felt sits visibly above
+   * the tray while staying far below the amber glass that will fill it. The
+   * brass lip is a physical invitation ring — stronger than before, but with
+   * no bloom or pulse, so §9.5 stays in the register of weight rather than
+   * energy.
+   */
+  const inset = { color: PALETTE.feltRecess, alpha: 0.94 };
+  const cut = { width: 4, color: 0x120b07, alpha: 0.3 };
+  const lip = { width: 3.5, color: PALETTE.brassLit, alpha: 0.78 };
+  const inner = { width: 1.5, color: 0xffffff, alpha: 0.12 };
 
   if (shape === "circle") {
-    const radius = Math.min(w, h) / 2;
+    const radius = Math.max(1, Math.min(w, h) / 2 - 2);
     g.circle(w / 2, h / 2, radius).fill(inset);
-    g.circle(w / 2, h / 2, radius).stroke(edge);
+    g.circle(w / 2, h / 2, radius).stroke(cut);
+    g.circle(w / 2, h / 2, radius - 0.75).stroke(lip);
     g.circle(w / 2, h / 2, Math.max(1, radius - 2))
-      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.08 });
+      .stroke(inner);
   } else {
     const r = Math.min(w, h) * 0.22;
-    g.roundRect(0, 0, w, h, r).fill(inset);
-    g.roundRect(0, 0, w, h, r).stroke(edge);
-    g.roundRect(2, 2, w - 4, h - 4, Math.max(1, r - 2))
-      .stroke({ width: 1.5, color: 0xffffff, alpha: 0.08 });
+    g.roundRect(2, 2, w - 4, h - 4, Math.max(1, r - 2)).fill(inset);
+    g.roundRect(2, 2, w - 4, h - 4, Math.max(1, r - 2)).stroke(cut);
+    g.roundRect(2.75, 2.75, w - 5.5, h - 5.5, Math.max(1, r - 2.75)).stroke(lip);
+    g.roundRect(4.5, 4.5, w - 9, h - 9, Math.max(1, r - 4.5)).stroke(inner);
   }
 
   token.addChild(g);

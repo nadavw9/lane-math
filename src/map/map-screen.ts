@@ -6,7 +6,7 @@ import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { DESIGN, DIM, PALETTE, SAFE_TOP, TRAY_ALPHA } from "../renderer/layout.js";
 import { UI_FONT, framedPanel, targetPlate, woodenTray } from "../renderer/tokens.js";
 import { OBJECTS, objectsFor, slotsFor, veiled, type Restored } from "./veil.js";
-import type { MapLevel, MapView } from "./model.js";
+import type { LevelState, MapLevel, MapView } from "./model.js";
 
 /**
  * The world map (GDD §7.6, unlocked by clearing 1-10).
@@ -41,6 +41,62 @@ const PAD = 12;
 const COLS = 5;
 const CELL = 62;
 const GAP = 8;
+
+/** Durable material hierarchy for a level plate after the entrance settles. */
+export interface MapPlatePresentation {
+  readonly scale: number;
+  readonly faceAlpha: number;
+  readonly faceFill: number;
+  readonly rim: number | undefined;
+  readonly seatAlpha: number;
+  readonly seatLayers: number;
+  readonly seatDepth: number;
+  readonly groundAlpha: number;
+}
+
+/**
+ * GDD §9.0 FOCAL: the next playable plate remains the map's one door.
+ *
+ * Entrance order points at it once; this presentation keeps pointing after
+ * motion stops. Open gains scale, a cool rim and a deeper seat. Cleared keeps
+ * its earned stars but lies slightly quieter, while only locked uses §9.6 DIM.
+ */
+export function mapPlatePresentation(state: LevelState): MapPlatePresentation {
+  if (state === "open") {
+    return {
+      scale: 1.1,
+      faceAlpha: 1,
+      faceFill: PALETTE.targetFront,
+      rim: PALETTE.targetFrontRim,
+      seatAlpha: 0.18,
+      seatLayers: 5,
+      seatDepth: 1.65,
+      groundAlpha: 1,
+    };
+  }
+  if (state === "cleared") {
+    return {
+      scale: 0.97,
+      faceAlpha: 0.9,
+      faceFill: PALETTE.targetPlate,
+      rim: PALETTE.brassDeep,
+      seatAlpha: 0.1,
+      seatLayers: 3,
+      seatDepth: 1,
+      groundAlpha: 0.82,
+    };
+  }
+  return {
+    scale: 0.96,
+    faceAlpha: DIM.alpha,
+    faceFill: PALETTE.targetPlate,
+    rim: undefined,
+    seatAlpha: 0.08,
+    seatLayers: 2,
+    seatDepth: 0.72,
+    groundAlpha: 1,
+  };
+}
 
 export class MapScreen {
   readonly root = new Container();
@@ -208,6 +264,7 @@ export class MapScreen {
   private plate(level: MapLevel, x: number, y: number, band: number): void {
     const w = CELL;
     const h = CELL * 0.66;
+    const presentation = mapPlatePresentation(level.state);
 
     /*
      * A REAL BUTTON, not a bare hit area with a listener.
@@ -230,8 +287,16 @@ export class MapScreen {
      * can stay visible between them rather than being veiled to death.
      */
     const seat = new Graphics();
-    for (let i = 3; i >= 1; i--) {
-      seat.roundRect(-i * 0.8, 2 + i * 1.2, w + i * 1.6, h + i, 8).fill({ color: 0x1a0f08, alpha: 0.12 });
+    for (let i = presentation.seatLayers; i >= 1; i--) {
+      seat
+        .roundRect(
+          -i * 0.8,
+          2 + i * presentation.seatDepth,
+          w + i * 1.6,
+          h + i * presentation.seatDepth * 0.85,
+          8,
+        )
+        .fill({ color: 0x1a0f08, alpha: presentation.seatAlpha });
     }
     /*
      * OPAQUE UNDER A LOCKED PLATE (§9.6).
@@ -247,23 +312,23 @@ export class MapScreen {
      */
     seat
       .roundRect(-2, -2, w + 4, h + 4, 8)
-      .fill({ color: PALETTE.felt, alpha: level.state === "locked" ? 1 : 0.85 });
+      .fill({ color: PALETTE.felt, alpha: presentation.groundAlpha });
 
     const face = targetPlate(
       w,
       h,
       String(level.slot),
       {
-        fill: level.state === "cleared" ? PALETTE.targetFront : PALETTE.targetPlate,
+        fill: presentation.faceFill,
         text: PALETTE.tokenInk,
         // Flat, like the lane's: a target is a thing you spend tiles ON, and
         // the map plate stands for the same object.
         bevel: 0,
-        outline: level.state === "cleared" ? PALETTE.highlight : undefined,
+        outline: presentation.rim,
       },
       level.slot,
     );
-    if (level.state === "locked") face.alpha = DIM.alpha;
+    face.alpha = presentation.faceAlpha;
 
     // Best-ever stars, which only a cleared plate has.
     if (level.state === "cleared") {
@@ -290,7 +355,15 @@ export class MapScreen {
     });
     control.addChildAt(seat, 0);
 
-    control.position.set(x, y);
+    /*
+     * Scale around the plate's centre, not its top-left. Without the offset the
+     * focal drifts down-right as it grows and stops lining up with its ladder.
+     */
+    control.scale.set(presentation.scale);
+    control.position.set(
+      x - (w * (presentation.scale - 1)) / 2,
+      y - (h * (presentation.scale - 1)) / 2,
+    );
     // The one OPEN level lands last: forty plates, and that is the door (§9.0).
     this.root.addChild(this.entry(control, level.state === "open" ? MAP_BANDS.open : band));
   }
