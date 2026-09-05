@@ -187,6 +187,15 @@ if (screen) {
       api.showMapAfterClear?.();
       settleWait = 280;
     }
+    if (name === "map-handoff-mid") {
+      api.showBoard();
+      await api.winLevel?.();
+      api.setEffectSpeed?.(1);
+      api.showMapAfterClear?.();
+      await new Promise((r) => setTimeout(r, 300));
+      api.setEffectSpeed?.(0);
+      settleWait = 0;
+    }
     if (name === "cleared") {
       /*
        * Win the level through the solver, so the cleared panel is reached the
