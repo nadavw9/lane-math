@@ -188,13 +188,11 @@ if (screen) {
       settleWait = 280;
     }
     if (name === "map-handoff-mid") {
+      /* W1 is seeded complete; after the real win, freeze the map with Library 2-01 still arriving. */
       api.showBoard();
       await api.winLevel?.();
       api.setEffectSpeed?.(1);
       api.showMapAfterClear?.();
-      await new Promise((r) => setTimeout(r, 300));
-      api.setEffectSpeed?.(0);
-      settleWait = 0;
     }
     if (name === "cleared") {
       /*
@@ -308,6 +306,11 @@ if (screen) {
       api.send({ type: "buyHint", hint: "narrow" });
     }
   }, screen);
+  if (screen === "map-handoff-mid") {
+    await page.waitForTimeout(2200);
+    await page.evaluate(() => window.laneMath?.setEffectSpeed?.(0));
+    settleWait = 0;
+  }
   // Long enough for the entrance to finish. The map lands in bands and the
   // footer is one of the last, so a short wait photographs a half-arrived
   // screen and the missing element looks like a bug rather than a shutter
