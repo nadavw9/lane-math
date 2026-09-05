@@ -55,6 +55,15 @@ describe("what the map opens", () => {
     expect(view.levels).toHaveLength(40);
   });
 
+
+  it("keeps Library plate 1 present and open after World 1 completes", () => {
+    const view = mapView(economyWith(IDS.slice(0, 10)), IDS);
+    const library = view.levels.filter((level) => level.world === 2);
+    expect(library).toHaveLength(10);
+    expect(library[0]).toMatchObject({ id: "2-01", slot: 1, state: "open" });
+    expect(library.map((level) => level.id)).toEqual(IDS.slice(10, 20));
+  });
+
   it("advances the frontier by one as levels are cleared", () => {
     const view = mapView(economyWith(["1-01", "1-02"]), IDS);
     expect(view.levels.filter((l) => l.state === "cleared").map((l) => l.id)).toEqual([

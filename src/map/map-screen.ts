@@ -74,7 +74,27 @@ const PAD = 12;
 const COLS = 5;
 const CELL = 62;
 const GAP = 8;
+/** The first open plate must remain readable while the map is arriving. */
+const OPEN_PLATE_MIN_ALPHA = 0.72;
 
+export interface MapPlateGridPosition {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Keep a level's physical slot stable even if the view arrives sparse/unsorted. */
+export function mapPlateGridPosition(slot: number, left: number, y: number): MapPlateGridPosition {
+  const index = Math.max(0, slot - 1);
+  return {
+    x: left + (index % COLS) * (CELL + GAP),
+    y: y + Math.floor(index / COLS) * (CELL * 0.66 + GAP),
+  };
+}
+
+/** The next focal is tappable from the first handoff frame, not only after fade-in. */
+export function mapPlateEntryAlpha(state: LevelState, alpha: number): number {
+  return state === "open" ? Math.max(alpha, OPEN_PLATE_MIN_ALPHA) : alpha;
+}
 /** Durable material hierarchy for a level plate after the entrance settles. */
 export interface MapPlatePresentation {
   readonly scale: number;
@@ -261,11 +281,11 @@ export class MapScreen {
   }
 
   /** Offset a node for its arrival band. */
-  private entry(node: Container, band: number): Container {
+  private entry(node: Container, band: number, minimumAlpha = 0): Container {
     if (!this.entrance) return node;
     const sample = this.entrance.sample(band);
     node.position.y += sample.dy;
-    node.alpha *= sample.alpha;
+    node.alpha *= Math.max(sample.alpha, minimumAlpha);
     return node;
   }
 
@@ -436,7 +456,7 @@ export class MapScreen {
       y + focus.dy - (h * (scale - 1)) / 2,
     );
     // The one OPEN level lands last: forty plates, and that is the door (§9.0).
-    this.root.addChild(this.entry(control, level.state === "open" ? MAP_BANDS.open : band));
+    this.root.addChild(this.entry(control, level.state === "open" ? MAP_BANDS.open : band, mapPlateEntryAlpha(level.state, 0)));
   }
 
   /**
@@ -828,7 +848,8 @@ export class MapScreen {
       // previous bunch is complete, its first plate is the next focal and the
       // remaining locked plates must not make an open bunch say "Clear the
       // previous bunch" over its doorway.
-      const blocked = levels[0]?.state === "locked" ? levels[0] : undefined;
+      const first = levels.find((level) => level.slot === 1);
+      const blocked = first?.state === "locked" ? first : undefined;
       if (world > 1 && blocked) {
         const gateLine = worldGateCopy(blocked.lockReason ?? "not-reached", v.worldGates[world] ?? 0, v.totalStars);
         const gate = this.text(gateLine, 9, PALETTE.tokenInk);
@@ -839,13 +860,9 @@ export class MapScreen {
 
       const gridWidth = COLS * CELL + (COLS - 1) * GAP;
       const left = (DESIGN.width - gridWidth) / 2;
-      levels.forEach((level, i) => {
-        this.plate(
-          level,
-          left + (i % COLS) * (CELL + GAP),
-          y + 30 + Math.floor(i / COLS) * (CELL * 0.66 + GAP),
-          MAP_BANDS.header + world,
-        );
+      levels.forEach((level) => {
+        const position = mapPlateGridPosition(level.slot, left, y + 30);
+        this.plate(level, position.x, position.y, MAP_BANDS.header + world);
       });
 
       y += trayH + 12;
