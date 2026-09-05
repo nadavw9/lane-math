@@ -1,5 +1,6 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, NineSliceSprite, Text, TextStyle, type Texture } from "pixi.js";
 
+import { CTA_SLICE, ctaChromeReady, ctaChromeTexture, type CtaChromeState } from "./cta-chrome.js";
 import { DIM, PALETTE } from "./layout.js";
 import { UI_FONT } from "./tokens.js";
 
@@ -56,14 +57,20 @@ function path(g: Graphics, shape: "rect" | "hex", w: number, h: number, inset = 
   );
 }
 
+function chromeState(state: ButtonState, pressed: boolean): CtaChromeState {
+  if (pressed && (state === "idle" || state === "armed")) return "pressed";
+  if (state === "armed") return "armed";
+  if (state === "unavailable") return "unavailable";
+  // disabled keeps idle chrome under DIM — temporary absence, not spent metal.
+  return "idle";
+}
+
 /**
- * One procedural brass/glass CTA kit (ART_DIRECTION §3–5, GDD §9.0).
- *
- * Primary controls are raised brass keys. Secondary controls are felt wells
- * held in brass. Both use the commit key's upper-left light, inset face,
- * restrained grain and contact shadow; neither has a flat-fill escape hatch.
- * State changes material and elevation instead of asking opacity to carry
- * selected, disabled and spent at once.
+ * Shared CTA control: HUMAN-FINAL 9-slice chrome + Text label (ART_DIRECTION,
+ * GDD §9.0). Primary/secondary faces come from the CTA atlas; labels are never
+ * baked into the sprites. Custom `face` still replaces the atlas body (commit
+ * key, map plaques). Hex shapes with no face keep a minimal Graphics fallback
+ * because the atlas is authored for rounded rects only.
  */
 export function button(options: ButtonOptions): Container {
   const {
@@ -89,12 +96,14 @@ export function button(options: ButtonOptions): Container {
   shadow.label = "button-contact-shadow";
   body.addChild(shadow);
 
-  const material = new Graphics();
-  material.label = `button-${variant}`;
-  body.addChild(material);
-
   const customFace = face ? face(width, height) : null;
   if (customFace) body.addChild(customFace);
+
+  let slice: NineSliceSprite | null = null;
+  const fallback = new Graphics();
+  fallback.label = `button-${variant}`;
+  fallback.visible = false;
+  body.addChild(fallback);
 
   const text = new Text({
     text: label,
@@ -111,16 +120,13 @@ export function button(options: ButtonOptions): Container {
   const mark = emblem ? emblem() : null;
   if (mark) body.addChild(mark);
 
-  const radius = Math.min(9, height * 0.26);
+  const useAtlas = customFace === null && shape === "rect" && ctaChromeReady();
 
   /** Draw the shared soft contact shadow from broad to tight. */
   const drawShadow = (lift: number): void => {
     shadow.clear();
     shadow.visible = elevated && lift > 0;
     if (!shadow.visible) return;
-    // Secondary CTAs keep a contact shadow, but at a lower luminance and shorter
-    // reach than primary keys. The shadow supplies weight without stealing the
-    // action hierarchy from the brass face.
     const weight = variant === "secondary" ? 0.72 : 1;
     for (let i = 4; i >= 1; i--) {
       path(shadow, shape, width, height, i * 0.4)
@@ -129,88 +135,72 @@ export function button(options: ButtonOptions): Container {
     shadow.position.set(0, variant === "secondary" ? 2.4 + lift * 1.6 : 2.8 + lift * 2.2);
   };
 
-  const grain = (g: Graphics, inset: number, colour: number, alpha: number): void => {
-    const usableW = Math.max(1, width - inset * 2);
-    const usableH = Math.max(1, height - inset * 2);
-    for (let i = 0; i < 7; i++) {
-      const x = inset + usableW * ((i * 0.37 + 0.11) % 1);
-      const y = inset + usableH * ((i * 0.61 + 0.17) % 1);
-      g.circle(x, y, 0.45 + (i % 2) * 0.25).fill({ color: colour, alpha });
+  const ensureSlice = (texture: Texture): NineSliceSprite => {
+    if (slice) {
+      slice.texture = texture;
+      return slice;
     }
+    slice = new NineSliceSprite({
+      texture,
+      leftWidth: CTA_SLICE.leftWidth,
+      topHeight: CTA_SLICE.topHeight,
+      rightWidth: CTA_SLICE.rightWidth,
+      bottomHeight: CTA_SLICE.bottomHeight,
+      width,
+      height,
+    });
+    slice.label = `button-${variant}-slice`;
+    body.addChildAt(slice, 1);
+    return slice;
   };
 
-  const drawPrimary = (g: Graphics): void => {
+  /** Minimal Graphics body only for hex / unloaded atlas — never the rect CTA kit. */
+  const drawFallback = (g: Graphics): void => {
     const spent = state === "unavailable";
     const armed = state === "armed";
-    const deep = spent ? 0x5d4b2b : PALETTE.brassDeep;
-    const mid = spent ? 0x77613a : (armed ? PALETTE.highlight : PALETTE.brass);
-    const light = spent ? 0x9b855d : PALETTE.brassLit;
-
-    path(g, shape, width, height).fill({ color: deep });
-    path(g, shape, width, height - Math.max(2, height * 0.09)).fill({ color: mid });
-    for (let i = 0; i < 4; i++) {
-      path(g, shape, width, height * (0.26 + i * 0.09), 1)
-        .fill({ color: light, alpha: spent ? 0.035 : 0.08 });
+    if (variant === "primary") {
+      const deep = spent ? 0x5d4b2b : PALETTE.brassDeep;
+      const mid = spent ? 0x77613a : (armed ? PALETTE.highlight : PALETTE.brass);
+      path(g, shape, width, height).fill({ color: deep });
+      path(g, shape, width, height - Math.max(2, height * 0.09)).fill({ color: mid });
+    } else {
+      const rim = spent ? 0x67583b : (armed ? PALETTE.highlight : PALETTE.brassQuiet);
+      const rimDeep = spent ? 0x493e2d : PALETTE.brassDeep;
+      const felt = spent ? 0x2a231d : PALETTE.felt;
+      const inset = Math.max(2.5, Math.min(3.5, height * 0.1));
+      path(g, shape, width, height).fill({ color: rimDeep });
+      path(g, shape, width, height - Math.max(2, height * 0.08)).fill({ color: rim });
+      path(g, shape, width, height, inset).fill({ color: felt });
     }
-    path(g, shape, width, height, 1.5)
-      .stroke({ width: 2, color: light, alpha: spent ? 0.22 : 0.55 });
-    g.moveTo(radius, 2).lineTo(width - radius, 2)
-      .stroke({ width: 2.5, color: light, alpha: spent ? 0.15 : 0.48 });
-    g.moveTo(radius, height - 2).lineTo(width - radius, height - 2)
-      .stroke({ width: 2.5, color: 0x2b1608, alpha: 0.42 });
-    g.ellipse(width * 0.22, height * 0.22, width * 0.18, Math.max(1, height * 0.07))
-      .fill({ color: 0xffffff, alpha: spent ? 0.04 : 0.15 });
-    grain(g, 5, 0x4a2f13, spent ? 0.07 : 0.13);
-  };
-
-  const drawSecondary = (g: Graphics): void => {
-    const spent = state === "unavailable";
-    const armed = state === "armed";
-    const rim = spent ? 0x67583b : (armed ? PALETTE.highlight : PALETTE.brassQuiet);
-    const rimDeep = spent ? 0x493e2d : PALETTE.brassDeep;
-    const rimLight = spent ? 0x9b855d : PALETTE.brassQuietLit;
-    const felt = spent ? 0x2a231d : PALETTE.felt;
-    // A narrow casting around a broad felt face: furniture, not an outline chip.
-    const inset = Math.max(2.5, Math.min(3.5, height * 0.1));
-
-    path(g, shape, width, height).fill({ color: rimDeep });
-    path(g, shape, width, height - Math.max(2, height * 0.08)).fill({ color: rim });
-    path(g, shape, width, height, inset).fill({ color: felt });
-    // The face is recessed by two lit edges, never by a perimeter outline.
-    g.moveTo(radius + inset, inset + 1.5)
-      .lineTo(width - radius - inset, inset + 1.5)
-      .stroke({ width: 2, color: 0x000000, alpha: 0.42 });
-    g.moveTo(radius + inset, height - inset - 1)
-      .lineTo(width - radius - inset, height - inset - 1)
-      .stroke({ width: 1, color: rimLight, alpha: spent ? 0.04 : 0.12 });
-    // The felt face still catches the shared upper-left studio light. Keeping
-    // this inside the casting (rather than only on the outer rim) gives a
-    // quiet secondary chip the weight of a small instrument, not an outlined
-    // UI control.
-    g.moveTo(inset + radius * 0.35, inset + 2.2)
-      .lineTo(width * 0.62, inset + 2.2)
-      .stroke({ width: 2.2, color: rimLight, alpha: spent ? 0.08 : 0.24 });
-    g.ellipse(inset + width * 0.18, inset + height * 0.22, width * 0.2, Math.max(1.2, height * 0.08))
-      .fill({ color: rimLight, alpha: spent ? 0.025 : 0.1 });
-    // A restrained rim glint keeps the brass casting legible without making
-    // Replay/Map compete with the primary Next Level / Continue key.
-    g.moveTo(radius + 1, 1.6).lineTo(width * 0.58, 1.6)
-      .stroke({ width: 1.4, color: rimLight, alpha: spent ? 0.08 : 0.28 });
-    grain(g, inset + 2, PALETTE.brassQuietLit, spent ? 0.03 : 0.055);
   };
 
   /** Redraw at a given press depth. Called synchronously on pointerdown. */
   const paint = (depth: number): void => {
     const lift = elevated ? 1 - depth / PRESS_DEPTH : 0;
     drawShadow(lift);
-    material.clear();
-    material.visible = customFace === null;
-    if (material.visible) {
-      if (variant === "primary") drawPrimary(material);
-      else drawSecondary(material);
+    const pressed = depth > 0;
+
+    if (customFace) {
+      fallback.visible = false;
+      if (slice) slice.visible = false;
+      customFace.position.set(0, depth);
+    } else if (useAtlas) {
+      const texture = ctaChromeTexture(variant, chromeState(state, pressed));
+      fallback.visible = false;
+      if (texture) {
+        const face = ensureSlice(texture);
+        face.visible = true;
+        face.width = width;
+        face.height = height;
+        face.position.set(0, depth);
+      }
+    } else {
+      if (slice) slice.visible = false;
+      fallback.visible = true;
+      fallback.clear();
+      drawFallback(fallback);
+      fallback.position.set(0, depth);
     }
-    material.position.set(0, depth);
-    if (customFace) customFace.position.set(0, depth);
 
     const midY = depth + height / 2;
     if (mark) {
