@@ -137,6 +137,8 @@ export class Renderer {
   /** Build id shown in the status band; long-pressing it exports the funnel. */
   private buildLabel = "";
   private nextLevelId: string | null = null;
+  /** The single real PNG used for every FTUE hand cue. */
+  private ftueHandTexture!: Texture;
 
   /*
    * THE FEEL LAYER (§9.5). All time-sampled, all read during draw().
@@ -303,6 +305,13 @@ export class Renderer {
       // colour and the game is completely playable.
       setGrainTexture(null);
     }
+
+    // The FTUE hand is authored art, not a collection of Pixi primitives.
+    // Keep this load independent of the optional token atlas path: the teach
+    // cue must never regress to the old ellipse/roundRect silhouette.
+    this.ftueHandTexture = await Assets.load<Texture>(
+      `${import.meta.env.BASE_URL}assets/ui/ftue_hand_point.png`,
+    );
 
     /*
      * The sprite path (ART_DIRECTION §5), off unless asked for.
@@ -1260,11 +1269,10 @@ export class Renderer {
     const handY = sample.focus < 0.2
       ? lerp(equation.y + equation.height / 2, frontY, sample.commitProgress)
       : lerp(frontY, focusY, sample.focus);
-    const hand = new Container();
-    hand.addChild(new Graphics().ellipse(-20, 0, 32, 18).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().ellipse(-2, -51, 7, 4.5).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
+    const hand = new Sprite(this.ftueHandTexture);
+    hand.anchor.set(0.31, 0.77);
     hand.position.set(handX + 22, handY + 26);
+    hand.scale.set(0.22);
     hand.rotation = -0.28;
     hand.eventMode = "none";
     this.root.addChild(this.entry(hand, BOARD_BANDS.status));
@@ -1458,7 +1466,7 @@ export class Renderer {
     }
     const shadow = new Graphics()
       .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
-      .fill({ color: PALETTE.handOutline, alpha: cue.shadowAlpha });
+      .fill({ color: PALETTE.text, alpha: cue.shadowAlpha });
     shadow.zIndex = BOARD_BANDS.status + 19;
     this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
 
@@ -1468,12 +1476,11 @@ export class Renderer {
     ring.zIndex = BOARD_BANDS.status + 20;
     this.root.addChild(this.entry(ring, BOARD_BANDS.status));
 
-    // A compact human hand silhouette; the fingertip lands on the live control.
-    const hand = new Container();
-    hand.addChild(new Graphics().ellipse(-20, 0, 32, 18).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().ellipse(-2, -51, 7, 4.5).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
+    // The authored hand sprite is anchored so its fingertip lands on the live control.
+    const hand = new Sprite(this.ftueHandTexture);
+    hand.anchor.set(0.31, 0.77);
     hand.position.set(handX, handY);
+    hand.scale.set(0.22);
     hand.rotation = -0.28;
     hand.zIndex = BOARD_BANDS.status + 22;
     this.root.addChild(this.entry(hand, BOARD_BANDS.status));
