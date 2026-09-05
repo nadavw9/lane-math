@@ -135,6 +135,7 @@ if (screen) {
   await page.evaluate(async (name) => {
     const api = window.laneMath;
     if (name === "intro-hint") api.setLevelIntroHint?.(api.preLevelHint?.() ?? "Use one useful piece at this stage.");
+    if (name === "board-first") api.endLevelIntro?.();
     if (name === "map") api.showMap();
     if (name.startsWith("academy-")) {
       const n = Number(name.slice("academy-".length));

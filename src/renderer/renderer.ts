@@ -2533,7 +2533,7 @@ export class Renderer {
       const innerX = panelX + inner.x;
       const innerY = panelY + inner.y;
 
-      const headline = this.text(s.levelId === "1-10" ? "World complete" : "cleared", 22, PALETTE.highlight);
+      const headline = this.text(s.levelId === "1-10" ? "World 1 complete" : "cleared", 22, PALETTE.highlight);
       headline.anchor.set(0.5, 0);
       headline.position.set(innerX + inner.width / 2, innerY + 8);
       this.root.addChild(this.entry(headline, CLEARED_BANDS.headline, true));
