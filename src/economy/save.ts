@@ -168,7 +168,8 @@ export function migrate(raw: unknown): SaveData | null {
 
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
-    levels,    lives: migrated.lives ?? 0,
+    levels,
+    lives: migrated.lives ?? 0,
     lastLifeGrantedAt: migrated.lastLifeGrantedAt ?? 0,
     clockHighWater: migrated.clockHighWater ?? migrated.lastLifeGrantedAt ?? 0,
     totalStars: migrated.totalStars ?? 0,
