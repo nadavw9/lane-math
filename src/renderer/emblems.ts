@@ -82,7 +82,17 @@ export function star(size: number, state: StarEmblemState = "earned"): Container
       face.tint = 0xffffff;
       face.label = `star-${state}`;
     }
-    if (state === "earned") sprite.rotation = -0.05;
+    if (state === "empty") {
+      // Brass map plates wash out the empty rim; seat the stamp on felt first
+      // so phone-eye still reads a #241812 hole + warm lip (Scout empty-on-felt).
+      const seat = new Graphics();
+      const r = size * 0.58;
+      seat.circle(0, 0, r).fill({ color: FELT, alpha: 1 });
+      seat.circle(0, 0, r).stroke({ width: Math.max(1, size * 0.08), color: 0x9a8064, alpha: 0.95 });
+      sprite.addChildAt(seat, 0);
+    } else {
+      sprite.rotation = -0.05;
+    }
     return sprite;
   }
 
