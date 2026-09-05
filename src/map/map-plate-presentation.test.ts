@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DIM, PALETTE } from "../renderer/layout.js";
-import { mapFocusBeat, mapPlatePresentation, mapProgressCopy, worldGateCopy } from "./map-screen.js";
+import { academyProgressCopy, mapFocusBeat, mapPlatePresentation, mapProgressCopy, worldGateCopy } from "./map-screen.js";
 
 
 describe("the map's durable next-level focal", () => {
@@ -65,5 +65,17 @@ describe("map progress footer", () => {
 
   it("shows the clear tally once earned stars qualify it", () => {
     expect(mapProgressCopy(10, 40, 10)).toBe("10 of 40 cleared");
+  });
+});
+
+
+describe("Academy progress badge", () => {
+  it("omits restored arithmetic beside a zero-star bank", () => {
+    expect(academyProgressCopy(0, 16, 0)).toBe("");
+    expect(academyProgressCopy(10, 40, 0)).toBe("");
+  });
+
+  it("shows the restored tally once earned stars qualify it", () => {
+    expect(academyProgressCopy(10, 16, 10)).toBe("10 of 16 restored");
   });
 });

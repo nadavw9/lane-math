@@ -27,6 +27,16 @@ export function mapProgressCopy(cleared: number, totalLevels: number, totalStars
 }
 
 /**
+ * The Academy badge follows the same honesty rule as the map footer: a seeded
+ * or legacy clear tally is not meaningful beside a zero-star bank. Keep the
+ * Academy name and room art visible, but omit the arithmetic badge until the
+ * bank contains earned stars that can qualify it.
+ */
+export function academyProgressCopy(restored: number, totalObjects: number, totalStars: number): string {
+  return totalStars > 0 ? `${restored} of ${totalObjects} restored` : "";
+}
+
+/**
  * The world map (GDD §7.6, unlocked by clearing 1-10).
  *
  * Built in the §9.6 material language rather than as a menu: the same squared
@@ -481,13 +491,12 @@ export class MapScreen {
      * once they have stopped, saying "16 of 16" forever would keep them in it.
      */
     const finished = restoredTotal >= 16;
-    const line = this.text(
-      finished ? "The Academy is yours." : `${restoredTotal} of 16 restored`,
-      11,
-      finished ? PALETTE.highlight : PALETTE.tray,
-    );
-    line.position.set(inner.x + inner.width - line.width - 10, inner.y + 6);
-    shelf.addChild(line);
+    const lineCopy = finished ? "The Academy is yours." : academyProgressCopy(restoredTotal, 16, v.totalStars);
+    if (lineCopy) {
+      const line = this.text(lineCopy, 11, finished ? PALETTE.highlight : PALETTE.tray);
+      line.position.set(inner.x + inner.width - line.width - 10, inner.y + 6);
+      shelf.addChild(line);
+    }
 
     // Four vignettes across the interior, sized to what is left after the title.
     const top = inner.y + 24;
