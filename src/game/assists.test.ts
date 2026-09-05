@@ -219,8 +219,9 @@ describe("modes change assistance, not budget (GDD §6, amended)", () => {
   it("1-4 DOES name and pulse — it is the teaching beat, and it fires once", () => {
     const director = new Director(load(SCRIPTED_TRAP_LEVEL), "normal", freshEconomy());
     stageTrapMove(director);
-    const w = stateOf(director.handle({ type: "tapCommit" })).warning!;
-    expect(w.scripted).toBe(true);
+    const state = stateOf(director.handle({ type: "tapCommit" }));
+    const w = state.warning!;
+    expect(state.slots).toEqual({ leftTileId: null, op: null, rightTileId: null });
     expect(w.keystoneTarget).not.toBeNull();
     expect(w.keystoneTileIds.length).toBeGreaterThan(0);
   });

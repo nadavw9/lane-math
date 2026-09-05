@@ -1,6 +1,7 @@
 import type { RuntimeLevelField } from "./level-fields.js";
 import type { BinaryOp, Mode, OperatorBudget, Rules, UnaryOp } from "../solver/index.js";
 import type { Unlocks } from "../economy/unlocks.js";
+import type { FtuePulse } from "./ftue.js";
 
 /** A level as stored in levels/ (GDD §10). */
 /**
@@ -111,8 +112,9 @@ export interface ViewState {
   readonly hints: readonly HintView[];
   readonly shop: readonly ShopEntry[];
   readonly shopOpen: boolean;
-  /* One-line teach-by-doing cue for the first plus board only. */
+  /** One-line teach-by-doing cue plus the visual channel it should pulse. */
   readonly teachingLine?: string | null;
+  readonly teachingPulse?: FtuePulse;
   readonly hintAd?: HintAdView | null;
 }
 

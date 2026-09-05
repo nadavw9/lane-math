@@ -21,6 +21,7 @@ import { ALL_UNLOCKED, unlocksFor } from "../economy/unlocks.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import { HINT_COST, HINT_LABEL, generateHint, hintContext, type HintType } from "./hints.js";
 import { WinnabilityService } from "./winnability-service.js";
+import { ftueCue } from "./ftue.js";
 import type {
   Affordance,
   FailureExit,
@@ -657,6 +658,7 @@ export class Director {
       shop: this.shopEntries(),
       shopOpen: this.shopOpen,
       teachingLine: this.teachingLine(),
+      teachingPulse: ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op)?.pulse ?? null,
       hintAd: this.hintAd(),
     };
   }
@@ -676,10 +678,8 @@ export class Director {
   }
 
   private teachingLine(): string | null {
-    if (this.level.id !== CONSTRAINT_LEVEL || this.phase !== "playing" || this.economy?.progressFor(this.level.id).cleared === true) return null;
-    if (this.slots.leftTileId === null) return "Tap a number.";
-    if (this.slots.op === null) return "Choose a sign.";
-    return "Make the target.";
+    if (this.phase !== "playing" || this.economy?.progressFor(this.level.id).cleared === true) return null;
+    return ftueCue(this.level.id, this.targetIndex, this.slots.leftTileId, this.slots.op)?.line ?? null;
   }
 
   private render(): Command[] {
@@ -1068,19 +1068,16 @@ export class Director {
      * Blocking: nothing is consumed and nothing is recorded — the equation
      * rewinds, free (§7.5 step 5).
      *
-     * Warning: the equation STAYS STANDING, because the override has to be
-     * able to replay it. Clearing it here and rebuilding it from the pending
-     * move would work too, but it would put the same move through the tap path
-     * twice and diverge the moment either path grew a side effect.
+     * Warning: the scripted teaching frame stays in the renderer's hold, but
+     * the settled warning state itself is already rewound so its underlay is clean.
      */
     const blocks = this.warningBlocks;
     if (blocks) {
-      // Keep the scripted teaching equation filled until its free Go Back
-      // acknowledgement; ordinary blocking warnings still rewind immediately.
-      if (!this.scriptedTrapLevel) {
-        this.slots = { leftTileId: null, op: null, rightTileId: null };
-        this.swapArmed = null;
-      }
+      // A blocked move is rewound before the warning is shown. The scripted
+      // teaching beat keeps the PRE-REWIND state in the renderer's hold, but
+      // the settled Go Back panel must sit over a clean equation row.
+      this.slots = { leftTileId: null, op: null, rightTileId: null };
+      this.swapArmed = null;
       this.pendingFatal = null;
     } else {
       this.pendingFatal = { kind: "binary", leftId: left.id, rightId: right.id, op };

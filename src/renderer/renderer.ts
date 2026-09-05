@@ -703,6 +703,12 @@ export class Renderer {
       this.reject = new RejectPulse();
     }
     if (next.phase !== "failed") this.reject = null;
+    // Closing Go Back must also clear the underlay reaction, not only the modal.
+    if (previous.warning !== null && next.warning === null) {
+      this.reject = null;
+      this.rejection = null;
+      this.resist = null;
+    }
 
     // §9.5: stars arrive ONE AT A TIME, weighted. Staggered delays rather than
     // a burst — three stars landing together is a spray, which is the register
@@ -778,6 +784,11 @@ export class Renderer {
           tween: new Tween(TIMING.place, EASE.settle),
         });
       } else if (before !== null) {
+        // The scripted trap's teaching beat already showed the staged equation;
+        // its settled warning is the rewind destination, not a second tile
+        // flight underneath the Go Back panel.
+        if (next.warning?.scripted) continue;
+
         const tile = next.tiles.find((t) => t.id === before);
 
         /*
@@ -1811,6 +1822,13 @@ export class Renderer {
       this.tileBounds.set(tile.id, { x: r.x, y: r.y, w: r.width, h: r.height });
     }
 
+    const pulseRect = s.teachingPulse === "pool" ? board.pool : s.teachingPulse === "minus" || s.teachingPulse === "multiply" ? board.operators : s.teachingPulse === "queue" ? lane : null;
+    if (pulseRect && s.phase === "playing") {
+      const pulse = new Graphics().roundRect(pulseRect.x - 3, pulseRect.y - 3, pulseRect.width + 6, pulseRect.height + 6, 10).stroke({ width: 2, color: PALETTE.highlight, alpha: 0.72 });
+      // One quiet brass outline is enough: the board still teaches by doing.
+      this.root.addChild(this.entry(pulse, BOARD_BANDS.status));
+    }
+
     this.drawFlights();
 
     // Ghosts are drawn in the pool loop above, straight from `tile.consumed`.
@@ -2520,7 +2538,7 @@ export class Renderer {
       const innerX = panelX + inner.x;
       const innerY = panelY + inner.y;
 
-      const headline = this.text("cleared", 22, PALETTE.highlight);
+      const headline = this.text(s.levelId === "1-10" ? "World 1 complete" : "cleared", 22, PALETTE.highlight);
       headline.anchor.set(0.5, 0);
       headline.position.set(innerX + inner.width / 2, innerY + 8);
       this.root.addChild(this.entry(headline, CLEARED_BANDS.headline, true));
@@ -2561,9 +2579,9 @@ export class Renderer {
        * another celebration layer would weaken the deliberate register.
        */
       const progress = new Container();
-      const banked = this.text(`${s.economy?.totalStars ?? 0} banked`, 12, PALETTE.tokenInk);
+      const banked = this.text(s.levelId === "1-01" ? "You earned " + (s.economy?.starsIfCleared ?? 0) + " stars." : (s.economy?.totalStars ?? 0) + " banked", 12, PALETTE.tokenInk);
       const destination = this.text(
-        hasNext ? `next ${this.nextLevelId} now open on map` : "Academy progress waits on map",
+        s.levelId === "1-01" ? "Used pieces stay used." : hasNext ? `next ${this.nextLevelId} now open on map` : "Academy progress waits on map",
         11,
         PALETTE.highlight,
       );

@@ -400,13 +400,14 @@ export class MapScreen {
     face.alpha = presentation.faceAlpha;
 
     // Best-ever stars, which only a cleared plate has.
-    if (level.state === "cleared") {
+    const plateStars = mapPlateStars(level.state, level.stars, this.view?.totalStars ?? 0);
+    if (level.state === "cleared" && plateStars > 0) {
       // Drawn objects, not glyphs: Outfit has no star, so this used to be
       // whatever dingbat the device shipped (see emblems.ts).
       // 8, and sat low: at 9 the row clipped the numeral's descender, which is
       // the kind of overlap that only shows up once real progress is on screen.
       const size = 8;
-      const stars = emblemMeter("star", mapPlateStars(level.state, level.stars, this.view?.totalStars ?? 0), 3, size);
+      const stars = emblemMeter("star", plateStars, 3, size);
       stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
       face.addChild(stars);
     }
@@ -823,7 +824,11 @@ export class MapScreen {
       const name = this.text(`${world}  ${WORLD_NAMES[world] ?? ""}`.toUpperCase(), 11, PALETTE.tokenInk, "900");
       name.position.set(PAD + 10, y + 7);
       this.root.addChild(this.entry(name, MAP_BANDS.header + world));
-      const blocked = levels.find((level) => level.state === "locked");
+      // Only a locked first plate owns the bunch-level gate copy. Once the
+      // previous bunch is complete, its first plate is the next focal and the
+      // remaining locked plates must not make an open bunch say "Clear the
+      // previous bunch" over its doorway.
+      const blocked = levels[0]?.state === "locked" ? levels[0] : undefined;
       if (world > 1 && blocked) {
         const gateLine = worldGateCopy(blocked.lockReason ?? "not-reached", v.worldGates[world] ?? 0, v.totalStars);
         const gate = this.text(gateLine, 9, PALETTE.tokenInk);
