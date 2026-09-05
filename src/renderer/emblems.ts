@@ -76,7 +76,13 @@ function spriteEmblem(textureKey: { kind: "star" | "life" | "hint"; state: strin
 export function star(size: number, state: StarEmblemState = "earned"): Container {
   const sprite = spriteEmblem({ kind: "star", state }, size);
   if (sprite) {
-    sprite.rotation = -0.05;
+    // Empty wells must stay the HF recessed stamp — never a tilted/tinted earned.
+    const face = sprite.children[0] as { tint?: number; label?: string };
+    if (face) {
+      face.tint = 0xffffff;
+      face.label = `star-${state}`;
+    }
+    if (state === "earned") sprite.rotation = -0.05;
     return sprite;
   }
 

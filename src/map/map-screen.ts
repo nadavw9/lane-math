@@ -429,11 +429,10 @@ export class MapScreen {
     if (level.state === "cleared" && plateStars > 0) {
       // Drawn objects, not glyphs: Outfit has no star, so this used to be
       // whatever dingbat the device shipped (see emblems.ts).
-      // 8, and sat low: at 9 the row clipped the numeral's descender, which is
-      // the kind of overlap that only shows up once real progress is on screen.
-      const size = 8;
+      // 11: empty HF wells need phone-squint room; 8px collapsed to muted-gold rim.
+      const size = 11;
       const stars = emblemMeter("star", plateStars, 3, size);
-      stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
+      stars.position.set((w - meterWidth(3, size)) / 2, h - 8 - size / 2);
       face.addChild(stars);
     }
 

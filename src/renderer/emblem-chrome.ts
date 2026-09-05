@@ -32,7 +32,7 @@ export async function loadEmblemChrome(baseUrl: string): Promise<boolean> {
       await Promise.all(
         KEYS.map(async ({ kind, state, file }) => {
           const texture = await Assets.load<Texture>(`${root}${file}`);
-          texture.source.scaleMode = "linear";
+          texture.source.scaleMode = "nearest";
           textures.set(key(kind, state), texture);
         }),
       );
