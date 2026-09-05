@@ -310,7 +310,7 @@ export class Renderer {
     // Keep this load independent of the optional token atlas path: the teach
     // cue must never regress to the old ellipse/roundRect silhouette.
     this.ftueHandTexture = await Assets.load<Texture>(
-      `${import.meta.env.BASE_URL}assets/ui/ftue_hand_point.png`,
+      `${import.meta.env.BASE_URL}assets/ui/ftue-pointing-hand@2x.png`,
     );
 
     /*
