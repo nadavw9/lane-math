@@ -31,6 +31,7 @@ import {
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { loadCtaChrome } from "./cta-chrome.js";
 import { loadEmblemChrome } from "./emblem-chrome.js";
+import { loadModalChrome } from "./modal-chrome.js";
 import { armCueFor } from "./arm-cue.js";
 import { queueLookSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
@@ -316,6 +317,7 @@ export class Renderer {
     );
     await loadCtaChrome(import.meta.env.BASE_URL);
     await loadEmblemChrome(import.meta.env.BASE_URL);
+    await loadModalChrome(import.meta.env.BASE_URL);
 
     /*
      * The sprite path (ART_DIRECTION §5), off unless asked for.

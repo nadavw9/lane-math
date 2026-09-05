@@ -1,7 +1,14 @@
-import { Container, Graphics, Matrix, Sprite, Text, TextStyle, type Texture } from "pixi.js";
+import { Container, Graphics, Matrix, NineSliceSprite, Sprite, Text, TextStyle, type Texture } from "pixi.js";
 
 import { hintDiamond, radical } from "./emblems.js";
 import { PALETTE } from "./layout.js";
+import {
+  MODAL_CARTOUCHE,
+  MODAL_SLICE,
+  modalCartoucheTexture,
+  modalChromeReady,
+  modalOrnateTexture,
+} from "./modal-chrome.js";
 
 /** §4 brass, the frame's two tones. */
 import {
@@ -287,10 +294,46 @@ export function framedPanel(
   h: number,
 ): { panel: Container; interior: { x: number; y: number; width: number; height: number } } {
   const panel = new Container();
+
+  if (modalChromeReady()) {
+    const frameTex = modalOrnateTexture()!;
+    const gemTex = modalCartoucheTexture()!;
+    const frame = new NineSliceSprite({
+      texture: frameTex,
+      leftWidth: MODAL_SLICE.leftWidth,
+      topHeight: MODAL_SLICE.topHeight,
+      rightWidth: MODAL_SLICE.rightWidth,
+      bottomHeight: MODAL_SLICE.bottomHeight,
+      width: w,
+      height: h,
+    });
+    frame.label = "modal-frame-ornate";
+    panel.addChild(frame);
+
+    // Fixed cartouche overlay — never 9-sliced; scale with panel vs master width.
+    const scale = w / MODAL_SLICE.artWidth;
+    const cw = MODAL_CARTOUCHE.width * scale;
+    const ch = MODAL_CARTOUCHE.height * scale;
+    const gem = new Sprite(gemTex);
+    gem.anchor.set(0.5, 0);
+    gem.width = cw;
+    gem.height = ch;
+    gem.position.set(w / 2, (MODAL_CARTOUCHE.masterY / MODAL_SLICE.artHeight) * h);
+    gem.label = "modal-frame-cartouche";
+    panel.addChild(gem);
+
+    // Felt opening tracks the non-stretch margins (logical L72/R72/T112/B52 → fraction of art).
+    const ix = (MODAL_SLICE.leftWidth / (MODAL_SLICE.artWidth * 2)) * w;
+    const iy = (MODAL_SLICE.topHeight / (MODAL_SLICE.artHeight * 2)) * h;
+    const iw = w - ix - (MODAL_SLICE.rightWidth / (MODAL_SLICE.artWidth * 2)) * w;
+    const ih = h - iy - (MODAL_SLICE.bottomHeight / (MODAL_SLICE.artHeight * 2)) * h;
+    return { panel, interior: { x: ix, y: iy, width: iw, height: ih } };
+  }
+
+  // Graphics fallback when atlas missing (tests / load fail).
   const border = Math.max(12, Math.min(w, h) * 0.075);
   const radius = border * 1.1;
 
-  // It floats, so it sits on something (§3).
   const shadow = new Graphics();
   for (let i = 3; i >= 1; i--) {
     shadow
@@ -300,23 +343,10 @@ export function framedPanel(
   panel.addChild(shadow);
 
   const g = new Graphics();
-  // Brass body, lit from the upper left: the deep tone underneath, the lit tone
-  // laid over the top-left so the frame has a direction rather than a fill.
   g.roundRect(0, 0, w, h, radius).fill({ color: PALETTE.brassDeep });
-  /*
-   * Light falls off DOWN the frame, built from stacked bands rather than one.
-   *
-   * A single lit band leaves its own rounded bottom corners showing as a pale
-   * tab on the frame's left edge — a shape boundary where there should only be
-   * material getting darker. Six overlapping bands put six different curves in
-   * six different places, none of which reads as an edge, and the accumulated
-   * alpha is the gradient. Same trick as the contact shadows: no filter, no
-   * render target, just shapes.
-   */
   for (let i = 0; i < 6; i++) {
     g.roundRect(0, 0, w, h * (0.26 + i * 0.07), radius).fill({ color: PALETTE.brass, alpha: 0.19 });
   }
-  // The outer top edge catches the light; the bottom falls into shadow.
   g.moveTo(radius, 1.5)
     .lineTo(w - radius, 1.5)
     .stroke({ width: 3, color: 0xffe9a8, alpha: 0.45 });
@@ -325,7 +355,6 @@ export function framedPanel(
     .stroke({ width: 3, color: 0x000000, alpha: 0.3 });
   panel.addChild(g);
 
-  // The opening: a felt interior, cut into the brass.
   const ix = border;
   const iy = border;
   const iw = w - border * 2;
@@ -334,20 +363,15 @@ export function framedPanel(
   const innerR = radius * 0.7;
   inner.roundRect(ix, iy, iw, ih, innerR).fill({ color: PALETTE.felt });
   grainOver(inner, (gr) => gr.roundRect(ix, iy, iw, ih, innerR), 0.22);
-  // The bright rim tracing the opening, which is what makes the frame read as
-  // having thickness rather than being a printed border.
   inner
     .roundRect(ix - 1.5, iy - 1.5, iw + 3, ih + 3, innerR + 1.5)
     .stroke({ width: 2.5, color: 0xffe9a8, alpha: 0.35 });
-  // Inside the opening, the top wall is turned away from the light.
   inner
     .moveTo(ix + innerR, iy + 2)
     .lineTo(ix + iw - innerR, iy + 2)
     .stroke({ width: 4, color: 0x000000, alpha: 0.34 });
   panel.addChild(inner);
 
-  // Corner studs — the reference's pyramids, as the rivets the plaques already
-  // carry, so the vocabulary is one the board has already taught.
   const studs = new Graphics();
   const sr = border * 0.3;
   for (const [sx, sy] of [
@@ -362,12 +386,6 @@ export function framedPanel(
   }
   panel.addChild(studs);
 
-  /*
-   * Centre cartouche + gem. Must fully bridge the brass frame into the felt
-   * opening — a short pill left a pale rim stroke visible under the diamond
-   * (Scout REJECT PR #8: "white slivers under the diamond tab", same class as
-   * Nadav's half-clipped cartouche numeral).
-   */
   const cartouche = new Graphics();
   const cw = border * 2.6;
   const ch = border * 1.35;
@@ -380,22 +398,19 @@ export function framedPanel(
     .fill({ color: 0xffe9a8, alpha: 0.28 });
   panel.addChild(cartouche);
   const gem = hintDiamond(border * 0.78);
-  // Seat the gem in the cartouche body, clear of the felt-opening rim below.
   gem.position.set(w / 2, cartoucheTop + ch * 0.42);
   panel.addChild(gem);
 
-  /*
-   * The specular belongs on the FRAME, not floating over the opening. Placed
-   * over the interior it read as a smudge on the felt rather than as light on
-   * metal, which is the difference between a lit object and a dirty one.
-   */
   const hi = new Graphics();
-  hi.ellipse(border * 1.6, border * 0.5, border * 1.5, border * 0.28)
-    .fill({ color: 0xffffff, alpha: 0.16 });
+  hi.ellipse(border * 1.6, border * 0.5, border * 1.5, border * 0.28).fill({
+    color: 0xffffff,
+    alpha: 0.16,
+  });
   panel.addChild(hi);
 
   return { panel, interior: { x: ix, y: iy, width: iw, height: ih } };
 }
+
 
 /**
  * Native plaque atlas top-edge notch as a fraction of frame width.
@@ -438,6 +453,7 @@ export interface TokenStyle {
    */
   readonly elevation?: number | undefined;
 }
+
 
 /**
  * Target plate — hexagonal, cool, flat, recessed (§9.2).
