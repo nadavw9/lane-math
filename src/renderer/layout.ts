@@ -48,6 +48,13 @@ export const PALETTE = {
   targetPlate: 0x1e2a3a,
   /** The front plate is the live one: same family, deeper and bluer. */
   targetFront: 0x16324f,
+  /**
+   * Front-target rim — cool steel, not gold.
+   *
+   * Gold-on-brass measured ~1.58:1 and failed the phone glance. A cool rim is a
+   * different channel from the plaque metal so the live target survives grayscale.
+   */
+  targetFrontRim: 0x8ec8e8,
   tile: 0x33241a,
   /**
    * A transformed tile is the SAME WOOD, freshly cut (§9.6).
@@ -235,6 +242,12 @@ const GAP = 8;
  */
 export const TOKEN_SIZE = { min: 46, max: 120 } as const;
 
+/**
+ * Left desk reserved for the brass automaton (PE-01 Scout REJECT fix).
+ * Preferred companion height ~88 needs ~pool.x>=110 with 14px layout air; sprite uses 20px clearance.
+ */
+export const AUTOMATON_DESK = 110;
+
 const TARGET_GAP = 6;
 /** Grids wider than this stop being scannable regardless of what fits. */
 const POOL_MAX_PER_ROW = 6;
@@ -362,6 +375,23 @@ function stackHeight(heights: readonly number[]): number {
  * more rows, so it runs out of vertical room sooner and settles smaller — which
  * means the two rules cannot drift apart.
  */
+function deskFitsGrid(grid: Grid): boolean {
+  const poolWidth = grid.perRow * grid.size + (grid.perRow - 1) * GAP;
+  return AUTOMATON_DESK + poolWidth <= DESIGN.width - PAD;
+}
+
+function heightsAtWithPoolGrid(board: BoardSize, size: number, poolGrid: Grid): number[] {
+  const operatorGrid = operatorGridFor(board.operators, size);
+  return [
+    laneHeight(board.targets, size),
+    EQUATION_PAD * 2 + EQUATION_ROW_H,
+    operatorGrid.rows * (size + GAP) - GAP,
+    poolGrid.rows * (size + GAP) - GAP,
+    board.hints > 0 ? board.hints * HINT_LINE_H : 0,
+    STATUS_H,
+  ];
+}
+
 function searchSize(board: BoardSize): number {
   const budget = DESIGN.height - PAD * 2;
   const fits = (size: number): boolean => stackHeight(heightsAt(board, size)) <= budget;
@@ -390,6 +420,55 @@ const sizeCache = new Map<string, number>();
  * inverts the signal §9.2 is buying. Taking the running minimum over every
  * smaller board costs one 14-tile board two pixels and makes the rule true.
  */
+function deskRepairSize(board: BoardSize, fitted: number): number {
+  const budget = DESIGN.height - PAD * 2;
+  const candidate = (s: number, perRow: number): Grid => ({
+    size: s,
+    perRow,
+    rows: Math.ceil(Math.max(1, board.tiles) / perRow),
+  });
+  const stackOk = (s: number, g: Grid): boolean =>
+    stackHeight(heightsAtWithPoolGrid(board, s, g)) <= budget;
+  const placeX = (poolWidth: number): number => {
+    const centeredX = (DESIGN.width - poolWidth) / 2;
+    const rightLimit = DESIGN.width - PAD - poolWidth;
+    return Math.min(Math.max(centeredX, AUTOMATON_DESK), Math.max(centeredX, rightLimit));
+  };
+
+  const natural = gridFor(board.tiles, fitted);
+  const naturalW = natural.perRow * fitted + (natural.perRow - 1) * GAP;
+  const naturalGutter = placeX(naturalW) - 4 - 14;
+  // Happy boards already readable — do not steal token pixels.
+  if (naturalGutter >= 52) return fitted;
+
+  // Prefer any balanced desk-fit across sizes before accepting a ragged grid.
+  for (const requireBalanced of [true, false]) {
+    for (let s = fitted; s >= TOKEN_SIZE.min; s--) {
+      const nat = gridFor(board.tiles, s);
+      for (let perRow = nat.perRow; perRow >= 1; perRow--) {
+        const g = candidate(s, perRow);
+        if (!deskFitsGrid(g) || !stackOk(s, g)) continue;
+        if (requireBalanced && !isBalanced(board.tiles, g)) continue;
+        return s;
+      }
+    }
+  }
+  return fitted;
+}
+
+/**
+ * The fitted size, forced to be NON-INCREASING in tile count.
+ *
+ * The raw search is not monotonic on its own, because the balance rule can
+ * force one board down a size while its larger neighbour grids evenly at the
+ * bigger one — measured, 13 tiles landed at 72 and 14 at 80. A player crossing
+ * that boundary would watch the tiles GROW as the board got harder, which
+ * inverts the signal §9.2 is buying. Taking the running minimum over every
+ * smaller board costs one 14-tile board two pixels and makes the rule true.
+ *
+ * PE-01 desk repair is folded into the same walk so a dense board that must
+ * shrink for the automaton cannot leave a larger neighbour at a bigger size.
+ */
 function fittedSize(board: BoardSize): number {
   const key = `${board.targets}:${board.tiles}:${board.operators}:${board.hints}`;
   const cached = sizeCache.get(key);
@@ -398,7 +477,8 @@ function fittedSize(board: BoardSize): number {
   let size: number = TOKEN_SIZE.max;
   const from = Math.min(CONTENT_RANGE.tiles.min, board.tiles);
   for (let tiles = from; tiles <= board.tiles; tiles++) {
-    size = Math.min(size, searchSize({ ...board, tiles }));
+    const slice = { ...board, tiles };
+    size = Math.min(size, deskRepairSize(slice, searchSize(slice)));
   }
 
   sizeCache.set(key, size);
@@ -413,10 +493,53 @@ function fittedSize(board: BoardSize): number {
  * margin at the head of a worksheet rather than as a gap under the controls.
  */
 export function bands(board: BoardSize): Bands {
+  /*
+   * PE-01 Scout REJECT fix: size already accounts for automaton desk (see
+   * fittedSize / deskRepairSize). Here pick the widest balanced-enough grid
+   * at that size that still leaves AUTOMATON_DESK when the natural fit would
+   * bury the companion.
+   */
+  const budget = DESIGN.height - PAD * 2;
   const size = fittedSize(board);
-  const grid = gridFor(board.tiles, size);
+  const candidate = (perRow: number): Grid => ({
+    size,
+    perRow,
+    rows: Math.ceil(Math.max(1, board.tiles) / perRow),
+  });
+  const stackOk = (g: Grid): boolean =>
+    stackHeight(heightsAtWithPoolGrid(board, size, g)) <= budget;
+  const placeX = (poolWidth: number): number => {
+    const centeredX = (DESIGN.width - poolWidth) / 2;
+    const rightLimit = DESIGN.width - PAD - poolWidth;
+    return Math.min(Math.max(centeredX, AUTOMATON_DESK), Math.max(centeredX, rightLimit));
+  };
+
+  let grid = gridFor(board.tiles, size);
+  let poolWidth = grid.perRow * size + (grid.perRow - 1) * GAP;
+  let poolX = placeX(poolWidth);
+
+  if (poolX - 4 - 14 < 52) {
+    const nat = grid.perRow;
+    let picked: Grid | null = null;
+    for (const requireBalanced of [true, false]) {
+      for (let perRow = nat; perRow >= 1; perRow--) {
+        const g = candidate(perRow);
+        if (!deskFitsGrid(g) || !stackOk(g)) continue;
+        if (requireBalanced && !isBalanced(board.tiles, g)) continue;
+        picked = g;
+        break;
+      }
+      if (picked) break;
+    }
+    if (picked) {
+      grid = picked;
+      poolWidth = grid.perRow * size + (grid.perRow - 1) * GAP;
+      poolX = placeX(poolWidth);
+    }
+  }
+
   const operatorGrid = operatorGridFor(board.operators, size);
-  const heights = heightsAt(board, size);
+  const heights = heightsAtWithPoolGrid(board, size, grid);
   const total = stackHeight(heights);
 
   let y = Math.max(PAD, DESIGN.height - PAD - total);
@@ -436,9 +559,8 @@ export function bands(board: BoardSize): Bands {
   // The pool band hugs its grid rather than spanning the full width: at large
   // token sizes the grid is narrower than the screen, and a full-width backdrop
   // around three big tiles reads as a tray someone forgot to fill.
-  const poolWidth = grid.perRow * size + (grid.perRow - 1) * GAP;
   const pool: Rect = {
-    x: (DESIGN.width - poolWidth) / 2,
+    x: poolX,
     y: poolBand.y,
     width: poolWidth,
     height: poolBand.height,
@@ -447,15 +569,6 @@ export function bands(board: BoardSize): Bands {
   return { lane, equation, operators, pool, hints, status, grid, operatorGrid };
 }
 
-/**
- * Targets stack bottom-up: the FRONT target sits at the bottom (GDD §2).
- *
- * `offset` is the distance from the front, NOT the target's index in the level.
- * Cleared targets are removed and the queue slides down (§2), so the front is
- * always offset 0 and always in the same place — which is what makes §9.4's
- * failure signal legible: the lane refusing to advance only reads as a refusal
- * if advancing is what normally happens.
- */
 export function targetSlot(offset: number, lane: Rect, grid: Grid): Rect {
   const width = lane.width * 0.5;
   return {

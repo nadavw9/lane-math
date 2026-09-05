@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUTOMATON_DESK,
   CONTENT_RANGE,
   DESIGN,
   TOKEN_SIZE,
@@ -224,5 +225,19 @@ describe("the stack fits and sits low (§9.1)", () => {
       expect(front.y).toBeGreaterThan(behind.y);
       expect(front.y + front.height).toBeLessThanOrEqual(b.lane.y + b.lane.height + 1e-9);
     }
+  });
+});
+
+describe("automaton desk (PE-01)", () => {
+  it("repairs dense 5-across boards so the companion is not postage", () => {
+    const b = bands({ targets: 5, tiles: 10, operators: 3, hints: 0 });
+    expect(b.pool.x).toBeGreaterThanOrEqual(AUTOMATON_DESK - 1e-9);
+    expect(b.pool.x + b.pool.width).toBeLessThanOrEqual(DESIGN.width - 12 + 1e-9);
+  });
+
+  it("keeps a readable left gutter on mid boards that already had slack", () => {
+    const b = bands({ targets: 5, tiles: 11, operators: 3, hints: 0 });
+    expect(b.pool.x).toBeGreaterThanOrEqual(96);
+    expect(b.grid.size).toBeGreaterThanOrEqual(60);
   });
 });

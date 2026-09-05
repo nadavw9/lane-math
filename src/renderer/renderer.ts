@@ -770,7 +770,8 @@ export class Renderer {
    */
   private drawOutOfLives(lane: Rect, eco: NonNullable<ViewState["economy"]>): void {
     const width = lane.width - 24;
-    const height = 214;
+    // Taller so the concerned automaton can sit at brand scale (PE-04), not postage.
+    const height = 248;
     const x = lane.x + 12;
     const y = lane.y + lane.height / 2 - height / 2;
 
@@ -794,16 +795,21 @@ export class Renderer {
      * difference between a layout designed around a face and one with a face
      * dropped into it afterwards is visible.
      */
-    const seat = 58;
-    const seatX = x + 18;
-    const seatY = y + 22;
+    // PE-04: brand-scale concerned pose beside the copy — not a postage stamp.
+    const seat = 96;
+    const seatX = x + 16;
+    const seatY = y + 18;
     // §2's table calls this state "Concerned"; the sheet ships it as `worried`.
     const placeholder = spriteFor("automaton-worried");
     if (placeholder) {
       const art = new Sprite(placeholder.texture);
-      art.width = seat;
-      art.height = seat;
-      art.position.set(seatX, seatY);
+      // Keep aspect — square stretch made the hero look wrong at larger seat.
+      const natW = Math.max(1, placeholder.frame.w);
+      const natH = Math.max(1, placeholder.frame.h);
+      const scale = seat / Math.max(natW, natH);
+      art.width = natW * scale;
+      art.height = natH * scale;
+      art.position.set(seatX + (seat - art.width) / 2, seatY + (seat - art.height) / 2);
       this.root.addChild(this.entry(art, BOARD_BANDS.pool));
     } else {
       // Reserved, and visibly reserved — a dim brass disc holding the space so
@@ -816,8 +822,9 @@ export class Renderer {
       this.root.addChild(this.entry(stand, BOARD_BANDS.pool));
     }
 
+    const copyX = seatX + seat + 14;
     const headline = this.text("Out of lives", 20, PALETTE.highlight);
-    headline.position.set(seatX + seat + 14, y + 26);
+    headline.position.set(copyX, seatY + 18);
     this.root.addChild(this.entry(headline, BOARD_BANDS.operators));
 
     const minutes = Math.floor(eco.msUntilNextLife / 60000);
@@ -826,16 +833,17 @@ export class Renderer {
       ? `next life in ${minutes}:${String(seconds).padStart(2, "0")}`
       : "a life is on its way";
     const timer = this.text(clock, 14, PALETTE.tokenInk);
-    timer.position.set(seatX + seat + 14, y + 54);
+    timer.position.set(copyX, seatY + 48);
     this.root.addChild(this.entry(timer, BOARD_BANDS.operators));
 
     // §5.2's refill, and the first player-facing route to it. Until now
     // offerLifeForAd had no caller outside the debug harness.
+    const actionY = seatY + seat + 14;
     this.root.addChild(
       this.entry(
         this.box(
           x + 20,
-          y + 104,
+          actionY,
           width - 40,
           44,
           "Watch to Continue",
@@ -855,7 +863,7 @@ export class Renderer {
     if (this.adMessage) {
       const note = this.text(this.adMessage, 12, PALETTE.tokenInk);
       note.anchor.set(0.5, 0);
-      note.position.set(DESIGN.width / 2, y + 156);
+      note.position.set(DESIGN.width / 2, actionY + 52);
       note.alpha = 0.85;
       this.root.addChild(this.entry(note, BOARD_BANDS.equation));
     }
@@ -1097,27 +1105,13 @@ export class Renderer {
   }
 
   private draw(): void {
+    this.root.sortableChildren = true;
     this.root.removeChildren();
     const s = this.state;
     if (!s) return;
 
     const board = this.bandsFor(s);
     const { lane, equation, operators, pool, status } = board;
-
-    /*
-     * THE AUTOMATON, FIRST — so every band draws over it (ART_DIRECTION §2).
-     *
-     * Non-flow by necessity: the worst board stacks 873px into a 900px design,
-     * leaving 15px above the lane and 12px below the status row, so there is no
-     * slack to give a character. Drawing it underneath means it costs the board
-     * nothing and is partially occluded by the column, which is what an object
-     * sitting on the desk behind the work should look like.
-     */
-    const mood = automatonState(s, this.idleMs);
-    const friend = automaton(mood, pool);
-    // Entry-wrapped like every other surface (§9.0 motion): the game's
-    // character was the one thing that appeared instantaneously.
-    if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
 
     // --- lane: the target queue, visible from level open (GDD §4.2) ---
     // Translucent so the world background reads through. The brightness gate
@@ -1199,17 +1193,13 @@ export class Renderer {
        * Queued plaques therefore render DIMMED and the front target at full
        * brightness, which is the disabled/available language the tokens already
        * speak, needs no new art, and survives both sunlight and colourblindness.
-       * The gold rim stays as reinforcement rather than as the whole message.
+       * Phone-eye P0-3: the live rim is COOL STEEL (PALETTE.targetFrontRim), not
+       * brighter gold — a different channel from brass so grayscale still finds
+       * the front. Queued plaques dim harder; the front lifts slightly.
        *
-       * DO NOT "FIX" THE 1.45:1. Measured on the rendered board, dimmed queued
-       * is L 0.1851 against the front's L 0.2919 — a smaller number than the
-       * rim it replaced, and deliberately so. The front target's PRIMARY
-       * identifier is POSITION: it is always the plaque at the bottom of the
-       * lane, the only one adjacent to the equation row. Brightness is the
-       * second channel and the gold rim the third. WCAG 2.2 SC 1.4.11 exempts
-       * information that is available in another form, and position is that
-       * form. Raising the dim would flatten the queue's depth for a signal that
-       * is already carried three ways.
+       * Position remains the primary identifier (bottom of the lane). Brightness
+       * is second; the cool rim is third. WCAG 2.2 SC 1.4.11 exempts information
+       * available in another form.
        */
       const plate = this.place(
         targetPlate(slot.width, slot.height, String(s.targets[i]), {
@@ -1220,18 +1210,23 @@ export class Renderer {
             : PALETTE.targetPlate,
           text: PALETTE.tokenInk,
           bevel: 0, // recessed: targets are spent ON, not picked up
+          // Cool rim on the live target — gold-on-brass failed the phone glance.
           outline: front
             ? this.rejecting
               ? PALETTE.failed
-              : PALETTE.highlight
+              : PALETTE.targetFrontRim
             : undefined,
+          outlineWidth: front ? 4 : undefined,
         // Two plaque castings, picked from the target's position in the queue
         // so a column does not repeat one of them down its length.
         }, i),
         slot.x + shove.dx,
         slot.y + shove.dy,
       );
-      if (!front) plate.alpha = DIM.alpha;
+      if (!front) {
+        // Stronger queue recess so the front carries hierarchy without brighter gold.
+        plate.alpha = Math.min(DIM.alpha, 0.7);
+      }
 
       this.entry(
         plate,
@@ -1833,7 +1828,8 @@ export class Renderer {
          * Only the thing they sat on was wrong.
          */
         const panelH = 42 + s.shop.length * 40;
-        const panelY = status.y - panelH - 8;
+        // Sit above the pool when possible — phone-eye: shop must not guillotine cubes.
+        const panelY = Math.min(status.y - 8, pool.y - 6) - panelH;
         const emptyShop = s.shop.every((e) => !e.owned && !e.affordable);
         const shopFrame = framedPanel(status.width, panelH);
         shopFrame.panel.position.set(status.x, panelY);
@@ -2366,5 +2362,13 @@ export class Renderer {
     const tray = feltLinedTray(pool.width, pool.height + 12, PALETTE.tray, TRAY_ALPHA, PALETTE.felt);
     tray.position.set(pool.x, pool.y - 6);
     this.root.addChildAt(this.entry(tray, BOARD_BANDS.furniture), 2);
+
+    // Automaton last among board chrome so cubes/tray cannot bury it (PE-01).
+    this.root.sortableChildren = true;
+    {
+      const mood = automatonState(s, this.idleMs);
+      const friend = automaton(mood, pool);
+      if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
+    }
   }
 }
