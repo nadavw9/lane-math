@@ -1159,6 +1159,38 @@ export class Renderer {
     return running;
   }
 
+  private drawScriptedTrapCommitHonesty(s: ViewState, board: Bands): void {
+    const beat = this.scriptedTrap;
+    if (!beat?.next.warning?.scripted) return;
+    const stagedIds = [s.slots.leftTileId, s.slots.rightTileId].filter((id): id is number => id !== null);
+    for (const id of stagedIds) {
+      const index = s.tiles.findIndex((tile) => tile.id === id);
+      if (index < 0) continue;
+      const r = poolSlot(index, board.pool, board.grid);
+      const cover = new Graphics().roundRect(r.x + 1, r.y + 1, r.width - 2, r.height - 2, Math.min(r.width, r.height) * 0.22).fill({ color: PALETTE.felt, alpha: 1 });
+      cover.eventMode = "none";
+      this.root.addChild(this.entry(cover, BOARD_BANDS.pool));
+      const hole = ghostSlot(r.width, r.height);
+      hole.position.set(r.x, r.y);
+      hole.eventMode = "none";
+      this.root.addChild(this.entry(hole, BOARD_BANDS.pool));
+    }
+    const op = s.slots.op;
+    if (op === null) return;
+    const available = [...BINARY.filter((candidate) => s.budget[candidate] !== undefined), ...UNARY.filter((candidate) => s.budget[candidate] !== undefined)];
+    const opIndex = available.indexOf(op);
+    if (opIndex < 0) return;
+    const r = operatorSlot(opIndex, available.length, board.operators, board.operatorGrid);
+    const size = Math.min(r.width, r.height);
+    const disc = operatorToken(size, LABEL[op] ?? op, { fill: PALETTE.operator, text: PALETTE.tokenInk, bevel: 0, elevation: 0 }, "unavailable", 0);
+    disc.alpha = 0.85;
+    disc.addChild(new Graphics().roundRect(size * 0.16, size * 0.46, size * 0.68, 3, 1.5).fill({ color: PALETTE.failed, alpha: 0.85 }));
+    disc.pivot.set(size / 2, size / 2);
+    disc.position.set(r.x + r.width / 2, r.y + size / 2);
+    disc.eventMode = "none";
+    this.root.addChild(this.entry(disc, BOARD_BANDS.operators));
+  }
+
   /** Draw the 1-04 teach-by-doing beat while the Director state stays pre-rewind. */
   private drawScriptedTrapBeat(s: ViewState, board: Bands): void {
     const beat = this.scriptedTrap;
@@ -1166,6 +1198,7 @@ export class Renderer {
     if (!beat || !warning?.scripted) return;
 
     const sample = sampleScriptedTrapBeat(beat.elapsedMs);
+    this.drawScriptedTrapCommitHonesty(s, board);
     const lane = board.lane;
     const equation = board.equation;
     const pool = board.pool;
