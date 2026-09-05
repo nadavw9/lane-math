@@ -2352,7 +2352,7 @@ export class Renderer {
               variant: entry.affordable && !entry.owned ? "primary" : "secondary",
               state: enabled ? "idle" : "unavailable",
               armed: entry.owned,
-              emblem: entry.owned ? undefined : () => star(11),
+              emblem: () => hintDiamond(14, enabled ? "available" : "disabled"),
             },
           );
           this.root.addChild(this.entry(row, BOARD_BANDS.equation));
