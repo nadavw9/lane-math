@@ -1202,22 +1202,33 @@ export class Renderer {
     if (!this.levelIntro) return;
     const veil = new Graphics().rect(0, 0, DESIGN.width, DESIGN.height).fill({ color: 0x120c08, alpha: 0.58 });
     veil.eventMode = "static";
+    // entry-exempt: level intro veil is a modal surface.
     this.root.addChild(veil);
     const panelW = DESIGN.width - 36;
     const panel = framedPanel(panelW, 238);
     panel.panel.position.set(18, 300);
+    // entry-exempt: level intro panel is a modal surface.
     this.root.addChild(panel.panel);
     const center = 18 + panel.interior.x + panel.interior.width / 2;
     const top = 300 + panel.interior.y;
     const title = this.text("Level " + s.levelId, 22, PALETTE.highlight);
-    title.anchor.set(0.5, 0); title.position.set(center, top + 14); this.root.addChild(title);
+    title.anchor.set(0.5, 0); title.position.set(center, top + 14);
+    // entry-exempt: level intro title.
+    this.root.addChild(title);
     const objective = this.text("Make " + (s.targets[0] ?? "the target"), 16, PALETTE.tokenInk);
-    objective.anchor.set(0.5, 0); objective.position.set(center, top + 52); this.root.addChild(objective);
+    objective.anchor.set(0.5, 0); objective.position.set(center, top + 52);
+    // entry-exempt: level intro objective.
+    this.root.addChild(objective);
     const intro = this.levelIntro;
     const note = this.text(intro.message ?? intro.hint ?? "Plan the queue before you start.", 12, PALETTE.tokenInk);
-    note.anchor.set(0.5, 0); note.position.set(center, top + 82); this.root.addChild(note);
+    note.anchor.set(0.5, 0); note.position.set(center, top + 82);
+    // entry-exempt: level intro copy.
+    this.root.addChild(note);
+    // entry-exempt: level intro hint control.
     if (intro.hint === null) this.root.addChild(this.box(center - 145, top + 112, 290, 34, "Watch a short ad for a hint", () => this.emit({ type: "tapLevelIntroHintAd" }), { variant: "secondary" }));
-    else { const bounded = this.text("This hint does not give the whole answer.", 11, PALETTE.highlightInk); bounded.anchor.set(0.5, 0); bounded.position.set(center, top + 112); this.root.addChild(bounded); }
+    else { const bounded = this.text("This hint does not give the whole answer.", 11, PALETTE.highlightInk); bounded.anchor.set(0.5, 0); bounded.position.set(center, top + 112); // entry-exempt: level intro bounded hint copy.
+    this.root.addChild(bounded); }
+    // entry-exempt: level intro start control.
     this.root.addChild(this.box(center - 145, top + 160, 290, 38, "Start Level", () => this.emit({ type: "tapLevelIntroStart" }), { variant: "primary" }));
   }
 
