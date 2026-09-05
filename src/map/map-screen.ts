@@ -2,6 +2,7 @@ import { Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } fr
 
 import { button, type ButtonState, type ButtonVariant } from "../renderer/button.js";
 import { loadCtaChrome } from "../renderer/cta-chrome.js";
+import { loadEmblemChrome } from "../renderer/emblem-chrome.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { EASE, TIMING, Tween } from "../renderer/tween.js";
@@ -206,6 +207,7 @@ export class MapScreen {
   /** Load the room art. Safe to call repeatedly; a failure leaves the wood. */
   async loadRooms(base = "/"): Promise<void> {
     await loadCtaChrome(import.meta.env.BASE_URL);
+    await loadEmblemChrome(import.meta.env.BASE_URL);
 
     for (const world of [1, 2, 3, 4]) {
       if (this.rooms.has(world)) continue;
@@ -427,11 +429,10 @@ export class MapScreen {
     if (level.state === "cleared" && plateStars > 0) {
       // Drawn objects, not glyphs: Outfit has no star, so this used to be
       // whatever dingbat the device shipped (see emblems.ts).
-      // 8, and sat low: at 9 the row clipped the numeral's descender, which is
-      // the kind of overlap that only shows up once real progress is on screen.
-      const size = 8;
+      // 11: empty HF wells need phone-squint room; 8px collapsed to muted-gold rim.
+      const size = 11;
       const stars = emblemMeter("star", plateStars, 3, size);
-      stars.position.set((w - meterWidth(3, size)) / 2, h - 7 - size / 2);
+      stars.position.set((w - meterWidth(3, size)) / 2, h - 8 - size / 2);
       face.addChild(stars);
     }
 
