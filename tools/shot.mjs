@@ -208,20 +208,23 @@ if (screen) {
     if (name === "trap-mid" || name === "trap-after") {
       api.load("1-04");
       api.endLevelIntro?.();
-      api.setEffectSpeed?.(name === "trap-mid" ? 0 : 1);
+      await new Promise((r) => setTimeout(r, 1400));
+      api.setEffectSpeed?.(1);
       // 1 + 3 = 4 is the authored tempting move; 9 - 5 is the safe move.
       api.send({ type: "tapTile", id: 5 });
       api.send({ type: "tapOperator", op: "+" });
       api.send({ type: "tapTile", id: 2 });
+      await new Promise((r) => setTimeout(r, 400));
       api.send({ type: "tapCommit" });
+      if (name === "trap-mid") api.setEffectSpeed?.(0);
       if (name === "trap-mid") {
         await new Promise((r) => setTimeout(r, 450));
         if (!(api.feel?.()?.scriptedTrap)) throw new Error("scripted trap beat is not holding");
       } else {
         await new Promise((r) => setTimeout(r, 1350));
         if (!api.state()?.warning) throw new Error("scripted trap warning did not settle");
-        api.send({ type: "dismissWarning" });
-        await new Promise((r) => setTimeout(r, 300));
+        api.settleScriptedTrap?.();
+        // Keep the settled warning on camera as the free Go Back rewind proof.
       }
     }
     if (name === "warned") {

@@ -708,7 +708,7 @@ export class Director {
       //
       // On an overridable warning the equation was left standing so the
       // override could replay it, so "go back" has to take it down here.
-      if (this.warning?.overridable) {
+      if (this.warning?.overridable || this.warning?.scripted) {
         this.slots = { leftTileId: null, op: null, rightTileId: null };
         this.swapArmed = null;
       }
@@ -1075,8 +1075,12 @@ export class Director {
      */
     const blocks = this.warningBlocks;
     if (blocks) {
-      this.slots = { leftTileId: null, op: null, rightTileId: null };
-      this.swapArmed = null;
+      // Keep the scripted teaching equation filled until its free Go Back
+      // acknowledgement; ordinary blocking warnings still rewind immediately.
+      if (!this.scriptedTrapLevel) {
+        this.slots = { leftTileId: null, op: null, rightTileId: null };
+        this.swapArmed = null;
+      }
       this.pendingFatal = null;
     } else {
       this.pendingFatal = { kind: "binary", leftId: left.id, rightId: right.id, op };

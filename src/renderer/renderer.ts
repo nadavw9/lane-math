@@ -549,6 +549,16 @@ export class Renderer {
     this.fx.removeChildren();
   }
 
+  // Review harness: force the scripted teaching state to its settled warning.
+  settleScriptedTrap(): void {
+    if (this.scriptedTrap) {
+      const { next } = this.scriptedTrap;
+      this.scriptedTrap = null;
+      this.commitState(next);
+    }
+    this.draw();
+  }
+
   apply(commands: readonly Command[]): void {
     const rejected = commands.some((c) => c.type === "reject");
 
@@ -1214,7 +1224,7 @@ export class Renderer {
 
     const caption = this.text(warning.line, 18, PALETTE.highlight);
     caption.anchor.set(0.5);
-    caption.position.set(lane.x + lane.width / 2, lane.y - 22);
+    caption.position.set(lane.x + lane.width / 2, lane.y + 20);
     caption.alpha = 0.9;
     // entry-exempt: scripted trap caption arrives with its focus treatment.
     this.root.addChild(caption);
@@ -2265,7 +2275,7 @@ export class Renderer {
             topY + 98,
             120,
             32,
-            w.scripted ? "Let Me Look" : "Got It",
+            w.scripted ? "Go Back" : "Got It",
             () => this.emit({ type: "dismissWarning" }),
           ),
         );
