@@ -30,7 +30,7 @@ import {
 } from "./layout.js";
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
-import { teachCueSample } from "./teach-cue.js";
+import { queueLookSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
@@ -137,6 +137,8 @@ export class Renderer {
   /** Build id shown in the status band; long-pressing it exports the funnel. */
   private buildLabel = "";
   private nextLevelId: string | null = null;
+  /** The single real PNG used for every FTUE hand cue. */
+  private ftueHandTexture!: Texture;
 
   /*
    * THE FEEL LAYER (§9.5). All time-sampled, all read during draw().
@@ -303,6 +305,13 @@ export class Renderer {
       // colour and the game is completely playable.
       setGrainTexture(null);
     }
+
+    // The FTUE hand is authored art, not a collection of Pixi primitives.
+    // Keep this load independent of the optional token atlas path: the teach
+    // cue must never regress to the old ellipse/roundRect silhouette.
+    this.ftueHandTexture = await Assets.load<Texture>(
+      `${import.meta.env.BASE_URL}assets/ui/ftue-pointing-hand@2x.png`,
+    );
 
     /*
      * The sprite path (ART_DIRECTION §5), off unless asked for.
@@ -1229,7 +1238,8 @@ export class Renderer {
     const frontY = frontSlot.y + frontSlot.height / 2;
 
     const veil = new Graphics()
-      .rect(lane.x, lane.y - 8, lane.width, pool.y + pool.height - lane.y + 16)
+      .rect(lane.x, lane.y - 8, lane.width, Math.max(0, focusSlot.y - lane.y + 8))
+      .rect(lane.x, focusSlot.y + focusSlot.height, lane.width, Math.max(0, pool.y + pool.height + 8 - focusSlot.y - focusSlot.height))
       .fill({ color: 0x120c08, alpha: 0.12 + sample.focus * 0.12 });
     veil.eventMode = "none";
     // entry-exempt: scripted trap focus veil arrives with the mid-commit beat.
@@ -1239,7 +1249,8 @@ export class Renderer {
     const path = new Graphics()
       .moveTo(equation.x + equation.width / 2, equation.y + equation.height / 2)
       .lineTo(frontX, frontY)
-      .stroke({ width: 2, color: PALETTE.highlight, alpha: 0.4 + sample.focus * 0.35 });
+      .lineTo(focusX, focusY)
+      .stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.68 + sample.focus * 0.25 });
     path.eventMode = "none";
     // entry-exempt: scripted trap focus path arrives with the mid-commit beat.
     this.root.addChild(path);
@@ -1251,6 +1262,20 @@ export class Renderer {
     commitMarker.eventMode = "none";
     // entry-exempt: paused commit marker arrives with the mid-commit beat.
     this.root.addChild(commitMarker);
+
+    const handX = sample.focus < 0.2
+      ? lerp(equation.x + equation.width / 2, frontX, sample.commitProgress)
+      : lerp(frontX, focusX, sample.focus);
+    const handY = sample.focus < 0.2
+      ? lerp(equation.y + equation.height / 2, frontY, sample.commitProgress)
+      : lerp(frontY, focusY, sample.focus);
+    const hand = new Sprite(this.ftueHandTexture);
+    hand.anchor.set(0.31, 0.77);
+    hand.position.set(handX + 22, handY + 26);
+    hand.scale.set(0.22);
+    hand.rotation = -0.28;
+    hand.eventMode = "none";
+    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
 
     const pulse = 1 + 0.08 * Math.sin(sample.progress * Math.PI * 4);
     const focusRing = new Graphics()
@@ -1283,7 +1308,7 @@ export class Renderer {
     const later = this.text(String(warning.keystoneTarget ?? s.targets[laterIndex] ?? "?"), 16, PALETTE.tokenInk);
     later.anchor.set(0.5);
     later.position.set(focusX, focusY);
-    later.alpha = 0.82;
+    later.alpha = 1;
     // entry-exempt: later-target value arrives with its focus treatment.
     this.root.addChild(later);
   }
@@ -1402,6 +1427,52 @@ export class Renderer {
     this.root.addChild(this.box(center - 145, top + 160, 290, 38, "Start Level", () => this.emit({ type: "tapLevelIntroStart" }), { variant: "primary" }));
   }
 
+  /**
+   * Exact-action family: brass pulse ring + HUMAN-FINAL hand + caption plaque.
+   * Used for FTUE teach targets and for 1-04's settled Go Back CTA.
+   */
+  private drawExactActionCue(
+    rect: Rect,
+    line: string,
+    opts: { readonly ringAlphaScale?: number; readonly plaqueY?: number } = {},
+  ): void {
+    const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
+    const ringAlphaScale = opts.ringAlphaScale ?? 1;
+    const shadow = new Graphics()
+      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
+      .fill({ color: PALETTE.text, alpha: cue.shadowAlpha });
+    shadow.zIndex = BOARD_BANDS.status + 19;
+    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
+
+    const ring = new Graphics()
+      .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
+      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * ringAlphaScale });
+    ring.zIndex = BOARD_BANDS.status + 20;
+    this.root.addChild(this.entry(ring, BOARD_BANDS.status));
+
+    const hand = new Sprite(this.ftueHandTexture);
+    hand.anchor.set(0.31, 0.77);
+    hand.position.set(cue.handX, cue.handY);
+    hand.scale.set(0.22);
+    hand.rotation = -0.28;
+    hand.zIndex = BOARD_BANDS.status + 22;
+    hand.eventMode = "none";
+    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+
+    const plaqueRect = opts.plaqueY === undefined ? cue.plaque : { ...cue.plaque, y: opts.plaqueY };
+    const plaque = new Graphics()
+      .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
+      .fill({ color: PALETTE.felt, alpha: 0.98 })
+      .stroke({ width: 4, color: PALETTE.brass });
+    plaque.zIndex = BOARD_BANDS.status + 21;
+    this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
+    const copy = this.text(line, 20, PALETTE.tokenInk);
+    copy.anchor.set(0.5);
+    copy.position.set(plaqueRect.x + plaqueRect.width / 2, plaqueRect.y + plaqueRect.height / 2);
+    copy.zIndex = BOARD_BANDS.status + 23;
+    this.root.addChild(this.entry(copy, BOARD_BANDS.status));
+  }
+
   /** Shared exact-action marker: live target, brass breath, hand, contextual plaque. */
   private drawTeachCue(s: ViewState, board: Bands, availableOps: readonly (BinaryOp | UnaryOp)[]): void {
     const target = s.teachingTarget;
@@ -1414,45 +1485,72 @@ export class Renderer {
     } else if (target.kind === "operator") {
       const index = availableOps.indexOf(target.op);
       if (index >= 0) rect = operatorSlot(index, availableOps.length, board.operators, board.operatorGrid);
+    } else if (target.kind === "queue") {
+      rect = targetSlot(target.offset, board.lane, board.grid);
     } else {
       rect = equationSlot(3, board.equation);
     }
     if (!rect) return;
 
-    const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
-    const shadow = new Graphics()
-      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
-      .fill({ color: PALETTE.handOutline, alpha: cue.shadowAlpha });
-    shadow.zIndex = BOARD_BANDS.status + 19;
-    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
+    const queueSweep = target.kind === "queue";
+    if (queueSweep) {
+      // Look-only: sweep back→front (e.g. 2→17→4). Never park a tap pulse on the front plate.
+      const remaining = Math.max(1, s.targets.length - s.targetIndex);
+      const waypoints = [];
+      for (let offset = remaining - 1; offset >= 0; offset -= 1) {
+        waypoints.push(targetSlot(offset, board.lane, board.grid));
+      }
+      const look = queueLookSample(waypoints, this.teachCueMs);
+      const route = new Graphics();
+      for (let i = 0; i < waypoints.length; i += 1) {
+        const plate = waypoints[i]!;
+        const x = plate.x + plate.width / 2;
+        const y = plate.y + plate.height / 2;
+        if (i === 0) route.moveTo(x, y);
+        else route.lineTo(x, y);
+      }
+      route.stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.72 });
+      route.eventMode = "none";
+      this.root.addChild(this.entry(route, BOARD_BANDS.status));
+      for (let i = 0; i < waypoints.length; i += 1) {
+        const plate = waypoints[i]!;
+        const alpha = look.plateAlphas[i] ?? 0;
+        if (alpha <= 0.05) continue;
+        const ring = new Graphics()
+          .roundRect(plate.x - 5, plate.y - 5, plate.width + 10, plate.height + 10, 12)
+          .stroke({ width: 4, color: PALETTE.brassLit, alpha });
+        ring.zIndex = BOARD_BANDS.status + 20;
+        ring.eventMode = "none";
+        this.root.addChild(this.entry(ring, BOARD_BANDS.status));
+      }
+      if (look.handAlpha > 0.05) {
+        const hand = new Sprite(this.ftueHandTexture);
+        hand.anchor.set(0.31, 0.77);
+        hand.position.set(look.handX, look.handY);
+        hand.scale.set(0.22);
+        hand.rotation = -0.28;
+        hand.alpha = look.handAlpha;
+        hand.zIndex = BOARD_BANDS.status + 22;
+        hand.eventMode = "none";
+        this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+      }
+      const cue = teachCueSample(waypoints[0] ?? rect, this.teachCueMs, DESIGN.width);
+      const plaqueRect = { ...cue.plaque, y: board.equation.y + 10 };
+      const plaque = new Graphics()
+        .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
+        .fill({ color: PALETTE.felt, alpha: 0.98 })
+        .stroke({ width: 4, color: PALETTE.brass });
+      plaque.zIndex = BOARD_BANDS.status + 21;
+      this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
+      const copy = this.text(s.teachingLine, 20, PALETTE.tokenInk);
+      copy.anchor.set(0.5);
+      copy.position.set(plaqueRect.x + plaqueRect.width / 2, plaqueRect.y + plaqueRect.height / 2);
+      copy.zIndex = BOARD_BANDS.status + 23;
+      this.root.addChild(this.entry(copy, BOARD_BANDS.status));
+      return;
+    }
 
-    const ring = new Graphics()
-      .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
-      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha });
-    ring.zIndex = BOARD_BANDS.status + 20;
-    this.root.addChild(this.entry(ring, BOARD_BANDS.status));
-
-    // A compact human hand silhouette; the fingertip lands on the live control.
-    const hand = new Container();
-    hand.addChild(new Graphics().ellipse(-20, 0, 32, 18).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().roundRect(-5, -52, 20, 58, 10).fill(PALETTE.handFill).stroke({ width: 3, color: PALETTE.handOutline }));
-    hand.addChild(new Graphics().ellipse(-2, -51, 7, 4.5).fill({ color: PALETTE.handHighlight, alpha: 0.75 }));
-    hand.position.set(cue.handX, cue.handY);
-    hand.rotation = -0.28;
-    hand.zIndex = BOARD_BANDS.status + 22;
-    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
-
-    const plaque = new Graphics()
-      .roundRect(cue.plaque.x, cue.plaque.y, cue.plaque.width, cue.plaque.height, 14)
-      .fill({ color: PALETTE.felt, alpha: 0.98 })
-      .stroke({ width: 4, color: PALETTE.brass });
-    plaque.zIndex = BOARD_BANDS.status + 21;
-    this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
-    const copy = this.text(s.teachingLine, 20, PALETTE.tokenInk);
-    copy.anchor.set(0.5);
-    copy.position.set(cue.plaque.x + cue.plaque.width / 2, cue.plaque.y + cue.plaque.height / 2);
-    copy.zIndex = BOARD_BANDS.status + 23;
-    this.root.addChild(this.entry(copy, BOARD_BANDS.status));
+    this.drawExactActionCue(rect, s.teachingLine);
   }
 
   private draw(): void {
@@ -1502,6 +1600,9 @@ export class Renderer {
     // §9.5: the queue advances with mass. Mid-advance every plate is drawn one
     // slot higher and falls in, so the column moves as a body.
     const advancing = this.laneAdvance ? 1 - this.laneAdvance.value : 0;
+    const scriptedFocusOffset = this.scriptedTrap?.next.warning?.scripted
+      ? Math.max(1, (this.scriptedTrap.next.warning.keystoneTargetIndex ?? s.targetIndex + 1) - s.targetIndex)
+      : -1;
 
     /*
      * Cleared targets leave a ghost, so the lane does not void out.
@@ -1552,9 +1653,12 @@ export class Renderer {
        * is second; the cool rim is third. WCAG 2.2 SC 1.4.11 exempts information
        * available in another form.
        */
+      // Look-at-queue beat: equal chrome on every plate so front 4 does not read as tap-this.
+      const queueTeach = s.teachingTarget?.kind === "queue";
+      const liveFront = front && !queueTeach;
       const plate = this.place(
         targetPlate(slot.width, slot.height, String(s.targets[i]), {
-          fill: front
+          fill: liveFront
             ? this.rejecting
               ? PALETTE.failed
               : PALETTE.targetFront
@@ -1562,19 +1666,19 @@ export class Renderer {
           text: PALETTE.tokenInk,
           bevel: 0, // recessed: targets are spent ON, not picked up
           // Cool rim on the live target — gold-on-brass failed the phone glance.
-          outline: front
+          outline: liveFront
             ? this.rejecting
               ? PALETTE.failed
               : PALETTE.targetFrontRim
             : undefined,
-          outlineWidth: front ? 4 : undefined,
+          outlineWidth: liveFront ? 4 : undefined,
         // Two plaque castings, picked from the target's position in the queue
         // so a column does not repeat one of them down its length.
         }, i),
         slot.x + shove.dx,
         slot.y + shove.dy,
       );
-      if (!front) {
+      if (!front && offset !== scriptedFocusOffset && !queueTeach) {
         // Stronger queue recess so the front carries hierarchy without brighter gold.
         plate.alpha = Math.min(DIM.alpha, 0.7);
       }
@@ -1582,7 +1686,7 @@ export class Renderer {
       this.entry(
         plate,
         // The FRONT target lands last: it is the focal point (§9.0).
-        front ? BOARD_BANDS.front : BOARD_BANDS.queue,
+        liveFront ? BOARD_BANDS.front : BOARD_BANDS.queue,
       );
     }
 
@@ -2391,8 +2495,20 @@ export class Renderer {
             32,
             w.scripted ? "Go Back" : "Got It",
             () => this.emit({ type: "dismissWarning" }),
+            { variant: w.scripted ? "primary" : "secondary" },
           ),
         );
+      }
+
+      // 1-04 settled rewind: same hand+pulse+plaque family as board FTUE cues,
+      // pointed at the live Go Back CTA (not only modal copy).
+      if (w.scripted) {
+        const goBack: Rect = w.overridable
+          ? { x: midX - 128, y: topY + 104, width: 124, height: 34 }
+          : { x: midX - 60, y: topY + 98, width: 120, height: 32 };
+        this.drawExactActionCue(goBack, "Tap Go Back.", {
+          plaqueY: panelY + panelH + 12,
+        });
       }
     }
 

@@ -4,7 +4,8 @@ export type FtuePulse = "pool" | "minus" | "queue" | "multiply" | null;
 export type FtueCueTarget =
   | { readonly kind: "tile"; readonly tileId: number }
   | { readonly kind: "operator"; readonly op: BinaryOp }
-  | { readonly kind: "commit" };
+  | { readonly kind: "commit" }
+  | { readonly kind: "queue"; readonly offset: number };
 
 /** Stable analytics keys. Display copy may change without splitting a funnel. */
 export type FtueCueKey =
@@ -45,6 +46,16 @@ function exactSequence(state: FtueCueState, key: "subtraction" | "multiply", op:
   return { key, line: "Press = to make the target.", pulse: "queue", target: { kind: "commit" } };
 }
 
+function anotherWay(state: FtueCueState): FtueCue | null {
+  if (state.targetIndex > 0) return null;
+  const first = liveId(state, 6);
+  if (state.leftTileId === null && first !== null) return { key: "multiple_ways", line: "Try another way to make 13.", pulse: "pool", target: { kind: "tile", tileId: first } };
+  if (state.op !== "+") return { key: "multiple_ways", line: "Tap + to make 13.", pulse: "pool", target: { kind: "operator", op: "+" } };
+  const second = liveId(state, 7);
+  if (state.rightTileId === null && second !== null) return { key: "multiple_ways", line: "Now choose 7.", pulse: "pool", target: { kind: "tile", tileId: second } };
+  return { key: "multiple_ways", line: "Press = to make 13.", pulse: "queue", target: { kind: "commit" } };
+}
+
 /** One short instruction attached to one exact live action. */
 export function ftueCue(levelId: string, state: FtueCueState): FtueCue | null {
   if (levelId === "1-01" && state.targetIndex === 0) {
@@ -62,10 +73,10 @@ export function ftueCue(levelId: string, state: FtueCueState): FtueCue | null {
   // Stop after the first move so replay boards do not become HUD chrome.
   if (state.targetIndex > 0) return null;
   switch (levelId) {
-    case "1-02": return { key: "multiple_ways", line: "There can be more than one way.", pulse: "pool" };
-    // TODO(P1): migrate 1-02, 1-04 and 1-06 to exact shared teach-cue sequences.
+    case "1-02": return anotherWay(state);
+    // 1-04 owns a longer warning beat in the renderer so the equation stays visible through the free rewind; it has no ordinary cue.
     case "1-05": return { key: "repeat_trap", line: "Try that idea again.", pulse: "queue" };
-    case "1-06":
+    case "1-06": return { key: "scan_queue", line: "Look at the whole queue.", pulse: "queue", target: { kind: "queue", offset: 0 } };
     case "1-07":
     case "1-08":
     case "1-09":

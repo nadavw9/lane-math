@@ -68,11 +68,6 @@ export const PALETTE = {
   /** Digits on the tokens: cream, drawn from the paper (§9.2). */
   tokenInk: 0xf4ead8,
 
-  /** Warm, silhouette-first hand marker colors from the FTUE cue concept. */
-  handFill: 0xf2c3a1,
-  handOutline: 0x452419,
-  handHighlight: 0xffe1c4,
-
   /*
    * INK ON PAPER — text drawn on the background or on a light panel. Distinct
    * from tokenInk on purpose: the two grounds are opposite, so one colour
