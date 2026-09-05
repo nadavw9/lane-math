@@ -203,9 +203,9 @@ function viewWithRestoration(): ReturnType<typeof mapView> {
   return forcedStars === null ? withRooms : { ...withRooms, starsAvailable: forcedStars };
 }
 
-function showMap(): void {
+function showMap(focusLevelId: string | null = null): void {
   renderer.setBoardVisible(false);
-  map.show(viewWithRestoration());
+  map.show(viewWithRestoration(), focusLevelId);
 }
 
 function showBoard(): void {
@@ -258,7 +258,8 @@ void ads.initialize();
 renderer.onInput((input) => {
   // §7.6: the map is absent until 1-10 is cleared, so the way back is too.
   if (input.type === "tapMap") {
-    showMap();
+    const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
+    showMap(focus);
     return;
   }
   if (input.type === "tapNextLevel") {
@@ -530,6 +531,11 @@ Object.assign(window, {
     state: () => lastState,
     setEffectSpeed,
     showMap,
+    /** Review hook: replay the clear-to-map handoff beat. */
+    showMapAfterClear: () => {
+      const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
+      showMap(focus);
+    },
     /** Review hook: force the spendable star balance. */
     setStars: (n: number) => {
       forcedStars = n;

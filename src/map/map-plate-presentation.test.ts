@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DIM, PALETTE } from "../renderer/layout.js";
-import { mapPlatePresentation } from "./map-screen.js";
+import { mapFocusBeat, mapPlatePresentation } from "./map-screen.js";
 
 describe("the map's durable next-level focal", () => {
   it("keeps the open plate elevated after entrance motion settles", () => {
@@ -27,5 +27,20 @@ describe("the map's durable next-level focal", () => {
     expect(cleared.faceAlpha).toBeGreaterThan(DIM.alpha);
     expect(locked.faceAlpha).toBe(DIM.alpha);
     expect(cleared.rim).not.toBe(PALETTE.targetFrontRim);
+  });
+});
+
+
+describe("the clear-to-map handoff beat", () => {
+  it("sets the next plate down with a short weighted settle", () => {
+    const start = mapFocusBeat(0);
+    const middle = mapFocusBeat(0.5);
+    const end = mapFocusBeat(1);
+
+    expect(start.dy).toBeLessThan(0);
+    expect(middle.scale).toBeGreaterThan(1);
+    expect(end.dy).toBeCloseTo(0);
+    expect(end.scale).toBeCloseTo(1);
+    expect(middle.scale).toBeLessThan(1.04);
   });
 });
