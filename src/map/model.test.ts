@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_ECONOMY } from "../economy/config.js";
 import { Economy } from "../economy/economy.js";
 
 import { SLOTS_PER_WORLD, WORLDS, levelId, mapView } from "./model.js";
@@ -22,7 +23,7 @@ for (const world of WORLDS) {
  * from the failure count (§5.4) and cannot be handed out directly, which is
  * exactly the point — the economy has one way to award them.
  */
-function economyWith(cleared: readonly string[], failuresFirst = 0): Economy {
+function economyWith(cleared: readonly string[], failuresFirst = 0, config = DEFAULT_ECONOMY): Economy {
   let saved: string | null = null;
   const store = {
     read: () => saved,
@@ -30,7 +31,7 @@ function economyWith(cleared: readonly string[], failuresFirst = 0): Economy {
       saved = raw;
     },
   };
-  const economy = new Economy(store);
+  const economy = new Economy(store, undefined, config);
   for (const id of cleared) {
     economy.beginReplay(id);
     for (let i = 0; i < failuresFirst; i++) economy.recordFailure(id);
@@ -134,5 +135,17 @@ describe("the totals that had nowhere to live", () => {
     const view = mapView(economyWith([]), IDS);
     expect(view.maxLives).toBeGreaterThan(0);
     expect(view.lives).toBeLessThanOrEqual(view.maxLives);
+  });
+});
+
+describe("world star gates", () => {
+  it("distinguishes a star shortfall from an unreached bunch", () => {
+    const afterWorldTwo = IDS.slice(0, IDS.indexOf("2-10") + 1);
+    const config = { ...DEFAULT_ECONOMY, worldStarGates: { ...DEFAULT_ECONOMY.worldStarGates, 3: 30, 4: 40 } };
+    const poor = mapView(economyWith(afterWorldTwo, 4, config), IDS);
+    expect(poor.totalStars).toBe(20);
+    expect(poor.levels.find((l) => l.id === "3-01")?.state).toBe("locked");
+    expect(poor.levels.find((l) => l.id === "3-01")?.lockReason).toBe("not-enough-stars");
+    expect(poor.levels.find((l) => l.id === "4-01")?.lockReason).toBe("not-reached");
   });
 });

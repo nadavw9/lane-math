@@ -792,6 +792,16 @@ export class MapScreen {
       const name = this.text(`${world}  ${WORLD_NAMES[world] ?? ""}`.toUpperCase(), 11, PALETTE.tokenInk, "900");
       name.position.set(PAD + 10, y + 7);
       this.root.addChild(this.entry(name, MAP_BANDS.header + world));
+      const blocked = levels.find((level) => level.state === "locked");
+      if (world > 1 && blocked) {
+        const gateLine = blocked.lockReason === "not-enough-stars"
+          ? "Earn " + (v.worldGates[world] ?? 0) + " stars to open this bunch. You have " + v.totalStars + "."
+          : "Clear the previous bunch to reach this one.";
+        const gate = this.text(gateLine, 9, PALETTE.tokenInk);
+        gate.position.set(PAD + 10, y + 17);
+        gate.alpha = 0.9;
+        this.root.addChild(this.entry(gate, MAP_BANDS.header + world));
+      }
 
       const gridWidth = COLS * CELL + (COLS - 1) * GAP;
       const left = (DESIGN.width - gridWidth) / 2;

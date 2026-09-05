@@ -181,6 +181,7 @@ export class Renderer {
   private entrance: Entrance | null = null;
   /** Outcome of the last rewarded-ad attempt, shown on the out-of-lives screen. */
   private adMessage: string | null = null;
+  private levelIntro: { hint: string | null; message: string | null } | null = null;
   private clearedEntrance: Entrance | null = null;
 
   private get rejecting(): boolean {
@@ -386,6 +387,22 @@ export class Renderer {
   /** Report an ad outcome to the player. Cleared when they leave the screen. */
   setAdMessage(message: string | null): void {
     this.adMessage = message;
+    this.draw();
+  }
+
+  beginLevelIntro(): void {
+    this.levelIntro = { hint: null, message: null };
+    this.draw();
+  }
+
+  setLevelIntroHint(hint: string | null, message: string | null = null): void {
+    if (!this.levelIntro) return;
+    this.levelIntro = { hint, message };
+    this.draw();
+  }
+
+  endLevelIntro(): void {
+    this.levelIntro = null;
     this.draw();
   }
 
@@ -1181,6 +1198,40 @@ export class Renderer {
     return token;
   }
 
+  private drawLevelIntro(s: ViewState): void {
+    if (!this.levelIntro) return;
+    const veil = new Graphics().rect(0, 0, DESIGN.width, DESIGN.height).fill({ color: 0x120c08, alpha: 0.58 });
+    veil.eventMode = "static";
+    // entry-exempt: level intro veil is a modal surface.
+    this.root.addChild(veil);
+    const panelW = DESIGN.width - 36;
+    const panel = framedPanel(panelW, 238);
+    panel.panel.position.set(18, 300);
+    // entry-exempt: level intro panel is a modal surface.
+    this.root.addChild(panel.panel);
+    const center = 18 + panel.interior.x + panel.interior.width / 2;
+    const top = 300 + panel.interior.y;
+    const title = this.text("Level " + s.levelId, 22, PALETTE.highlight);
+    title.anchor.set(0.5, 0); title.position.set(center, top + 14);
+    // entry-exempt: level intro title.
+    this.root.addChild(title);
+    const objective = this.text("Make " + (s.targets[0] ?? "the target"), 16, PALETTE.tokenInk);
+    objective.anchor.set(0.5, 0); objective.position.set(center, top + 52);
+    // entry-exempt: level intro objective.
+    this.root.addChild(objective);
+    const intro = this.levelIntro;
+    const note = this.text(intro.message ?? intro.hint ?? "Plan the queue before you start.", 12, PALETTE.tokenInk);
+    note.anchor.set(0.5, 0); note.position.set(center, top + 82);
+    // entry-exempt: level intro copy.
+    this.root.addChild(note);
+    // entry-exempt: level intro hint control.
+    if (intro.hint === null) this.root.addChild(this.box(center - 145, top + 112, 290, 34, "Watch a short ad for a hint", () => this.emit({ type: "tapLevelIntroHintAd" }), { variant: "secondary" }));
+    else { const bounded = this.text("This hint does not give the whole answer.", 11, PALETTE.highlightInk); bounded.anchor.set(0.5, 0); bounded.position.set(center, top + 112); // entry-exempt: level intro bounded hint copy.
+    this.root.addChild(bounded); }
+    // entry-exempt: level intro start control.
+    this.root.addChild(this.box(center - 145, top + 160, 290, 38, "Start Level", () => this.emit({ type: "tapLevelIntroStart" }), { variant: "primary" }));
+  }
+
   private draw(): void {
     this.root.sortableChildren = true;
     this.root.removeChildren();
@@ -1717,7 +1768,7 @@ export class Renderer {
     // --- status line + restart ---
     // §9.4: no "no solution exists" text. During play this line carries
     // rejections and confirmations; on failure the board has already said it.
-    const banner = this.rejection ?? s.message ?? "";
+    const banner = s.teachingLine ?? this.rejection ?? s.message ?? "";
     /*
      * CREAM AND GOLD, because this band is FELT now.
      *
@@ -2156,7 +2207,7 @@ export class Renderer {
       const panelX = equation.x;
       const panelW = equation.width;
       const panelY = equation.y;
-      const panelH = Math.min(196, status.y - equation.y - 4);
+      const panelH = Math.min(224, status.y - equation.y - 4);
       const framed = framedPanel(panelW, panelH);
       framed.panel.position.set(panelX, panelY);
       this.root.addChild(this.entry(framed.panel, BOARD_BANDS.equation));
@@ -2184,15 +2235,24 @@ export class Renderer {
        * gone for good.
        */
       const heading = this.text(
-        exit.restartCostsLife
-          ? "starting over costs a life — going back does not"
-          : "this restart is free — and going back is too",
+        exit.canCleanRetry
+          ? "restart with a clean 3-star chance"
+          : exit.restartCostsLife
+            ? "starting over costs a life — going back does not"
+            : "this restart is free — and going back is too",
         15,
         PALETTE.tokenInk,
       );
       heading.anchor.set(0.5, 0);
       heading.position.set(innerX + inner.width / 2, innerY + 10);
       this.root.addChild(this.entry(heading, BOARD_BANDS.equation));
+
+      if (this.adMessage) {
+        const note = this.text(this.adMessage, 11, PALETTE.highlight);
+        note.anchor.set(0.5, 0);
+        note.position.set(innerX + inner.width / 2, innerY + 30);
+        this.root.addChild(this.entry(note, BOARD_BANDS.equation));
+      }
 
       const buttonH = 34;
       const gap = 7;
@@ -2207,8 +2267,11 @@ export class Renderer {
        * makes it deliberately informative — it leaks where the mistake was —
        * so it earns the top slot and the gold.
        */
-      const continueLabel = exit.canContinue
-        ? "Watch an Ad · Back to Where It Still Worked"
+      const cleanRetry = exit.canCleanRetry;
+      const continueLabel = cleanRetry
+        ? "Watch a short ad to restart and try for 3 stars."
+        : exit.canContinue
+          ? "Watch an Ad · Back to Where It Still Worked"
         : exit.continuesLeft === 0
           ? "Continues Used"
           : "Nothing to Rewind To";
@@ -2220,10 +2283,14 @@ export class Renderer {
             buttonW,
             buttonH,
             continueLabel,
-            exit.canContinue ? () => this.emit({ type: "tapContinue" }) : undefined,
+            cleanRetry
+              ? () => this.emit({ type: "tapCleanRetryAd" })
+              : exit.canContinue
+                ? () => this.emit({ type: "tapContinue" })
+                : undefined,
             {
               variant: "primary",
-              state: exit.canContinue ? "idle" : "unavailable",
+              state: cleanRetry || exit.canContinue ? "idle" : "unavailable",
             },
           ),
           BOARD_BANDS.equation,
@@ -2238,8 +2305,8 @@ export class Renderer {
             seatY(1),
             half,
             buttonH,
-            "Restart",
-            () => this.emit({ type: "tapRestart" }),
+            cleanRetry ? "Leave" : "Restart",
+            cleanRetry ? () => this.emit({ type: "tapMap" }) : () => this.emit({ type: "tapRestart" }),
             { variant: "secondary" },
           ),
           BOARD_BANDS.equation,
@@ -2252,9 +2319,9 @@ export class Renderer {
             seatY(1),
             half,
             buttonH,
-            "Map",
-            () => this.emit({ type: "tapMap" }),
-            { variant: "secondary" },
+            cleanRetry ? "No free restart" : "Map",
+            cleanRetry ? undefined : () => this.emit({ type: "tapMap" }),
+            { variant: "secondary", state: cleanRetry ? "unavailable" : "idle" },
           ),
           BOARD_BANDS.equation,
         ),
@@ -2471,5 +2538,6 @@ export class Renderer {
       const friend = automaton(mood, pool, motion);
       if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
     }
+    if (this.levelIntro) this.drawLevelIntro(s);
   }
 }

@@ -15,7 +15,7 @@ import {
   type Tile,
   type UnaryOp,
 } from "../solver/index.js";
-import { livesActiveFor, starsFor } from "../economy/config.js";
+import { livesActiveFor } from "../economy/config.js";
 import type { Economy } from "../economy/economy.js";
 import { ALL_UNLOCKED, unlocksFor } from "../economy/unlocks.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
@@ -27,6 +27,7 @@ import type {
   Command,
   EconomyView,
   HintView,
+  HintAdView,
   InputEvent,
   LadderLevel,
   Phase,
@@ -417,7 +418,7 @@ export class Director {
       maxLives: this.economy.config.maxLives,
       livesActive: livesActiveFor(this.level.id, this.economy.config),
       bestStars: progress.bestStars,
-      starsIfCleared: starsFor(this.failures, this.economy.config),
+      starsIfCleared: this.economy.starsForAttempt(this.level.id),
       totalStars: this.economy.state.totalStars,
       firstFailureExempt: this.lastFailureExempt,
       lockedOut: !this.economy.canPlay(this.level.id),
@@ -460,6 +461,7 @@ export class Director {
       canContinue: continuesLeft > 0 && this.branchPoint() !== null,
       continuesLeft,
       restartCostsLife: livesActive && !this.lastFailureExempt,
+      canCleanRetry: this.economy !== null && this.level.id >= this.economy.config.cleanRetryUnlockLevelId && this.economy.canStartCleanRetry(this.level.id),
     };
   }
 
@@ -470,6 +472,17 @@ export class Director {
    * failure count — §5.1 says failures still cost stars, so a continue buys a
    * position, never a clean sheet, and a level cannot be bought to three stars.
    */
+  private cleanRetryFromAd(): Command[] {
+    if (this.phase !== "failed" || !this.economy?.beginCleanRetry(this.level.id)) {
+      return this.reject("no clean retry available");
+    }
+    this.lastFailureExempt = false;
+    this.reset();
+    this.telemetry?.record({ name: "clean_retry_started", level_id: this.level.id, attempt_number: this.failures + 1 });
+    this.startTelemetry();
+    return this.render();
+  }
+
   private continueFromBranch(): Command[] {
     if (this.phase !== "failed") return this.reject("nothing to continue from");
     if (this.continuesUsed >= MAX_CONTINUES) return this.reject("no continues left");
@@ -642,7 +655,30 @@ export class Director {
       hints: this.hintViews(),
       shop: this.shopEntries(),
       shopOpen: this.shopOpen,
+      teachingLine: this.teachingLine(),
+      hintAd: this.hintAd(),
     };
+  }
+
+  private hintAd(): HintAdView | null {
+    if (!this.economy || this.phase !== "playing" || this.level.id < this.economy.config.hintAdUnlockLevelId) return null;
+    const target = this.frontTarget;
+    if (target === undefined) return null;
+    const tiles = this.live;
+    const option = enumerate(tiles, target, this.budget, this.level.rules)[0];
+    if (!option) return null;
+    return { piece: option.left, text: "Use " + option.left + " at this stage.", reward: "bounded-piece" };
+  }
+
+  preLevelHint(): string | null {
+    return this.hintAd()?.text ?? null;
+  }
+
+  private teachingLine(): string | null {
+    if (this.level.id !== CONSTRAINT_LEVEL || this.phase !== "playing") return null;
+    if (this.slots.leftTileId === null) return "Tap a number.";
+    if (this.slots.op === null) return "Choose a sign.";
+    return "Make the target.";
   }
 
   private render(): Command[] {
@@ -663,6 +699,7 @@ export class Director {
       return this.render();
     }
     if (input.type === "continueFromBranch") return this.continueFromBranch();
+    if (input.type === "cleanRetryFromAd") return this.cleanRetryFromAd();
     if (input.type === "dismissWarning") {
       // §7.5 step 5: the move is rewound for free — no star, no life, no
       // failure recorded. Nothing was ever consumed, so there is nothing to
@@ -755,6 +792,9 @@ export class Director {
       case "tapMap":
       case "exportTelemetry":
       case "tapWatchAd":
+      case "tapCleanRetryAd":
+      case "tapLevelIntroStart":
+      case "tapLevelIntroHintAd":
       // The shell shows the ad; it sends continueFromBranch only once the
       // reward has actually landed, so this side has nothing to do here.
       case "tapContinue":

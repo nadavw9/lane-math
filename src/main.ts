@@ -140,8 +140,10 @@ function open(level: LadderLevel): void {
   void renderer.setWorld(level.world);
   // The board arrives (§9.0). Every open, including a replay of the same level.
   renderer.setAdMessage(null);
+  renderer.endLevelIntro();
   renderer.beginEntrance();
   apply(director.firstRender());
+  if (level.id >= economy.config.hintAdUnlockLevelId) renderer.beginLevelIntro();
 }
 
 /*
@@ -257,6 +259,22 @@ void ads.initialize();
 
 renderer.onInput((input) => {
   // §7.6: the map is absent until 1-10 is cleared, so the way back is too.
+  if (input.type === "tapLevelIntroStart") {
+    renderer.endLevelIntro();
+    return;
+  }
+  if (input.type === "tapLevelIntroHintAd") {
+    void (async () => {
+      renderer.setLevelIntroHint(null, "opening…");
+      const outcome = await ads.offerHintAd();
+      if (outcome === "rewarded") {
+        renderer.setLevelIntroHint(director.preLevelHint() ?? "Use one useful piece at this stage.");
+      } else {
+        renderer.setLevelIntroHint(null, "No ad was completed. Nothing changed.");
+      }
+    })();
+    return;
+  }
   if (input.type === "tapMap") {
     const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
     showMap(focus);
@@ -289,6 +307,21 @@ renderer.onInput((input) => {
    * got nothing must not be left staring at an unchanged board wondering
    * whether they were charged.
    */
+  if (input.type === "tapCleanRetryAd") {
+    void (async () => {
+      renderer.setAdMessage("opening…");
+      const outcome = await ads.offerCleanRetryAd();
+      if (outcome === "rewarded") {
+        renderer.setAdMessage(null);
+        apply(director.handle({ type: "cleanRetryFromAd" }));
+        return;
+      }
+      renderer.setAdMessage("No ad was completed. Nothing changed.");
+      send({ type: "tick" });
+    })();
+    return;
+  }
+
   if (input.type === "tapContinue") {
     void (async () => {
       renderer.setAdMessage("opening…");
@@ -555,6 +588,9 @@ Object.assign(window, {
       if (map.visible) map.show(viewWithRestoration());
     },
     showBoard,
+    endLevelIntro: () => renderer.endLevelIntro(),
+    setLevelIntroHint: (hint: string | null, message: string | null = null) => renderer.setLevelIntroHint(hint, message),
+    preLevelHint: () => director.preLevelHint(),
     mapView: () => mapView(economy, LEVEL_IDS),
     ads: () => ({ available: ads.available }),
     /** The §5.2 refill offer, exposed so the ad path can be exercised. */

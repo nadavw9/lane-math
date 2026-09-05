@@ -10,6 +10,7 @@ import { furthestReached, unlocksFor } from "../economy/unlocks.js";
  * put three different star readings in the lane header.
  */
 export type LevelState = "locked" | "open" | "cleared";
+export type LockReason = "not-reached" | "not-enough-stars";
 
 export interface MapLevel {
   readonly id: string;
@@ -18,6 +19,7 @@ export interface MapLevel {
   readonly state: LevelState;
   /** 0-3. Best ever, not this attempt — the board shows the live one. */
   readonly stars: number;
+  readonly lockReason: LockReason | null;
 }
 
 export interface MapView {
@@ -46,6 +48,7 @@ export interface MapView {
   readonly restored: Readonly<Record<number, 0 | 1 | 2 | 3 | 4>>;
   /** Cost of each room's next object, or null when finished or locked (§6). */
   readonly restoreCost: Readonly<Record<number, number | null>>;
+  readonly worldGates: Readonly<Record<number, number>>;
 }
 
 export const WORLDS = [1, 2, 3, 4] as const;
@@ -67,33 +70,33 @@ export function mapView(economy: Economy, ids: readonly string[]): MapView {
   const save = economy.state;
   const unlocks = unlocksFor(save);
 
-  /*
-   * The frontier is the first level not yet cleared. Everything up to and
-   * including it is open; everything after is locked. A level the player has
-   * already cleared stays open forever — replaying for a better star count is
-   * the whole point of §5.4's economy.
-   */
+  const gates = economy.config.worldStarGates;
+  const worldComplete = (world: number): boolean =>
+    ids.filter((id) => Number(id.split("-")[0]) === world).every((id) => save.levels[id]?.cleared === true);
   let frontier = ids.length;
   for (let i = 0; i < ids.length; i++) {
-    if (save.levels[ids[i]!]?.cleared !== true) {
-      frontier = i;
-      break;
-    }
+    if (save.levels[ids[i]!]?.cleared !== true) { frontier = i; break; }
   }
 
   const levels = ids.map((id, index) => {
     const progress = save.levels[id];
     const [world, slot] = id.split("-").map(Number) as [number, number];
+    const priorWorldComplete = world <= 1 || worldComplete(world - 1);
+    const gate = gates[world] ?? 0;
+    const enoughStars = save.totalStars >= gate;
+    const clearedLevel = progress?.cleared === true;
+    const lockReason: LockReason | null = clearedLevel || (priorWorldComplete && enoughStars && index <= frontier)
+      ? null
+      : !priorWorldComplete
+        ? "not-reached"
+        : !enoughStars
+          ? "not-enough-stars"
+          : "not-reached";
     return {
-      id,
-      world,
-      slot,
-      state: (progress?.cleared === true
-        ? "cleared"
-        : index <= frontier
-          ? "open"
-          : "locked") as LevelState,
+      id, world, slot,
+      state: (clearedLevel ? "cleared" : lockReason === null ? "open" : "locked") as LevelState,
       stars: progress?.bestStars ?? 0,
+      lockReason,
     };
   });
 
@@ -114,6 +117,7 @@ export function mapView(economy: Economy, ids: readonly string[]): MapView {
       3: economy.canRestore(3) ? economy.nextRestoreCost(3) : null,
       4: economy.canRestore(4) ? economy.nextRestoreCost(4) : null,
     },
+    worldGates: gates,
     lives: economy.lives,
     maxLives: economy.maxLivesAllowed,
     muted: economy.muted,

@@ -26,6 +26,8 @@ export interface LevelProgress {
    * the same level." Persisted per level so a restart re-reveals them free.
    */
   readonly hintsPurchased: readonly string[];
+  /* Clean rating is minted only by a verified rewarded retry ad. */
+  readonly ratingAttempt?: "tainted" | "clean";
 }
 
 export interface SaveData {
@@ -66,6 +68,7 @@ export const EMPTY_PROGRESS: LevelProgress = {
   cleared: false,
   firstFailureUsed: false,
   hintsPurchased: [],
+  ratingAttempt: "tainted",
 };
 
 export function emptySave(now: number, maxLives: number): SaveData {
@@ -158,9 +161,14 @@ export function migrate(raw: unknown): SaveData | null {
   // current version, is refused rather than half-read.
   if (migrated.schemaVersion !== SAVE_SCHEMA_VERSION) return null;
 
+  const levels = Object.fromEntries(Object.entries(migrated.levels ?? {}).map(([id, progress]) => {
+    const value = progress as Partial<LevelProgress>;
+    return [id, { ...EMPTY_PROGRESS, ...value, hintsPurchased: value.hintsPurchased ?? [], ratingAttempt: value.ratingAttempt === "clean" ? "clean" : "tainted" } satisfies LevelProgress];
+  }));
+
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
-    levels: migrated.levels ?? {},
+    levels,
     lives: migrated.lives ?? 0,
     lastLifeGrantedAt: migrated.lastLifeGrantedAt ?? 0,
     clockHighWater: migrated.clockHighWater ?? migrated.lastLifeGrantedAt ?? 0,

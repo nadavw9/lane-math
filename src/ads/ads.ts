@@ -92,6 +92,14 @@ export class Ads {
    * costs nothing, unavailable means no ad was there to watch. Collapsing the
    * last two into "failed" is what makes a player think they were cheated.
    */
+  async offerCleanRetryAd(): Promise<AdOutcome> {
+    return this.showRewarded();
+  }
+
+  async offerHintAd(): Promise<AdOutcome> {
+    return this.showRewarded();
+  }
+
   async showRewarded(): Promise<AdOutcome> {
     if (!this.plugin || !this.ready) return "unavailable";
 
