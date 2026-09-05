@@ -30,7 +30,7 @@ import {
 } from "./layout.js";
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { armCueFor } from "./arm-cue.js";
-import { queueLookSample, queueSweepSample, teachCueSample } from "./teach-cue.js";
+import { queueLookSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
 import { BOARD_BANDS, CLEARED_BANDS, Entrance } from "./entry.js";
 import { RejectPulse, Shatter } from "./effects.js";
