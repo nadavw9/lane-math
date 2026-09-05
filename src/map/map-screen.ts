@@ -2,6 +2,7 @@ import { Assets, Container, Graphics, Sprite, Text, TextStyle, type Texture } fr
 
 import { button, type ButtonState, type ButtonVariant } from "../renderer/button.js";
 import { loadCtaChrome } from "../renderer/cta-chrome.js";
+import { loadEmblemChrome } from "../renderer/emblem-chrome.js";
 import { emblemMeter, meterWidth, star } from "../renderer/emblems.js";
 import { MAP_BANDS, Entrance } from "../renderer/entry.js";
 import { EASE, TIMING, Tween } from "../renderer/tween.js";
@@ -206,6 +207,7 @@ export class MapScreen {
   /** Load the room art. Safe to call repeatedly; a failure leaves the wood. */
   async loadRooms(base = "/"): Promise<void> {
     await loadCtaChrome(import.meta.env.BASE_URL);
+    await loadEmblemChrome(import.meta.env.BASE_URL);
 
     for (const world of [1, 2, 3, 4]) {
       if (this.rooms.has(world)) continue;
