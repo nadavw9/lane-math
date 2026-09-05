@@ -536,6 +536,8 @@ Object.assign(window, {
       const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
       showMap(focus);
     },
+    pauseMapForReview: () => map.pauseForReview(),
+    mapFeel: () => map.feelState(),
     /** Review hook: force the spendable star balance. */
     setStars: (n: number) => {
       forcedStars = n;

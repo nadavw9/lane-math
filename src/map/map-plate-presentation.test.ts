@@ -32,15 +32,16 @@ describe("the map's durable next-level focal", () => {
 
 
 describe("the clear-to-map handoff beat", () => {
-  it("sets the next plate down with a short weighted settle", () => {
+  it("holds the next plate visibly above its seat at the review midpoint", () => {
     const start = mapFocusBeat(0);
     const middle = mapFocusBeat(0.5);
     const end = mapFocusBeat(1);
 
-    expect(start.dy).toBeLessThan(0);
-    expect(middle.scale).toBeGreaterThan(1);
+    expect(start.dy).toBeLessThanOrEqual(-18);
+    expect(middle.dy).toBeLessThanOrEqual(-10);
+    expect(middle.scale).toBeGreaterThanOrEqual(1.03);
     expect(end.dy).toBeCloseTo(0);
     expect(end.scale).toBeCloseTo(1);
-    expect(middle.scale).toBeLessThan(1.04);
+    expect(middle.scale).toBeLessThan(1.05);
   });
 });

@@ -108,8 +108,8 @@ export interface MapFocusSample {
 export function mapFocusBeat(progress: number): MapFocusSample {
   const t = Math.max(0, Math.min(1, progress));
   return {
-    scale: 1 + Math.sin(Math.PI * t) * 0.025,
-    dy: -6 * (1 - EASE.settle(t)),
+    scale: 1 + Math.sin(Math.PI * t) * 0.035,
+    dy: -22 * (1 - t * t),
   };
 }
 
@@ -120,6 +120,7 @@ export class MapScreen {
   /** The map ARRIVES (§9.0), it does not appear. */
   private entrance: Entrance | null = null;
   /** The plate unlocked by the clear-to-map handoff, if this map open has one. */
+  private reviewPaused = false;
   private focusLevelId: string | null = null;
   private focusBeat: Tween | null = null;
 
@@ -148,6 +149,7 @@ export class MapScreen {
 
   constructor() {
     this.root.visible = false;
+    this.reviewPaused = false;
   }
 
   /** Load the room art. Safe to call repeatedly; a failure leaves the wood. */
@@ -187,6 +189,7 @@ export class MapScreen {
       : null;
     this.focusLevelId = focus;
     this.focusBeat = focus ? new Tween(TIMING.clearProgressBeat, EASE.settle) : null;
+    this.reviewPaused = false;
     this.draw();
   }
 
@@ -201,8 +204,10 @@ export class MapScreen {
   private static readonly COMPLETION_MS = 900;
 
   advance(deltaMs: number): boolean {
+    if (this.reviewPaused) return false;
     let running = false;
     let dirty = false;
+    const entranceWasRunning = this.entrance !== null;
 
     if (this.completion !== null) {
       this.completion += deltaMs / MapScreen.COMPLETION_MS;
@@ -215,7 +220,7 @@ export class MapScreen {
       else this.entrance = null;
       dirty = true;
     }
-    if (this.focusBeat) {
+    if (this.focusBeat && !entranceWasRunning) {
       if (this.focusBeat.advance(deltaMs)) running = true;
       else {
         this.focusBeat = null;
@@ -226,6 +231,18 @@ export class MapScreen {
 
     if (dirty) this.draw();
     return running;
+  }
+  /** Review evidence for condition-based midpoint and rest shutters. */
+  feelState(): { entrance: boolean; focusLevelId: string | null; focusProgress: number | null } {
+    return {
+      entrance: this.entrance !== null,
+      focusLevelId: this.focusBeat ? this.focusLevelId : null,
+      focusProgress: this.focusBeat ? Number(this.focusBeat.raw.toFixed(3)) : null,
+    };
+  }
+
+  pauseForReview(): void {
+    this.reviewPaused = true;
   }
 
   /** Offset a node for its arrival band. */
@@ -239,6 +256,7 @@ export class MapScreen {
 
   hide(): void {
     this.root.visible = false;
+    this.reviewPaused = false;
   }
 
   private text(value: string, size: number, colour: number, weight: "bold" | "900" = "bold"): Text {

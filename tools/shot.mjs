@@ -178,11 +178,12 @@ if (screen) {
        */
       await new Promise((r) => setTimeout(r, 1200));
     }
-    if (name === "map-handoff") {
+    if (name === "map-handoff" || name === "map-handoff-rest") {
       api.showBoard();
       await api.winLevel?.();
       api.showMapAfterClear?.();
-      settleWait = 280;
+      if (api.state()?.phase !== "won") throw new Error("clear-to-map route did not clear the level");
+      api.setEffectSpeed?.(name === "map-handoff" ? 0.25 : 1);
     }
     if (name === "cleared") {
       /*
@@ -269,11 +270,22 @@ if (screen) {
       api.send({ type: "buyHint", hint: "narrow" });
     }
   }, screen);
-  // Long enough for the entrance to finish. The map lands in bands and the
-  // footer is one of the last, so a short wait photographs a half-arrived
-  // screen and the missing element looks like a bug rather than a shutter
-  // fired early — which is exactly how it read the first time.
-  await page.waitForTimeout(settleWait);
+  if (screen === "map-handoff") {
+    await page.waitForFunction(() => {
+      const feel = window.laneMath?.mapFeel?.();
+      if (feel?.focusProgress === null || feel?.focusProgress < 0.5) return false;
+      if (feel.focusProgress >= 0.62) throw new Error(`missed handoff midpoint at ${feel.focusProgress}`);
+      window.laneMath?.pauseMapForReview?.();
+      return true;
+    });
+  } else if (screen === "map-handoff-rest") {
+    await page.waitForFunction(() => {
+      const feel = window.laneMath?.mapFeel?.();
+      return feel?.entrance === false && feel?.focusProgress === null;
+    });
+  } else {
+    await page.waitForTimeout(settleWait);
+  }
 }
 
 // Say what was actually photographed, so a fallback render is never mistaken
