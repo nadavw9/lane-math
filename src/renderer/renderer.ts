@@ -1427,6 +1427,52 @@ export class Renderer {
     this.root.addChild(this.box(center - 145, top + 160, 290, 38, "Start Level", () => this.emit({ type: "tapLevelIntroStart" }), { variant: "primary" }));
   }
 
+  /**
+   * Exact-action family: brass pulse ring + HUMAN-FINAL hand + caption plaque.
+   * Used for FTUE teach targets and for 1-04's settled Go Back CTA.
+   */
+  private drawExactActionCue(
+    rect: Rect,
+    line: string,
+    opts: { readonly ringAlphaScale?: number; readonly plaqueY?: number } = {},
+  ): void {
+    const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
+    const ringAlphaScale = opts.ringAlphaScale ?? 1;
+    const shadow = new Graphics()
+      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
+      .fill({ color: PALETTE.text, alpha: cue.shadowAlpha });
+    shadow.zIndex = BOARD_BANDS.status + 19;
+    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
+
+    const ring = new Graphics()
+      .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
+      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * ringAlphaScale });
+    ring.zIndex = BOARD_BANDS.status + 20;
+    this.root.addChild(this.entry(ring, BOARD_BANDS.status));
+
+    const hand = new Sprite(this.ftueHandTexture);
+    hand.anchor.set(0.31, 0.77);
+    hand.position.set(cue.handX, cue.handY);
+    hand.scale.set(0.22);
+    hand.rotation = -0.28;
+    hand.zIndex = BOARD_BANDS.status + 22;
+    hand.eventMode = "none";
+    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+
+    const plaqueRect = opts.plaqueY === undefined ? cue.plaque : { ...cue.plaque, y: opts.plaqueY };
+    const plaque = new Graphics()
+      .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
+      .fill({ color: PALETTE.felt, alpha: 0.98 })
+      .stroke({ width: 4, color: PALETTE.brass });
+    plaque.zIndex = BOARD_BANDS.status + 21;
+    this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
+    const copy = this.text(line, 20, PALETTE.tokenInk);
+    copy.anchor.set(0.5);
+    copy.position.set(plaqueRect.x + plaqueRect.width / 2, plaqueRect.y + plaqueRect.height / 2);
+    copy.zIndex = BOARD_BANDS.status + 23;
+    this.root.addChild(this.entry(copy, BOARD_BANDS.status));
+  }
+
   /** Shared exact-action marker: live target, brass breath, hand, contextual plaque. */
   private drawTeachCue(s: ViewState, board: Bands, availableOps: readonly (BinaryOp | UnaryOp)[]): void {
     const target = s.teachingTarget;
@@ -1446,61 +1492,55 @@ export class Renderer {
     }
     if (!rect) return;
 
-    const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
     const queueSweep = target.kind === "queue";
-    const routeStart = queueSweep ? targetSlot(Math.max(0, s.targets.length - s.targetIndex - 1), board.lane, board.grid) : rect;
-    const startX = routeStart.x + routeStart.width / 2;
-    const startY = routeStart.y + routeStart.height / 2;
-    const targetX = rect.x + rect.width / 2;
-    const targetY = rect.y + rect.height / 2;
-    const sweep = queueSweep ? queueSweepSample(routeStart, rect, this.teachCueMs) : null;
-    const handX = sweep?.handX ?? cue.handX;
-    const handY = sweep?.handY ?? cue.handY;
     if (queueSweep) {
+      const routeStart = targetSlot(Math.max(0, s.targets.length - s.targetIndex - 1), board.lane, board.grid);
+      const startX = routeStart.x + routeStart.width / 2;
+      const startY = routeStart.y + routeStart.height / 2;
+      const targetX = rect.x + rect.width / 2;
+      const targetY = rect.y + rect.height / 2;
       const route = new Graphics()
         .moveTo(startX, startY)
         .lineTo(targetX, targetY)
         .stroke({ width: 3, color: PALETTE.brassLit, alpha: 0.72 });
       route.eventMode = "none";
       this.root.addChild(this.entry(route, BOARD_BANDS.status));
+      const cue = teachCueSample(rect, this.teachCueMs, DESIGN.width);
+      const sweep = queueSweepSample(routeStart, rect, this.teachCueMs);
+      const shadow = new Graphics()
+        .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
+        .fill({ color: PALETTE.text, alpha: cue.shadowAlpha });
+      shadow.zIndex = BOARD_BANDS.status + 19;
+      this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
+      const ring = new Graphics()
+        .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
+        .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * (sweep.targetAlpha || 0.35) });
+      ring.zIndex = BOARD_BANDS.status + 20;
+      this.root.addChild(this.entry(ring, BOARD_BANDS.status));
+      const hand = new Sprite(this.ftueHandTexture);
+      hand.anchor.set(0.31, 0.77);
+      hand.position.set(sweep.handX, sweep.handY);
+      hand.scale.set(0.22);
+      hand.rotation = -0.28;
+      hand.zIndex = BOARD_BANDS.status + 22;
+      hand.eventMode = "none";
+      this.root.addChild(this.entry(hand, BOARD_BANDS.status));
+      const plaqueRect = { ...cue.plaque, y: board.equation.y + 10 };
+      const plaque = new Graphics()
+        .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
+        .fill({ color: PALETTE.felt, alpha: 0.98 })
+        .stroke({ width: 4, color: PALETTE.brass });
+      plaque.zIndex = BOARD_BANDS.status + 21;
+      this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
+      const copy = this.text(s.teachingLine, 20, PALETTE.tokenInk);
+      copy.anchor.set(0.5);
+      copy.position.set(plaqueRect.x + plaqueRect.width / 2, plaqueRect.y + plaqueRect.height / 2);
+      copy.zIndex = BOARD_BANDS.status + 23;
+      this.root.addChild(this.entry(copy, BOARD_BANDS.status));
+      return;
     }
-    const shadow = new Graphics()
-      .ellipse(rect.x + rect.width * 0.2, rect.y + rect.height - 1, rect.width * 0.6, 8)
-      .fill({ color: PALETTE.text, alpha: cue.shadowAlpha });
-    shadow.zIndex = BOARD_BANDS.status + 19;
-    this.root.addChild(this.entry(shadow, BOARD_BANDS.status));
 
-    const ring = new Graphics()
-      .roundRect(rect.x - 7, rect.y - cue.lift - 7, rect.width + 14, rect.height + 14, 14)
-      .stroke({ width: 6, color: PALETTE.brassLit, alpha: cue.ringAlpha * (sweep?.targetAlpha ?? 1) });
-    ring.zIndex = BOARD_BANDS.status + 20;
-    this.root.addChild(this.entry(ring, BOARD_BANDS.status));
-
-    // The authored hand sprite is anchored so its fingertip lands on the live control.
-    const hand = new Sprite(this.ftueHandTexture);
-    hand.anchor.set(0.31, 0.77);
-    hand.position.set(handX, handY);
-    hand.scale.set(0.22);
-    hand.rotation = -0.28;
-    hand.zIndex = BOARD_BANDS.status + 22;
-    this.root.addChild(this.entry(hand, BOARD_BANDS.status));
-
-    // The queue lesson must leave all three targets visible; seat its caption
-    // over the unused equation row rather than across the queue it names.
-    const plaqueRect = queueSweep
-      ? { ...cue.plaque, y: board.equation.y + 10 }
-      : cue.plaque;
-    const plaque = new Graphics()
-      .roundRect(plaqueRect.x, plaqueRect.y, plaqueRect.width, plaqueRect.height, 14)
-      .fill({ color: PALETTE.felt, alpha: 0.98 })
-      .stroke({ width: 4, color: PALETTE.brass });
-    plaque.zIndex = BOARD_BANDS.status + 21;
-    this.root.addChild(this.entry(plaque, BOARD_BANDS.status));
-    const copy = this.text(s.teachingLine, 20, PALETTE.tokenInk);
-    copy.anchor.set(0.5);
-    copy.position.set(plaqueRect.x + plaqueRect.width / 2, plaqueRect.y + plaqueRect.height / 2);
-    copy.zIndex = BOARD_BANDS.status + 23;
-    this.root.addChild(this.entry(copy, BOARD_BANDS.status));
+    this.drawExactActionCue(rect, s.teachingLine);
   }
 
   private draw(): void {
@@ -2446,6 +2486,17 @@ export class Renderer {
             { variant: w.scripted ? "primary" : "secondary" },
           ),
         );
+      }
+
+      // 1-04 settled rewind: same hand+pulse+plaque family as board FTUE cues,
+      // pointed at the live Go Back CTA (not only modal copy).
+      if (w.scripted) {
+        const goBack: Rect = w.overridable
+          ? { x: midX - 128, y: topY + 104, width: 124, height: 34 }
+          : { x: midX - 60, y: topY + 98, width: 120, height: 32 };
+        this.drawExactActionCue(goBack, "Tap Go Back.", {
+          plaqueY: panelY + panelH + 12,
+        });
       }
     }
 
