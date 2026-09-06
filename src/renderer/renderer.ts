@@ -32,6 +32,7 @@ import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { loadCtaChrome } from "./cta-chrome.js";
 import { loadEmblemChrome } from "./emblem-chrome.js";
 import { loadModalChrome } from "./modal-chrome.js";
+import { loadCommitKeyChrome } from "./commit-key-chrome.js";
 import { armCueFor } from "./arm-cue.js";
 import { queueLookSample, teachCueSample } from "./teach-cue.js";
 import { armHaptic } from "./haptics.js";
@@ -318,6 +319,7 @@ export class Renderer {
     await loadCtaChrome(import.meta.env.BASE_URL);
     await loadEmblemChrome(import.meta.env.BASE_URL);
     await loadModalChrome(import.meta.env.BASE_URL);
+    await loadCommitKeyChrome(import.meta.env.BASE_URL);
 
     /*
      * The sprite path (ART_DIRECTION §5), off unless asked for.
@@ -1783,6 +1785,7 @@ export class Renderer {
      * substance, less presence — rather than a second, lighter button.
      */
     const canCommit = s.affordance === "commit";
+    const commitFace = this.inputLocked ? "unavailable" : canCommit ? "armed" : "idle";
     const commitRect = equationSlot(3, equation);
     /*
      * Brass, through the button component's material face, so the key keeps
@@ -1796,8 +1799,8 @@ export class Renderer {
       // printed a second one in cream on top of the cut one.
       label: "",
       variant: "primary",
-      face: (w, h) => commitKey(w, h, canCommit),
-      state: this.inputLocked || !canCommit ? "disabled" : "armed",
+      face: (w, h) => commitKey(w, h, commitFace),
+      state: this.inputLocked ? "unavailable" : canCommit ? "armed" : "disabled",
       onTap: this.inputLocked || !canCommit ? undefined : () => this.emit({ type: "tapCommit" }),
     });
     commit.position.set(commitRect.x + resistDx, commitRect.y - (commitTeach?.lift ?? 0));

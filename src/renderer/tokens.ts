@@ -9,6 +9,7 @@ import {
   modalChromeReady,
   modalOrnateTexture,
 } from "./modal-chrome.js";
+import { commitKeyChromeReady, commitKeyChromeTexture, type CommitKeyFace } from "./commit-key-chrome.js";
 
 /** §4 brass, the frame's two tones. */
 import {
@@ -972,7 +973,18 @@ export function emptySlot(w: number, h: number, shape: "square" | "circle"): Con
  * Armed stays GOLD per §9.6. Gold means ready, and this is the one control that
  * is ever properly ready.
  */
-export function commitKey(w: number, h: number, armed: boolean): Container {
+export function commitKey(w: number, h: number, face: CommitKeyFace | boolean): Container {
+  const state: CommitKeyFace = typeof face === "boolean" ? (face ? "armed" : "idle") : face;
+  if (commitKeyChromeReady()) {
+    const texture = commitKeyChromeTexture(state);
+    if (texture) {
+      const sprite = new Sprite(texture);
+      sprite.width = w;
+      sprite.height = h;
+      return sprite;
+    }
+  }
+
   const key = new Container();
   const r = Math.min(w, h) * 0.24;
 
@@ -1000,8 +1012,10 @@ export function commitKey(w: number, h: number, armed: boolean): Container {
    * already use, so the disarmed key is this key in shadow rather than a
    * different, slightly sick material.
    */
-  const body = armed ? PALETTE.brass : PALETTE.brassSpent;
-  const deep = armed ? PALETTE.brassDeep : 0x3a3220;
+  const armed = state === "armed";
+  const unavailable = state === "unavailable";
+  const body = armed ? PALETTE.brass : unavailable ? 0x30291d : PALETTE.brassSpent;
+  const deep = armed ? PALETTE.brassDeep : unavailable ? 0x211b14 : 0x3a3220;
 
   // The bezel: the wall of the key, darkest where it meets the row.
   g.roundRect(0, 0, w, h, r).fill(deep);
@@ -1029,7 +1043,7 @@ export function commitKey(w: number, h: number, armed: boolean): Container {
     const t = i / BANDS;
     g.roundRect(inset, inset, fw, fh * (1 - t), fr).fill({
       color: sheen,
-      alpha: (armed ? 0.036 : 0.055) * (1 - t),
+      alpha: (armed ? 0.036 : unavailable ? 0.035 : 0.055) * (1 - t),
     });
   }
   // And the shadow gathering along the bottom of the face, the other half of
@@ -1078,7 +1092,7 @@ export function commitKey(w: number, h: number, armed: boolean): Container {
     cut.roundRect(barX, y, barW, barH, barH / 2).fill({ color: 0x1a0f08, alpha: armed ? 0.55 : 0.5 });
     cut
       .roundRect(barX, y + barH * 0.62, barW, barH * 0.5, barH / 3)
-      .fill({ color: armed ? PALETTE.highlight : PALETTE.brass, alpha: armed ? 0.85 : 0.5 });
+      .fill({ color: armed ? PALETTE.highlight : PALETTE.brass, alpha: armed ? 0.85 : unavailable ? 0.28 : 0.5 });
   }
   key.addChild(cut);
   return key;
