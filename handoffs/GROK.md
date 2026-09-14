@@ -3,7 +3,7 @@
 **Status:** DONE — draft PR open  
 **Branch:** `feat/academy-reprice-star-gates`  
 **Base:** `origin/master` @ `1ad4889` (no merge to master)  
-**Tip SHA:** `21e35d1` (`21e35d1e2d90a0ebd10281f43d203ecaf9fa22a4`)
+**Tip SHA:** `13c5ee6` (`13c5ee65b3ce6b8f29e6fa0f5b86eb32f4e58fb3`)
 **Economy commit:** `69d9563`  
 **Writer:** Grok (one-writer lane)  
 **Out of scope this run:** Track B (toast/mascot), Base44, `handoffs/CODEX.md`
@@ -58,7 +58,7 @@ Recent `origin/master` tip merges (#23–#27): warning-latency CI flake, CTA chr
 
 ## CoS / Eng Lead reply kit
 
-- Tip SHA: `21e35d1`
+- Tip SHA: `13c5ee6`
 - Draft PR: https://github.com/nadavw9/lane-math/pull/28
 - Blocker: none for Track A.
 - Hints intentionally untouched (1/2/3).
@@ -80,12 +80,16 @@ CoS verified: `origin/master` @ `1ad4889` also runs **57 files / 478 passed** �
 
 **Do not invent filler tests to hit 485.** Added only the required direct default-gate assertions below.
 
+### Suite after corrections
+
+`npm test` → **58 files / 481 passed / 0 failed** (master baseline 478 + 3 new `config.test.ts` cases).
+
 ### Direct production gate tests
 
 New `src/economy/config.test.ts`: asserts `STAR_GATE_WORLD_2/3/4 === 10/20/30` and `DEFAULT_ECONOMY.worldStarGates` (not map injects).
 
 ### Tip
 
-**Tip SHA:** `21e35d1` on `feat/academy-reprice-star-gates` / draft #28.
+**Tip SHA:** `13c5ee6` on `feat/academy-reprice-star-gates` / draft #28.
 
 **Tests after gate asserts:** 58 files / **481 passed** (478 baseline + 3 direct gate tests). Still short of 485; not padded.
