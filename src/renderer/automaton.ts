@@ -72,6 +72,8 @@ export interface AutomatonMotionSample {
   readonly dy: number;
   /** Multiplier on drawn scaleY; pivot at feet so the gutter stay clear. */
   readonly scaleY: number;
+  /** Added to sprite.x. Positive is toward the pool (right). Clamped in automaton(). */
+  readonly dx: number;
 }
 
 /**
@@ -93,6 +95,7 @@ export function sampleAutomatonMotion(
     const hop = Math.sin(Math.PI * t);
     return {
       dy: -JUMP_PX * hop,
+      dx: 0,
       scaleY: 1,
     };
   }
@@ -110,7 +113,41 @@ export function sampleAutomatonMotion(
   }
   return {
     dy: DROOP_PX * settle,
+    dx: 0,
     scaleY: 1 - DROOP_SQUASH * settle,
+  };
+}
+
+/**
+ * Honor `prefers-reduced-motion: reduce` for decorative idle life.
+ * Enter jump/droop still fire; continuous breathe/sway does not.
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof globalThis === "undefined") return false;
+  const g = globalThis as { matchMedia?: (q: string) => { matches: boolean } };
+  try {
+    return g.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Idle life while the desk companion holds a pose (calm / thinking / held win-fail).
+ *
+ * Soft breathe (vertical) + slight L/R sway. No stretch above rest — PE-01 and
+ * the jump/droop squash contract stay intact. Enter motions replace this sample
+ * for their duration; idle resumes when the tween ends.
+ */
+export function sampleAutomatonIdle(elapsedMs: number): AutomatonMotionSample {
+  const t = Math.max(0, elapsedMs) / 1000;
+  // ~2.5s breath, ~3.8s sway — readable at phone distance, not nervous.
+  const breath = Math.sin((t * Math.PI * 2) / 2.5);
+  const sway = Math.sin((t * Math.PI * 2) / 3.8);
+  return {
+    dy: -1.8 * breath,
+    dx: 2.2 * sway,
+    scaleY: 1,
   };
 }
 
@@ -164,7 +201,10 @@ export function automaton(
   const contentRight = drawnW * contentRightFrac;
 
   // Place so opaque body clears pool; soft shadow may fall in the air gap only.
-  sprite.x = Math.max(INSET_X, pool.x - GUTTER_CLEARANCE - contentRight);
+  // Idle sway may drift left into the desk margin; never right into the cubes.
+  const maxX = pool.x - GUTTER_CLEARANCE - contentRight;
+  const baseX = Math.max(INSET_X, maxX);
+  sprite.x = Math.min(Math.max(INSET_X, baseX + (motion?.dx ?? 0)), maxX);
   // Feet on the pool baseline; squash grows downward from the head so the
   // contact stays planted (scaleY < 1 shortens toward the top-left origin).
   const baseY = Math.max(0, pool.y + pool.height - drawnH);

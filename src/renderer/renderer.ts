@@ -6,6 +6,8 @@ import {
   automaton,
   automatonMotionOnEnter,
   automatonState,
+  prefersReducedMotion,
+  sampleAutomatonIdle,
   sampleAutomatonMotion,
   THINKING_AFTER_MS,
   type AutomatonMotionKind,
@@ -31,7 +33,7 @@ import {
 import { button, type ButtonState, type ButtonVariant } from "./button.js";
 import { loadCtaChrome } from "./cta-chrome.js";
 import { loadEmblemChrome } from "./emblem-chrome.js";
-import { loadModalChrome } from "./modal-chrome.js";
+import { loadModalChrome, modalChromeReady, MODAL_CARTOUCHE, MODAL_SLICE } from "./modal-chrome.js";
 import { loadCommitKeyChrome } from "./commit-key-chrome.js";
 import { armCueFor } from "./arm-cue.js";
 import { queueLookSample, teachCueSample } from "./teach-cue.js";
@@ -60,6 +62,7 @@ import { starsForClear } from "./star-sync.js";
 import {
   emptySlot,
   framedPanel,
+  feltPill,
   ghostPlaque,
   ghostSlot,
   numberTile,
@@ -170,6 +173,8 @@ export class Renderer {
    * it onto a fresh sprite each frame (same pattern as lifts / laneAdvance).
    */
   private automatonFeel: { kind: AutomatonMotionKind; tween: Tween } | null = null;
+  /** Desk companion idle clock (breathe + sway). Independent of idleMs thinking. */
+  private automatonLifeMs = 0;
   /** One renderer-clock phase for the currently armed swap operand. */
   private armCueMs = 0;
   private teachCueMs = 0;
@@ -399,6 +404,7 @@ export class Renderer {
   onInput(handler: (input: InputEvent) => void): void {
     this.emit = (input: InputEvent) => {
       this.idleMs = 0;
+      this.automatonLifeMs = 0;
       handler(input);
     };
   }
@@ -892,9 +898,8 @@ export class Renderer {
    */
   private drawOutOfLives(lane: Rect, eco: NonNullable<ViewState["economy"]>): void {
     const width = lane.width - 24;
-    // PE-04: brand-scale concerned hero (#6) on master SAFE_TOP/cartouche seating
-    // (#8). Taller panel so wait line stays inside the felt well above the frame.
-    const height = 284;
+    // TX-P0-1: room for wait pill + CTA inside the felt (not on brass / CTA).
+    const height = 330;
     const x = lane.x + 12;
     /*
      * The framedPanel cartouche protrudes ABOVE the outer edge. Preferred seat
@@ -936,11 +941,11 @@ export class Renderer {
      * difference between a layout designed around a face and one with a face
      * dropped into it afterwards is visible.
      */
-    // PE-04: brand-scale concerned pose beside the copy — not a postage stamp.
-    // PE-04 size from #6; seat coords from #8 (interior, not outer brass).
-    const seat = 128;
+    // PE-04 concerned pose beside the copy — slightly shorter seat so CTA +
+    // wait pill both clear the felt well (TX-P0-1).
+    const seat = 112;
     const seatX = contentLeft + 8;
-    const seatY = contentTop + 10;
+    const seatY = contentTop + 8;
     // §2's table calls this state "Concerned"; the sheet ships it as `worried`.
     const placeholder = spriteFor("automaton-worried");
     if (placeholder) {
@@ -980,14 +985,39 @@ export class Renderer {
 
     // §5.2's refill, and the first player-facing route to it. Until now
     // offerLifeForAd had no caller outside the debug harness.
-    const actionY = seatY + seat + 16;
+    //
+    // TX-P0-1: ONE string on the gold CTA. Wait line in its OWN felt/pill row
+    // ABOVE the CTA (inside the felt well) — never stacked on the CTA face and
+    // never parked on the brass rim (ornate bottom chrome eats bottom air).
+    const ctaH = 44;
+    const pillH = 28;
+    const stackGap = 10;
+    const bottomAir = 16;
+    const pillW = contentW - 28;
+    const pillX = contentLeft + 14;
+    const pillY = seatY + seat + 12;
+    const actionY = pillY + pillH + stackGap;
+    // Keep CTA clear of the brass band even if the chrome interior is optimistic.
+    const ctaMax = contentBottom - bottomAir - ctaH;
+    const ctaY = Math.min(actionY, ctaMax);
+    const pillYClamped = Math.min(pillY, ctaY - stackGap - pillH);
+
+    const pill = feltPill(pillW, pillH, 0x1a120c, 0.97);
+    pill.position.set(pillX, pillYClamped);
+    this.root.addChild(this.entry(pill, BOARD_BANDS.status));
+    const wait = this.text("or wait — the timer is always running", 11, PALETTE.tokenInk);
+    wait.anchor.set(0.5, 0.5);
+    wait.position.set(pillX + pillW / 2, pillYClamped + pillH / 2);
+    wait.alpha = 0.95;
+    this.root.addChild(this.entry(wait, BOARD_BANDS.status));
+
     this.root.addChild(
       this.entry(
         this.box(
           contentLeft + 10,
-          actionY,
+          ctaY,
           contentW - 20,
-          44,
+          ctaH,
           "Watch to Continue",
           () => this.emit({ type: "tapWatchAd" }),
           { variant: "primary" },
@@ -1005,21 +1035,10 @@ export class Renderer {
     if (this.adMessage) {
       const note = this.text(this.adMessage, 12, PALETTE.tokenInk);
       note.anchor.set(0.5, 0);
-      note.position.set(DESIGN.width / 2, actionY + 52);
+      note.position.set(DESIGN.width / 2, ctaY + ctaH + 4);
       note.alpha = 0.85;
       this.root.addChild(this.entry(note, BOARD_BANDS.equation));
     }
-
-    /*
-     * Wait copy stays FULLY inside the felt opening (phone-eye: it used to sit
-     * on y+height-26 and straddle the brass border). Bottom-anchored into the
-     * interior with a clear margin above the frame.
-     */
-    const wait = this.text("or wait — the timer is always running", 11, PALETTE.tokenInk);
-    wait.anchor.set(0.5, 1);
-    wait.position.set(x + inner.x + inner.width / 2, contentBottom - 18);
-    wait.alpha = 0.6;
-    this.root.addChild(this.entry(wait, BOARD_BANDS.status));
   }
 
   private drawFlights(): void {
@@ -1071,6 +1090,21 @@ export class Renderer {
     const wasThinking = this.idleMs >= THINKING_AFTER_MS;
     this.idleMs += deltaMs;
     if (!wasThinking && this.idleMs >= THINKING_AFTER_MS) dirty = true;
+
+    // Idle life (breathe + sway): continuous sample while the desk companion is up.
+    // Enter jump/droop already dirties via automatonFeel; idle resumes after.
+    // Reduced-motion: hold a static pose (jump/droop enter motions still fire).
+    if (
+      this.state &&
+      (this.state.phase === "playing" || this.state.phase === "won" || this.state.phase === "failed") &&
+      !this.state.economy?.lockedOut &&
+      !this.automatonFeel &&
+      !prefersReducedMotion()
+    ) {
+      const before = this.automatonLifeMs;
+      this.automatonLifeMs += deltaMs * effectSpeed();
+      if (this.automatonLifeMs !== before) dirty = true;
+    }
 
     for (let i = this.shatters.length - 1; i >= 0; i--) {
       if (!this.shatters[i]!.update(deltaMs)) this.shatters.splice(i, 1);
@@ -2300,37 +2334,60 @@ export class Renderer {
         /*
          * BRASS OVER FELT, like the other five modals (§9.0).
          *
-         * This was a cream card with a gold stroke — the same treatment the
-         * warning panel had, removed there for the same reason: ART_DIRECTION
-         * §4 lists cream as light TEXT, not a surface. It survived here for two
-         * rounds after that lesson because the fix landed where the bug was
-         * noticed rather than everywhere the rule held.
-         *
-         * The rows were never the problem: they already run through the button
-         * component with idle/unavailable states and a designed empty state.
-         * Only the thing they sat on was wrong.
+         * TX-P0-2 / TX-P0-3: title clears the cartouche gem (≥8 CSS pad) on a
+         * short plaque; panel bottom brass clears pool cube tops.
          */
-        const panelH = 42 + s.shop.length * 40;
-        // Sit above the pool when possible — phone-eye: shop must not guillotine cubes.
-        const panelY = Math.min(status.y - 8, pool.y - 6) - panelH;
         const emptyShop = s.shop.every((e) => !e.owned && !e.affordable);
+        const rowH = 34;
+        const rowGap = 4;
+        const rowsBlock = s.shop.length * (rowH + rowGap);
+        // Title plaque below cartouche — shorter copy so it fits the plaque.
+        const titleCopy = emptyShop ? "Earn Hint Stars" : "Hint Shop";
+        const plaqueH = 28;
+        const titleGap = 10;
+        const gemPad = 20; // TX-P0-2: ≥8 CSS under cartouche; 20 reads on phone.
+        /*
+         * Ornate 9-slice keeps ~absolute top/bottom chrome. Short panels leave
+         * almost no felt well, so the shop panel is floored tall enough that
+         * title + rows sit in real felt, then re-anchored so bottom brass clears
+         * pool cube tops (TX-P0-3).
+         */
+        const chromeTop = modalChromeReady() ? MODAL_SLICE.topHeight / 2 : 18; // logical px
+        const chromeBot = modalChromeReady() ? MODAL_SLICE.bottomHeight / 2 : 18;
+        const scaleW = status.width / MODAL_SLICE.artWidth;
+        const gemH = modalChromeReady() ? MODAL_CARTOUCHE.height * scaleW : 28;
+        const gemTopApprox = modalChromeReady()
+          ? (MODAL_CARTOUCHE.masterY / MODAL_SLICE.artHeight) * 400
+          : 0;
+        const headerNeed = Math.max(chromeTop * 0.55, gemTopApprox + gemH + gemPad) + plaqueH + titleGap;
+        const panelH = Math.ceil(Math.max(360, headerNeed + rowsBlock + chromeBot + 12));
+        // TX-P0-3: bottom brass + baked contact shadow clear cube tops.
+        const poolClear = 56;
+        const panelBottom = Math.min(status.y - 8, pool.y - poolClear);
+        const panelY = panelBottom - panelH;
         const shopFrame = framedPanel(status.width, panelH);
         shopFrame.panel.position.set(status.x, panelY);
         this.root.addChild(this.entry(shopFrame.panel, BOARD_BANDS.furniture));
 
         const shopInner = shopFrame.interior;
         const innerX = status.x + shopInner.x;
-        const innerY = panelY + shopInner.y;
+        const innerW = shopInner.width;
+        const titleY = panelY + (() => {
+          if (modalChromeReady()) {
+            const gemTop = (MODAL_CARTOUCHE.masterY / MODAL_SLICE.artHeight) * panelH;
+            return Math.max(shopInner.y + gemPad, gemTop + gemH + gemPad);
+          }
+          return shopInner.y + gemPad;
+        })();
 
-        const title = this.text(
-          emptyShop ? "Clear Levels to Earn Hint Stars" : "Hints — None Reveals a Keystone",
-          12,
-          PALETTE.tray,
-        );
-        // Inset from the interior's own left edge. Flush against it, the first
-        // glyph was clipped by the frame's inner bevel — the rows get away with
-        // it because they are filled boxes, and a letterform does not.
-        title.position.set(innerX + 6, innerY + 2);
+        const plaqueW = Math.min(innerW - 8, 220);
+        const plaqueX = status.x + (status.width - plaqueW) / 2;
+        const plaque = feltPill(plaqueW, plaqueH, 0x1a120c, 0.98);
+        plaque.position.set(plaqueX, titleY);
+        this.root.addChild(this.entry(plaque, BOARD_BANDS.pool));
+        const title = this.text(titleCopy, 13, PALETTE.tokenInk);
+        title.anchor.set(0.5, 0.5);
+        title.position.set(plaqueX + plaqueW / 2, titleY + plaqueH / 2);
         this.root.addChild(this.entry(title, BOARD_BANDS.pool));
 
         /*
@@ -2339,8 +2396,9 @@ export class Renderer {
          * a greyed shop teaches "this is not for me". It now says how to earn
          * the stars instead, which is a route rather than a wall.
          */
+        const rowsY = titleY + plaqueH + titleGap;
         s.shop.forEach((entry, i) => {
-          const y = innerY + 22 + i * 40;
+          const y = rowsY + i * (rowH + rowGap);
           const enabled = entry.owned || entry.affordable;
           // Owned is "earned", so it is gold on the dark chip. Unaffordable is
           // the same chip under the dim treatment, not a greyer chip.
@@ -2349,8 +2407,8 @@ export class Renderer {
           const row = this.box(
             innerX,
             y,
-            shopInner.width,
-            34,
+            innerW,
+            rowH,
             `${entry.label}   ${entry.owned ? "Owned" : `${entry.cost}`}`,
             () => this.emit({ type: "buyHint", hint: entry.type }),
             {
@@ -2901,7 +2959,9 @@ export class Renderer {
       const mood = automatonState(s, this.idleMs);
       const motion = this.automatonFeel
         ? sampleAutomatonMotion(this.automatonFeel.kind, this.automatonFeel.tween.raw)
-        : null;
+        : prefersReducedMotion()
+          ? null
+          : sampleAutomatonIdle(this.automatonLifeMs);
       const friend = automaton(mood, pool, motion);
       if (friend) this.root.addChild(this.entry(friend, BOARD_BANDS.furniture));
     }

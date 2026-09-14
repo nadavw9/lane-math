@@ -819,6 +819,26 @@ export function woodenTray(w: number, h: number, colour: number, alpha: number):
   return tray;
 }
 
+
+/**
+ * Readable felt/pill row for secondary copy inside a framed panel (TX-P0-1).
+ *
+ * Toast / wait / subtitle strings sit in their OWN box — never on a CTA face
+ * and never on the brass rim (SHIP gate: readable floating copy).
+ */
+export function feltPill(
+  w: number,
+  h: number,
+  fill: number = PALETTE.felt,
+  alpha = 0.92,
+): Graphics {
+  const g = new Graphics();
+  const r = Math.min(h / 2, 10);
+  g.roundRect(0, 0, w, h, r).fill({ color: fill, alpha });
+  g.roundRect(0.5, 0.5, w - 1, h - 1, r).stroke({ width: 1.25, color: PALETTE.brassDeep, alpha: 0.45 });
+  return g;
+}
+
 /** The wood frame and opaque felt surface that physically support real art. */
 export function feltLinedTray(
   w: number,

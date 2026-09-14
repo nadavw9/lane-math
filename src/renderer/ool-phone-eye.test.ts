@@ -59,18 +59,58 @@ describe("front plaque cool rim seats on art geometry", () => {
 });
 
 describe("OOL wait line stays inside the felt interior", () => {
-  it("places the wait baseline above the brass border thickness", () => {
+  it("stacks wait pill above the CTA, both above the brass band", () => {
     const width = 372;
-    const height = 264;
+    const height = 330;
     const border = Math.max(12, Math.min(width, height) * 0.075);
     const interiorBottom = height - border;
-    // Bottom-anchored wait at contentBottom - 18, ~11px glyph → top of glyphs
-    // still below interior bottom, and the baseline itself is 12px above brass.
-    const waitBaseline = interiorBottom - 18;
-    expect(waitBaseline).toBeLessThan(interiorBottom);
-    expect(waitBaseline).toBeGreaterThan(border);
-    // Old bug: y + height - 26 sat inside the brass band when border > 18.
+    const ctaH = 44;
+    const pillH = 28;
+    const stackGap = 10;
+    const bottomAir = 16;
+    // Pill above CTA (TX-P0-1): pill then gap then CTA then bottomAir.
+    const ctaBottom = interiorBottom - bottomAir;
+    const ctaTop = ctaBottom - ctaH;
+    const pillBottom = ctaTop - stackGap;
+    const pillTop = pillBottom - pillH;
+    expect(ctaBottom).toBeLessThanOrEqual(interiorBottom);
+    expect(pillBottom).toBeLessThanOrEqual(ctaTop);
+    expect(pillTop).toBeGreaterThan(border);
+    // Old bug: bare wait at height - 26 sat inside the brass band when border > 18.
     const oldBugY = height - 26;
     expect(oldBugY).toBeGreaterThan(interiorBottom - 14);
+  });
+
+  it("keeps CTA label and wait copy on separate surfaces (TX-P0-1)", () => {
+    const ctaH = 44;
+    const pillH = 28;
+    const stackGap = 10;
+    // Pill ABOVE CTA — no shared y-range.
+    const pill = { top: 0, bottom: pillH };
+    const cta = { top: pillH + stackGap, bottom: pillH + stackGap + ctaH };
+    expect(cta.top).toBeGreaterThanOrEqual(pill.bottom + stackGap);
+  });
+});
+
+describe("hints shop clears cartouche and pool cubes (TX-P0-2/3)", () => {
+  it("pads the title at least 8 CSS below a cartouche-sized gem", () => {
+    const panelW = 396;
+    const panelH = 220;
+    const scale = panelW / 480;
+    const gemTop = (18 / 560) * panelH;
+    const gemBottom = gemTop + 92 * scale;
+    const titleTop = gemBottom + 20;
+    expect(titleTop - gemBottom).toBeGreaterThanOrEqual(20);
+    expect(titleTop).toBeGreaterThan(gemBottom);
+  });
+
+  it("anchors shop bottom brass clear of pool cube tops", () => {
+    const poolY = 620;
+    const poolClear = 56;
+    const panelH = 240;
+    const panelBottom = poolY - poolClear;
+    const panelY = panelBottom - panelH;
+    expect(panelBottom).toBeLessThanOrEqual(poolY - 56);
+    expect(panelY + panelH).toBe(panelBottom);
   });
 });

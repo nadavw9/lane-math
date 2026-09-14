@@ -6,6 +6,8 @@ import {
   THINKING_AFTER_MS,
   automatonMotionOnEnter,
   automatonState,
+  prefersReducedMotion,
+  sampleAutomatonIdle,
   sampleAutomatonMotion,
 } from "./automaton.js";
 import { ALL_UNLOCKED } from "../economy/unlocks.js";
@@ -139,8 +141,9 @@ describe("sampleAutomatonMotion (weight, not energy)", () => {
     expect(end.scaleY).toBeCloseTo(1, 6);
     // Hold plateau between sink and recover.
     expect(sampleAutomatonMotion("droop", 0.45).dy).toBeCloseTo(deep.dy, 5);
-    // No lateral motion in the sample — PE-01 gutter stays intact.
-    expect(Object.keys(deep).sort()).toEqual(["dy", "scaleY"]);
+    // Enter motions keep dx at 0 — idle sway is a separate sampler.
+    expect(Object.keys(deep).sort()).toEqual(["dx", "dy", "scaleY"]);
+    expect(deep.dx).toBe(0);
   });
 
   it("never stretches taller than rest (squash only)", () => {
@@ -152,3 +155,34 @@ describe("sampleAutomatonMotion (weight, not energy)", () => {
     }
   });
 });
+
+describe("sampleAutomatonIdle (desk life)", () => {
+  it("breathes vertically and sways horizontally without stretch", () => {
+    const a = sampleAutomatonIdle(0);
+    const b = sampleAutomatonIdle(625); // quarter of 2.5s breath
+    expect(a.scaleY).toBeCloseTo(1, 6);
+    expect(b.scaleY).toBeCloseTo(1, 6);
+    expect(Math.abs(b.dy)).toBeGreaterThan(0.5);
+    expect(Math.abs(sampleAutomatonIdle(950).dx) + Math.abs(sampleAutomatonIdle(1900).dx)).toBeGreaterThan(0.5);
+    for (let t = 0; t <= 8000; t += 100) {
+      const s = sampleAutomatonIdle(t);
+      expect(s.scaleY).toBeLessThanOrEqual(1.000001);
+      expect(Math.abs(s.dy)).toBeLessThanOrEqual(2.0);
+      expect(Math.abs(s.dx)).toBeLessThanOrEqual(2.5);
+    }
+  });
+
+  it("is continuous and returns to near-rest on full breath periods", () => {
+    expect(sampleAutomatonIdle(0).dy).toBeCloseTo(0, 5);
+    expect(sampleAutomatonIdle(2500).dy).toBeCloseTo(0, 5);
+    expect(sampleAutomatonIdle(0).dx).toBeCloseTo(0, 5);
+    expect(sampleAutomatonIdle(3800).dx).toBeCloseTo(0, 5);
+  });
+});
+
+describe("prefersReducedMotion", () => {
+  it("is false without matchMedia (node/test default)", () => {
+    expect(prefersReducedMotion()).toBe(false);
+  });
+});
+
