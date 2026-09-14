@@ -5,9 +5,10 @@
 **Branch:** `feat/save-backup-recovery`  
 **Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`)  
 **Impl commit (reviewed):** `82a729c` (`82a729ce2cde9b11b79bb56c7017f221edd346e0`)  
-**Docs/handoff tip:** `bf3f62e` (`bf3f62eddb6a8f67ffec2da3fbaadf0fc6fe91e0`) — #30 finalization edges + storage throw safety (prior comparison tip `78a3cfa`)  
+**Impl tip (this pass):** `1cc1ee5` (`1cc1ee5d32085f60129fb581c08b5affd9a907dd`) — P0-A tri-state reads + P0-B recovery-secured write gate  
+**Prior finalization tip:** `bf3f62e` / docs stamp `30eb731` — throw-safety + corrupt-backup edges  
 **Writer:** Grok (Eng Lead sole writer on this lane)  
-**Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree.
+**Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree. **ready-for-non-draft = no** (MERGE HOLD).
 
 ## Candidate framing (CoS / Nadav / Codex)
 
@@ -62,13 +63,13 @@ Behavior:
 ```
 npm test       →  vitest run
 Test Files  59 passed (59)
-Tests       492 passed (492)   # +4 edge cases in save-recovery.test.ts (was 488)
+Tests       494 passed (494)   # +2 P0-A/P0-B in save-recovery.test.ts (was 492 @ bf3f62e)
 
 npm run typecheck  →  tsc --noEmit   OK
-npm run build      →  vite build     OK (prebuild levels:build OK)  # not re-run this tip; typecheck+test green
+npm run build      →  vite build     OK (prebuild levels:build OK)
 ```
 
-No separate lint script in `package.json`. Suite green. Impl still `82a729c` (tests + handoff only).
+No separate lint script in `package.json`. Suite green. Protection lineage `82a729c`; harden tip `1cc1ee5`. PR #30 stays **DRAFT**.
 
 ## History inspect (report only — no wild claims)
 
@@ -127,6 +128,32 @@ Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent**
 | 8 | **No historical-recovery claim** without device evidence | `handoffs/GROK.md` history section | n/a (docs) | **equivalent** | Explicit non-claim retained |
 | 9 | **Cloud / account sync append-only** + conflict choice | none — GitHub path is `LocalStorageStore` / in-memory only | n/a | **missing** | No cloud append path, no account-linked save, no conflict UI/choice. Base44 cloud append-only contract is **not** on GitHub #30; localStorage-only durability. CoS GO: rate explicitly **missing**. |
 
+### #30 harden tip `1cc1ee5` (P0-A / P0-B — 2026-09-14)
+
+Lineage: protection `82a729c` → throw-safety `bf3f62e` / docs `30eb731` → this tip `1cc1ee5`. Schema **v2** + economy contracts unchanged. **ready-for-non-draft = no**.
+
+**P0-A — read failure ≠ missing key**
+- `safeReadResult`: **found** / **missing** / **unavailable** (throw). `LocalStorageStore.read` propagates getItem throws / absent storage (not null-as-miss).
+- `SaveLoadStatus.storageReadable`; Economy session with `storageReadable=false` sets `allowDurableWrites=false` — **never** fallback primary or backup writes (regen/commit in-memory only; `lastPersistOk=false`).
+- Test: seeded primary+backup map; getItem throws, setItem succeeds; Economy+regen; backing bytes **exactly unchanged**; persistence unavailable.
+
+**P0-B — failed recovery preserve blocks ALL durable fallback writes**
+- `preserveRecoveryRawOnce` returns boolean after write+confirm; `hasRecoveryRaw` / `recoverySecured` only from confirmed existing or successful preserve (never hard-coded `true`).
+- Unreadable primary + no valid backup + recovery not secured → block **SAVE_KEY** as well as backup mirror; retain `pendingRecoveryRaw` in memory for retry preserve.
+- Valid backup recovery may still restore primary.
+- Test: recovery key writes fail, SAVE_KEY would succeed; original primary raw unchanged; no empty backup; `hasRecoveryRaw`/`recoverySecured` false; `lastPersistOk` false; no throw.
+
+**Also**
+- `LocalStorageStore`: `lastWriteOk=false` when `localStorage` absent (optional-chaining no-op no longer looks like success).
+- Generational backup: park previous validated primary into `SAVE_BACKUP_KEY` before replacing primary; bootstrap duplicate only when backup missing — do not always mirror newest into both keys.
+- Explicit load status: `storageReadable`, `recoverySecured` (+ `pendingRecoveryRaw` on load result).
+
+**Out of scope (unchanged):** cloud, Capacitor Preferences, multi-tab, Base44, ChronosGlobe, old UI.
+
+**Files:** `src/economy/save.ts`, `src/economy/economy.ts`, `src/economy/save-recovery.test.ts`, `handoffs/GROK.md`.
+
+**Base44 mirror delta notes:** GitHub-only. These gates are **stricter** than the prior GitHub tip (`bf3f62e`) and may diverge from live Base44 until Codex ports: (1) tri-state read / no write on read-unavailable, (2) block empty SAVE_KEY until recovery secured, (3) generational backup vs newest-duplicate mirror. Cloud append-only / conflict choice remains **missing** on GitHub. Grok will not touch Base44/ChronosGlobe.
+
 ### #30 finalization tip (CoS GO checklist)
 
 Protection lineage **`82a729c`**. This tip adds focused edges + minimal production hardening (still draft; no merge):
@@ -159,5 +186,5 @@ Protection lineage **`82a729c`**. This tip adds focused edges + minimal producti
 
 ### Codex select/adapt/reject ask
 
-Review GitHub protection `82a729c` + finalization tip `bf3f62e` vs live Base44 app `6aa7c38d569a74337f54f559`. Closest remaining gaps: **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Corrupt-backup + storage-throw + persist observability + resume-mirror covered.
+Review GitHub protection `82a729c` + harden tip `1cc1ee5` (after `bf3f62e`) vs live Base44 app. Closest remaining gaps: **Base44 port of P0-A/P0-B gates**, **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Tri-state reads + recovery-secured write gate + generational backup covered on GitHub; PR #30 stays DRAFT / MERGE HOLD.
 
