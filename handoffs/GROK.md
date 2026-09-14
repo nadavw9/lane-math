@@ -3,7 +3,8 @@
 **Status:** DONE — draft PR open  
 **Branch:** `feat/academy-reprice-star-gates`  
 **Base:** `origin/master` @ `1ad4889` (no merge to master)  
-**Tip SHA:** `69d9563a5aa7eaaf3a7efc73929b17e2eb6b12bb` (`69d9563`)  
+**Tip SHA:** `b037d69cde0f4d7644e74839fab7180a0a50daf3` (`b037d69`)
+**Economy commit:** `69d9563`  
 **Writer:** Grok (one-writer lane)  
 **Out of scope this run:** Track B (toast/mascot), Base44, `handoffs/CODEX.md`
 
@@ -49,7 +50,7 @@ Star-gate unit test in `src/map/model.test.ts` overrides gates locally — still
 
 ## Draft PR
 
-(URL filled after `gh pr create --draft`)
+https://github.com/nadavw9/lane-math/pull/28 (DRAFT)
 
 ## ChatGPT-path regression skim (post Claude/Codex exhaustion)
 
@@ -57,7 +58,8 @@ Recent `origin/master` tip merges (#23–#27): warning-latency CI flake, CTA chr
 
 ## CoS / Eng Lead reply kit
 
-- Tip SHA + draft PR URL below after push.
+- Tip SHA: `b037d69`
+- Draft PR: https://github.com/nadavw9/lane-math/pull/28
 - Blocker: none for Track A.
 - Hints intentionally untouched (1/2/3).
 - Schema: no bump.
