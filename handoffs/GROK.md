@@ -3,7 +3,7 @@
 **Status:** DONE — draft PR open  
 **Branch:** `feat/academy-reprice-star-gates`  
 **Base:** `origin/master` @ `1ad4889` (no merge to master)  
-**Tip SHA:** `b037d69cde0f4d7644e74839fab7180a0a50daf3` (`b037d69`)
+**Tip SHA:** 472b943
 **Economy commit:** `69d9563`  
 **Writer:** Grok (one-writer lane)  
 **Out of scope this run:** Track B (toast/mascot), Base44, `handoffs/CODEX.md`
@@ -58,8 +58,32 @@ Recent `origin/master` tip merges (#23–#27): warning-latency CI flake, CTA chr
 
 ## CoS / Eng Lead reply kit
 
-- Tip SHA: `b037d69`
+- Tip SHA: see Codex corrections section
 - Draft PR: https://github.com/nadavw9/lane-math/pull/28
 - Blocker: none for Track A.
 - Hints intentionally untouched (1/2/3).
 - Schema: no bump.
+
+
+## Codex review corrections (2026-09-14)
+
+### 485 → 478 discrepancy (provenance)
+
+CoS verified: `origin/master` @ `1ad4889` also runs **57 files / 478 passed** — identical test-file list to this branch before gate asserts.
+
+**485 is not a GitHub baseline.** Investigation:
+- `vitest list` on master and on this branch both enumerated **478** tests (57 files).
+- No test files deleted between master and Track A tip; only `restoration.test.ts` price expectations changed.
+- No remote branch / unpushed commit found carrying 485 tests.
+- Most likely provenance of “485”: an **acceptance target** (Codex/Base44 or local session expectation) that assumed ~7 additional tests which **never reached GitHub** — not a Track A regression, not present on master either.
+- Local stashes (`tx-p0-readable-overlays WIP`) hold Track B renderer WIP only — no economy suite of +7.
+
+**Do not invent filler tests to hit 485.** Added only the required direct default-gate assertions below.
+
+### Direct production gate tests
+
+New `src/economy/config.test.ts`: asserts `STAR_GATE_WORLD_2/3/4 === 10/20/30` and `DEFAULT_ECONOMY.worldStarGates` (not map injects).
+
+### Tip
+
+**Tip SHA:**  on  / draft #28.
