@@ -1,24 +1,35 @@
 # GROK — Eng Track B (TX-P0 readable overlays + mascot idle)
 
-**Status:** CANDIDATE on GitHub only — draft PR open; **MERGE HOLD** until CoS + Codex say otherwise  
-**Role of this branch:** Evidence-backed **candidate** for readable-box overlays + mascot idle. **GitHub visual is NOT approved live design.** Do **not** redefine Wolf Academy visual language from these stills.  
+**Status:** **PRODUCTION-BOUND** on GitHub — draft PR open; **MERGE HOLD** until CoS + Codex approve sync/merge  
+**Role of this branch:** Production-bound Track B for the Wolf Academy app (same product; Codex will sync approved GitHub work to Base44). **Not** a disposable candidate lane. Scout SHIP on stills ≠ auto-merge / ≠ live. Soft parks remain soft.  
 **Branch:** `feat/tx-p0-readable-toasts-mascot-idle`  
+**PR:** https://github.com/nadavw9/lane-math/pull/29 (draft)  
 **Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`) — NOT the old economy branch  
-**Impl commit (reviewed):** `dff2b98` (`dff2b98d711b0a83231379d9d50343a423767389`)  
-**Docs/handoff tip:** `81f156e` (record separately; do not chase tip in a loop)  
+**Impl commit (reviewed):** `dff2b98` (`dff2b98d711b0a83231379d9d50343a423767389`) — record separately; do not chase tip SHA  
+**Docs/handoff tip:** see branch tip after docs commits (do not chase)  
 **Writer:** Grok (Eng Lead sole writer on this lane)  
-**Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no solver/Director/levels/economy changes; never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator.
+**Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no solver/Director/levels/economy changes; never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. P0 SAVE-LOSS lives on a **separate** worktree/`feat/save-backup-recovery` (PR #30) — do not mix into this tree.
 
-## Candidate framing (CoS / Nadav / Codex)
+## Production-bound framing (CoS / Nadav / Codex)
 
-- This PR is a **GitHub-only candidate**. Scout SHIP on stills ≠ live product approval.
-- **MERGE HOLD** until CoS **and** Codex explicitly clear — even if Visual Scout / Games Lab later SHIP the stills.
-- Do **not** treat after-shots as the new Wolf Academy visual source of truth.
-- **Base44 sync needed = No** from this writer. Codex owns any Base44 adaptation.
+- Track B is **production-bound** for the Wolf Academy app — resume as the real path to ship, not a throwaway experiment.
+- **Scout SHIP ≠ auto-merge.** Visual Scout CANDIDATE SHIP of TX-P0-1/2/3 is evidence only; merge still requires CoS + Codex.
+- **MERGE HOLD** until CoS **and** Codex explicitly clear — even if Scout / Games Lab SHIP the stills.
+- Codex (exclusive Base44 writer) will sync approved GitHub work to Base44 **if** CoS/Codex approve. Grok never mutates Base44/ChronosGlobe.
+- Do **not** redefine Wolf Academy visual language from GitHub stills alone; Codex owns live adaptation.
+
+## Soft parks (remain SOFT — not P0)
+
+Scout SHIP’d TX-P0-1/2/3 with **soft** nits still parked (do not treat as P0; no big polish cycle unless cheap one-commit):
+
+| Soft park | Note |
+|-----------|------|
+| Wait-pill ghost | OOL wait pill may still read slightly ghosty vs gold CTA |
+| Shop ↔ dials proximity | Shop floor at 360 CSS may still sit near / occlude operator dials (clears cube tops) |
 
 ## Explicit Codex ask
 
-Please review **impl `dff2b98`** as a **candidate** against the **current Base44 app `6aa7c38d569a74337f54f559`**, then **select / adapt / reject**.  
+Please review **impl `dff2b98`** against the **current Base44 app `6aa7c38d569a74337f54f559`**, then **select / adapt / reject** for production sync.  
 Wire nothing to live Base44 from this PR until you decide. Grok will not touch Base44 or ChronosGlobe.
 
 ## Track / scope (unchanged)
@@ -58,7 +69,7 @@ npm run typecheck  →  tsc --noEmit   OK
 npm run build      →  vite build     OK (prebuild levels:build OK)
 ```
 
-No separate lint script in `package.json`. Suite green; no disappearing-tests incident this run.
+No separate lint script in `package.json`. Suite green; no disappearing-tests incident this run. Re-verified 2026-09-14 Track B UNPAUSE.
 
 ## Screenshot paths
 
@@ -71,27 +82,28 @@ No separate lint script in `package.json`. Suite green; no disappearing-tests in
 
 Capture: Playwright phone viewport `393×852` @ DPR 3, `?sprites=1`, seed `docs/review/_hud-emblem-seed.json`, intro dismissed.
 
-## Gate findings (candidate — not live)
+## Gate findings (production-bound impl — not live until Codex sync)
 
 | Gate | Status | Finding |
 |------|--------|---------|
-| TX-P0-1 | **PASS (candidate impl)** | CTA alone on gold; wait on separate felt pill above CTA inside panel |
-| TX-P0-2 | **PASS (candidate impl)** | Short title on plaque; pad under cartouche ≥8 (ships 20) |
-| TX-P0-3 | **PASS (candidate impl)** | Shop bottom anchored `pool.y - 56`; cubes readable under brass |
-| Mascot idle | **PASS (candidate impl)** | Breathe + sway; jump/droop unchanged; reduced-motion holds static |
+| TX-P0-1 | **PASS (Scout CANDIDATE SHIP; soft wait-pill ghost parked)** | CTA alone on gold; wait on separate felt pill above CTA inside panel |
+| TX-P0-2 | **PASS (Scout CANDIDATE SHIP)** | Short title on plaque; pad under cartouche ≥8 (ships 20) |
+| TX-P0-3 | **PASS (Scout CANDIDATE SHIP; soft shop↔dials proximity parked)** | Shop bottom anchored `pool.y - 56`; cubes readable under brass |
+| Mascot idle | **PASS** | Breathe + sway; jump/droop unchanged; reduced-motion holds static |
 
 ## Unresolved risks / escalate-to-Codex triggers
 
-- Shop panel floors at **360** CSS for ornate 9-slice felt well — may still occlude **operator dials** (phone-eye / TX-P1-3 class) while clearing cube tops. Candidate tradeoff for Codex/Scout.
+- Shop panel floors at **360** CSS for ornate 9-slice felt well — may still occlude **operator dials** (phone-eye / TX-P1-3 class) while clearing cube tops. Soft park for Codex/Scout; not P0.
+- Wait-pill may still read slightly ghosty vs gold CTA — soft park; not P0.
 - Continuous idle redraw while companion is up (perf); gated off under reduced-motion / locked-out / enter tween.
 - Stash `stash@{0}` had prior WIP; applied after verify vs `cce5602` (renderer tree matched stash base for these files). Did not overwrite before-evidence PNGs.
 
 **Escalate if:** save risk, contract conflict, disappearing tests, Base44 duplication, visual-direction conflict, or scope blockers.  
-**This run:** no save/schema risk; no economy/solver/Director contract edits; tests 487 green (up from 478 on master via new idle/OOL asserts); **no Base44 duplication** (Grok did not touch Base44); visual is **candidate only** — Codex must select/adapt/reject vs Base44 app `6aa7c38d569a74337f54f559`.
+**This run:** no save/schema risk; no economy/solver/Director contract edits; tests 487 green (up from 478 on master via new idle/OOL asserts); **no Base44 duplication** (Grok did not touch Base44); production-bound GitHub path — Codex must select/adapt/reject vs Base44 app `6aa7c38d569a74337f54f559` before any live sync.
 
 ## Base44 sync needed
 
-**No** (from Grok). Codex decides any sync after candidate review.
+**Pending CoS + Codex approval.** From Grok: **No** direct Base44 writes. Codex exclusive writer syncs if approved.
 
 ## Prior Track A (merged)
 
