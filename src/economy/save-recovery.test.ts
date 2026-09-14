@@ -185,17 +185,25 @@ describe("save backup / recovery (P0 SAVE-LOSS)", () => {
     expect(store.read(SAVE_RECOVERY_KEY)).toBe(first);
   });
 
-  it("healthy writeSave mirrors backup; load refreshes backup from validated primary", () => {
+  it("healthy writeSave bootstraps backup; later writes keep previous primary as generational backup", () => {
     const store = new MemoryStore();
     const first = progressSave(5);
     writeSave(store, first);
+    // First write: no previous primary → bootstrap backup = current.
     expect(store.read(SAVE_BACKUP_KEY)).toBe(store.read(SAVE_KEY));
 
     const second = progressSave(9, { totalStars: 18 });
-    store.write(SAVE_KEY, JSON.stringify(second));
+    writeSave(store, second);
+    expect(JSON.parse(store.read(SAVE_KEY)!).totalStars).toBe(18);
+    // Generational: backup retains previous validated primary, not a duplicate of newest.
+    expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
+
+    // Direct primary bump + load: valid backup is left alone (not collapsed to newest).
+    const third = progressSave(11, { totalStars: 22 });
+    store.write(SAVE_KEY, JSON.stringify(third));
     const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
-    expect(loaded.save.totalStars).toBe(18);
-    expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(18);
+    expect(loaded.save.totalStars).toBe(22);
+    expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
   });
 
   it("corrupt backup JSON + unreadable primary → emptySave; recovery raw still exportable", () => {
@@ -373,4 +381,89 @@ describe("save backup / recovery (P0 SAVE-LOSS)", () => {
     expect(readRecoveryRaw(store)).toBe(raw);
     expect(economy.hasRecoveryRaw).toBe(true);
   });
+
+  it("P0-A: read throws + write succeeds must not wipe seeded primary/backup (not clean launch)", () => {
+    const bag = new Map<string, string>();
+    const good = progressSave(7);
+    const primaryJson = JSON.stringify(good);
+    const backupJson = JSON.stringify(progressSave(7, { totalStars: 14 }));
+    bag.set(SAVE_KEY, primaryJson);
+    bag.set(SAVE_BACKUP_KEY, backupJson);
+
+    let failGet = true;
+    const ls = {
+      getItem: (k: string) => {
+        if (failGet) throw new DOMException("SecurityError");
+        return bag.get(k) ?? null;
+      },
+      setItem: (k: string, v: string) => {
+        bag.set(k, v);
+      },
+      removeItem: (k: string) => {
+        bag.delete(k);
+      },
+      clear: () => bag.clear(),
+      key: (_i: number) => null as string | null,
+      get length() {
+        return bag.size;
+      },
+    };
+    const prev = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: ls, configurable: true });
+    try {
+      const store = new LocalStorageStore();
+      // Reads throw, writes would succeed — must NOT treat as clean first launch.
+      expect(() => new Economy(store, () => T0 + 60_000)).not.toThrow();
+      const economy = new Economy(store, () => T0 + 120_000);
+      // Access lives to force regenerate/commit path.
+      expect(economy.lives).toBe(DEFAULT_ECONOMY.maxLives);
+      expect(economy.loadStatus.storageReadable).toBe(false);
+      expect(economy.lastPersistOk).toBe(false);
+      // Backing bytes exactly unchanged despite successful setItem path.
+      expect(bag.get(SAVE_KEY)).toBe(primaryJson);
+      expect(bag.get(SAVE_BACKUP_KEY)).toBe(backupJson);
+      expect(bag.has(SAVE_RECOVERY_KEY)).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", { value: prev, configurable: true });
+    }
+  });
+
+  it("P0-B: failed recovery preserve blocks ALL durable fallback writes including SAVE_KEY", () => {
+    const corruptPrimary = '{"schemaVersion":99,"broken":true,"progress":"KEEP-ME"}';
+
+    class SelectiveFailStore implements SaveStore {
+      readonly map = new Map<string, string>();
+      failRecoveryWrites = true;
+      read(key: string): string | null {
+        return this.map.get(key) ?? null;
+      }
+      write(key: string, value: string): void {
+        if (this.failRecoveryWrites && key === SAVE_RECOVERY_KEY) {
+          throw new Error("QuotaExceededError");
+        }
+        this.map.set(key, value);
+      }
+    }
+
+    const store = new SelectiveFailStore();
+    store.map.set(SAVE_KEY, corruptPrimary);
+    // No valid backup.
+
+    expect(() => new Economy(store, () => T0 + 60_000)).not.toThrow();
+    const economy = new Economy(store, () => T0 + 120_000);
+    // Force regen/commit that would previously write empty SAVE_KEY.
+    expect(economy.lives).toBe(DEFAULT_ECONOMY.maxLives);
+    expect(() => economy.recordClear("1-01")).not.toThrow();
+
+    expect(store.map.get(SAVE_KEY)).toBe(corruptPrimary);
+    expect(store.map.has(SAVE_BACKUP_KEY)).toBe(false);
+    expect(store.map.has(SAVE_RECOVERY_KEY)).toBe(false);
+    expect(economy.hasRecoveryRaw).toBe(false);
+    expect(economy.recoverySecured).toBe(false);
+    expect(economy.loadStatus.recoverySecured).toBe(false);
+    expect(economy.lastPersistOk).toBe(false);
+    expect(economy.loadStatus.primaryUnreadable).toBe(true);
+    expect(economy.loadStatus.storageReadable).toBe(true);
+  });
+
 });
