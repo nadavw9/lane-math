@@ -3,7 +3,7 @@
 **Status:** DONE — draft PR open  
 **Branch:** `feat/academy-reprice-star-gates`  
 **Base:** `origin/master` @ `1ad4889` (no merge to master)  
-**Tip SHA:** 472b943
+**Tip SHA:** `21e35d1` (`21e35d1e2d90a0ebd10281f43d203ecaf9fa22a4`)
 **Economy commit:** `69d9563`  
 **Writer:** Grok (one-writer lane)  
 **Out of scope this run:** Track B (toast/mascot), Base44, `handoffs/CODEX.md`
@@ -58,7 +58,7 @@ Recent `origin/master` tip merges (#23–#27): warning-latency CI flake, CTA chr
 
 ## CoS / Eng Lead reply kit
 
-- Tip SHA: see Codex corrections section
+- Tip SHA: `21e35d1`
 - Draft PR: https://github.com/nadavw9/lane-math/pull/28
 - Blocker: none for Track A.
 - Hints intentionally untouched (1/2/3).
@@ -86,4 +86,6 @@ New `src/economy/config.test.ts`: asserts `STAR_GATE_WORLD_2/3/4 === 10/20/30` a
 
 ### Tip
 
-**Tip SHA:**  on  / draft #28.
+**Tip SHA:** `21e35d1` on `feat/academy-reprice-star-gates` / draft #28.
+
+**Tests after gate asserts:** 58 files / **481 passed** (478 baseline + 3 direct gate tests). Still short of 485; not padded.
