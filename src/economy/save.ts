@@ -5,9 +5,24 @@
  * migration precedent)." The migration hook below has nothing to migrate yet;
  * that is the point. Adding versioning after saves exist in the wild is the
  * expensive path, and the cost of writing it now is a switch with one arm.
+ *
+ * Backup / recovery (P0 SAVE-LOSS): a single primary key used to be both the
+ * only copy and the write target. loadSave → emptySave → Economy.regenerate →
+ * writeSave could overwrite an unreadable primary and destroy the only raw
+ * payload. Backup holds the last validated primary; recovery holds the first
+ * unreadable raw string and is never replaced by later failures.
+ *
+ * #30 harden: tri-state reads (found/missing/unavailable) so a throw is never
+ * treated as a clean first launch; recovery preserve must be genuinely secured
+ * before any empty/fallback durable write; generational backup parks the
+ * previous validated primary before replacing SAVE_KEY.
  */
 export const SAVE_SCHEMA_VERSION = 2;
 export const SAVE_KEY = "lane-math.save.v1";
+/** Previous validated primary — written only after parse+migrate success. */
+export const SAVE_BACKUP_KEY = "lane-math.save.backup.v1";
+/** First unreadable raw primary payload — written once, never replaced. */
+export const SAVE_RECOVERY_KEY = "lane-math.save.recovery.v1";
 
 export interface LevelProgress {
   /** Best rating achieved. Replays may improve it (Candy Crush model, §5.1). */
@@ -62,6 +77,40 @@ export interface SaveData {
   readonly muted: boolean;
 }
 
+/**
+ * Tri-state durable read. Callers must not treat `unavailable` as a clean miss
+ * (first launch) — that path enables emptySave fallback writes.
+ */
+export type ReadResult =
+  | { readonly status: "found"; readonly value: string }
+  | { readonly status: "missing" }
+  | { readonly status: "unavailable" };
+
+export interface SaveLoadStatus {
+  readonly save: SaveData;
+  /** True when primary was unreadable and a validated backup was used instead. */
+  readonly recoveredFromBackup: boolean;
+  /**
+   * True when SAVE_RECOVERY_KEY holds a confirmed preserved unreadable raw.
+   * Never hard-coded true — only existing key or successful preserve.
+   */
+  readonly hasRecoveryRaw: boolean;
+  /** True when primary was present but failed parse/migrate (not a clean miss). */
+  readonly primaryUnreadable: boolean;
+  /**
+   * False when a durable read threw / storage is absent. Not a clean first launch.
+   * Sessions with storageReadable=false must not perform fallback durable writes.
+   */
+  readonly storageReadable: boolean;
+  /** Alias of hasRecoveryRaw — recovery key genuinely secured on the store. */
+  readonly recoverySecured: boolean;
+  /**
+   * Unreadable primary bytes retained in memory when preserve did not secure,
+   * for a later retry. Null when secured or no unreadable primary.
+   */
+  readonly pendingRecoveryRaw: string | null;
+}
+
 export const EMPTY_PROGRESS: LevelProgress = {
   bestStars: 0,
   failCount: 0,
@@ -88,7 +137,11 @@ export function emptySave(now: number, maxLives: number): SaveData {
   };
 }
 
-/** Anything that can hold a string. Swapped for Capacitor Preferences later. */
+/**
+ * Anything that can hold a string. Swapped for Capacitor Preferences later.
+ * `read` returns null for a missing key; **throw** to signal unavailable storage
+ * (so callers can distinguish miss vs read failure via `safeReadResult`).
+ */
 export interface SaveStore {
   read(key: string): string | null;
   write(key: string, value: string): void;
@@ -114,18 +167,46 @@ export class MemoryStore implements SaveStore {
 }
 
 export class LocalStorageStore implements SaveStore {
+  /**
+   * False when the most recent `write` was swallowed (quota / private mode /
+   * absent localStorage). Callers must not claim "saved" when this is false.
+   */
+  lastWriteOk = true;
+
   read(key: string): string | null {
-    try {
-      return globalThis.localStorage?.getItem(key) ?? null;
-    } catch {
-      return null;
+    const ls = globalThis.localStorage;
+    if (!ls) {
+      // Absent storage is unavailable, not a missing key.
+      throw new Error("localStorage unavailable");
     }
+    // Let getItem SecurityError/etc. propagate — safeReadResult maps to unavailable.
+    return ls.getItem(key);
   }
   write(key: string, value: string): void {
     try {
-      globalThis.localStorage?.setItem(key, value);
+      const ls = globalThis.localStorage;
+      if (!ls) {
+        // optional chaining would write nothing while looking "ok" — mark failed.
+        this.lastWriteOk = false;
+        return;
+      }
+      ls.setItem(key, value);
+      this.lastWriteOk = true;
     } catch {
       // Private mode or a full quota. Losing progress is bad; crashing is worse.
+      // Do not removeItem / clear — existing durable bytes stay untouched.
+      this.lastWriteOk = false;
+    }
+  }
+  /**
+   * Best-effort remove for future callers. Never throws; on failure leaves
+   * existing data in place (does not clear other keys).
+   */
+  remove(key: string): void {
+    try {
+      globalThis.localStorage?.removeItem(key);
+    } catch {
+      /* private/unavailable — leave store untouched */
     }
   }
 }
@@ -180,18 +261,209 @@ export function migrate(raw: unknown): SaveData | null {
   };
 }
 
-export function loadSave(store: SaveStore, now: number, maxLives: number): SaveData {
-  const raw = store.read(SAVE_KEY);
-  if (raw === null) return emptySave(now, maxLives);
+function tryParseMigrate(raw: string): SaveData | null {
   try {
-    const migrated = migrate(JSON.parse(raw));
-    return migrated ?? emptySave(now, maxLives);
+    return migrate(JSON.parse(raw));
   } catch {
-    // Corrupt save. Starting clean beats refusing to launch.
-    return emptySave(now, maxLives);
+    return null;
   }
 }
 
-export function writeSave(store: SaveStore, data: SaveData): void {
-  store.write(SAVE_KEY, JSON.stringify(data));
+/** Tri-state read: found / missing / unavailable (throw). Never conflates throw with miss. */
+export function safeReadResult(store: SaveStore, key: string): ReadResult {
+  try {
+    const value = store.read(key);
+    if (value === null) return { status: "missing" };
+    return { status: "found", value };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+function safeWrite(store: SaveStore, key: string, value: string): boolean {
+  try {
+    store.write(key, value);
+  } catch {
+    return false;
+  }
+  // LocalStorageStore swallows quota/private/absent throws internally — surface via lastWriteOk.
+  if (store instanceof LocalStorageStore) return store.lastWriteOk;
+  return true;
+}
+
+/**
+ * Seed backup only when missing/invalid. Do not collapse a valid previous
+ * generation into a duplicate of the newest primary.
+ */
+function refreshBackup(store: SaveStore, validated: SaveData): void {
+  const backup = safeReadResult(store, SAVE_BACKUP_KEY);
+  if (backup.status === "unavailable") return;
+  if (backup.status === "found" && tryParseMigrate(backup.value)) return;
+  safeWrite(store, SAVE_BACKUP_KEY, JSON.stringify(validated));
+}
+
+/**
+ * Preserve the first unreadable primary raw; never replace a later failure.
+ * Returns whether recovery is genuinely secured on the store (existing key or
+ * successful write). Never reports success from a best-effort no-op.
+ */
+export function preserveRecoveryRawOnce(store: SaveStore, raw: string): boolean {
+  const existing = safeReadResult(store, SAVE_RECOVERY_KEY);
+  if (existing.status === "found") return true;
+  if (existing.status === "unavailable") return false;
+  if (!safeWrite(store, SAVE_RECOVERY_KEY, raw)) return false;
+  // Confirm — do not claim secured if the write was a silent no-op.
+  const confirm = safeReadResult(store, SAVE_RECOVERY_KEY);
+  return confirm.status === "found" && confirm.value === raw;
+}
+
+function recoverySecuredOnStore(store: SaveStore): boolean {
+  return safeReadResult(store, SAVE_RECOVERY_KEY).status === "found";
+}
+
+/** Never throws — unavailable storage → null (export helpers stay safe). */
+export function readRecoveryRaw(store: SaveStore): string | null {
+  const result = safeReadResult(store, SAVE_RECOVERY_KEY);
+  return result.status === "found" ? result.value : null;
+}
+
+/** Never throws. True only when the recovery key is confirmed present. */
+export function hasRecoveryRaw(store: SaveStore): boolean {
+  return recoverySecuredOnStore(store);
+}
+
+export interface WriteSaveOptions {
+  /**
+   * When false, write primary only — do not replace backup. Used when the
+   * runtime fell back to emptySave after an unreadable primary so a valid
+   * backup (or an absent one) is not overwritten by an empty shell, and so a
+   * ctor clock refresh cannot destroy the only remaining progress copy.
+   */
+  readonly mirrorBackup?: boolean;
+}
+
+/**
+ * Persist a working save. By default uses generational backup: park the
+ * previous validated primary into SAVE_BACKUP_KEY before replacing SAVE_KEY.
+ * Pass `{ mirrorBackup: false }` for empty/fallback commits that must not
+ * clobber a validated backup.
+ *
+ * Returns true when the primary write succeeded (and backup bootstrap when
+ * needed). False means durable store may lag in-memory (quota/private/throw)
+ * — do not claim "saved". Never throws; never clears existing keys on failure.
+ */
+export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): boolean {
+  const payload = JSON.stringify(data);
+  const mirror = opts.mirrorBackup !== false;
+
+  if (mirror) {
+    const prev = safeReadResult(store, SAVE_KEY);
+    // Generational: retain previous validated primary as backup before replace.
+    // Do not park corrupt/unreadable bytes into backup.
+    if (prev.status === "found" && tryParseMigrate(prev.value) && prev.value !== payload) {
+      safeWrite(store, SAVE_BACKUP_KEY, prev.value);
+    }
+  }
+
+  const primaryOk = safeWrite(store, SAVE_KEY, payload);
+  if (!primaryOk) return false;
+  if (!mirror) return true;
+
+  // Bootstrap only: if no backup exists yet, seed with current (first write).
+  // Do not reduce durability to always duplicating newest into both keys.
+  const backup = safeReadResult(store, SAVE_BACKUP_KEY);
+  if (backup.status === "missing") {
+    return safeWrite(store, SAVE_BACKUP_KEY, payload);
+  }
+  return true;
+}
+
+/**
+ * Load with backup/recovery protection.
+ *
+ * 1. Successful primary parse+migrate → ensure backup exists (seed if missing).
+ * 2. Unreadable primary → stash exact raw in recovery once (record success),
+ *    then try backup.
+ * 3. Valid backup → use as working save (caller should rewrite primary).
+ * 4. No backup → emptySave for runtime; if recovery not secured, caller must
+ *    block ALL durable fallback writes (including SAVE_KEY).
+ * 5. Read unavailable → emptySave for runtime; storageReadable=false; caller
+ *    must not treat as clean first launch and must not write.
+ */
+export function loadSaveStatus(store: SaveStore, now: number, maxLives: number): SaveLoadStatus {
+  const primary = safeReadResult(store, SAVE_KEY);
+
+  if (primary.status === "unavailable") {
+    return {
+      save: emptySave(now, maxLives),
+      recoveredFromBackup: false,
+      hasRecoveryRaw: false,
+      primaryUnreadable: false,
+      storageReadable: false,
+      recoverySecured: false,
+      pendingRecoveryRaw: null,
+    };
+  }
+
+  if (primary.status === "missing") {
+    const secured = recoverySecuredOnStore(store);
+    return {
+      save: emptySave(now, maxLives),
+      recoveredFromBackup: false,
+      hasRecoveryRaw: secured,
+      primaryUnreadable: false,
+      storageReadable: true,
+      recoverySecured: secured,
+      pendingRecoveryRaw: null,
+    };
+  }
+
+  const migrated = tryParseMigrate(primary.value);
+  if (migrated) {
+    refreshBackup(store, migrated);
+    const secured = recoverySecuredOnStore(store);
+    return {
+      save: migrated,
+      recoveredFromBackup: false,
+      hasRecoveryRaw: secured,
+      primaryUnreadable: false,
+      storageReadable: true,
+      recoverySecured: secured,
+      pendingRecoveryRaw: null,
+    };
+  }
+
+  // Unreadable: JSON fail, migrate null, or unsupported newer schema.
+  const secured = preserveRecoveryRawOnce(store, primary.value);
+  const pending = secured ? null : primary.value;
+
+  const backup = safeReadResult(store, SAVE_BACKUP_KEY);
+  if (backup.status === "found") {
+    const fromBackup = tryParseMigrate(backup.value);
+    if (fromBackup) {
+      return {
+        save: fromBackup,
+        recoveredFromBackup: true,
+        hasRecoveryRaw: secured,
+        primaryUnreadable: true,
+        storageReadable: true,
+        recoverySecured: secured,
+        pendingRecoveryRaw: pending,
+      };
+    }
+  }
+
+  return {
+    save: emptySave(now, maxLives),
+    recoveredFromBackup: false,
+    hasRecoveryRaw: secured,
+    primaryUnreadable: true,
+    storageReadable: true,
+    recoverySecured: secured,
+    pendingRecoveryRaw: pending,
+  };
+}
+
+export function loadSave(store: SaveStore, now: number, maxLives: number): SaveData {
+  return loadSaveStatus(store, now, maxLives).save;
 }

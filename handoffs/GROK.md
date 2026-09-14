@@ -1,95 +1,190 @@
-# GROK — Eng Track A (Academy reprice + star gates)
+# GROK — Eng P0 SAVE-LOSS (backup + recovery)
 
-**Status:** DONE — draft PR open  
-**Branch:** `feat/academy-reprice-star-gates`  
-**Base:** `origin/master` @ `1ad4889` (no merge to master)  
-**Tip SHA:** `13c5ee6` (`13c5ee65b3ce6b8f29e6fa0f5b86eb32f4e58fb3`)
-**Economy commit:** `69d9563`  
-**Writer:** Grok (one-writer lane)  
-**Out of scope this run:** Track B (toast/mascot), Base44, `handoffs/CODEX.md`
+**Status:** CANDIDATE on GitHub only — draft PR open; **MERGE HOLD** until CoS + Codex say otherwise (Base44 sync)  
+**Role of this branch:** Protect unreadable / unsupported primary from being overwritten by `emptySave` + `Economy.regenerate` → `writeSave`.  
+**Branch:** `feat/save-backup-recovery`  
+**Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`)  
+**Impl commit (reviewed):** `82a729c` (`82a729ce2cde9b11b79bb56c7017f221edd346e0`)  
+**Impl tip (this pass):** `1cc1ee5` (`1cc1ee5d32085f60129fb581c08b5affd9a907dd`) — P0-A tri-state reads + P0-B recovery-secured write gate  
+**Prior finalization tip:** `bf3f62e` / docs stamp `30eb731` — throw-safety + corrupt-backup edges  
+**Writer:** Grok (Eng Lead sole writer on this lane)  
+**Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree. **ready-for-non-draft = no** (MERGE HOLD).
 
-## Contracts applied
+## Candidate framing (CoS / Nadav / Codex)
 
-| Contract | Before | After | Touched |
-|---|---|---|---|
-| Academy `Economy.RESTORE_COSTS` / `nextRestoreCost` ladder | `[2,2,3,3]` (10★/room, 40★ ladder) | `[1,1,2,2]` (6★/room, 24★ ladder) | `src/economy/economy.ts`, `ART_DIRECTION.md` §6 note |
-| `STAR_GATE_WORLD_2/3/4` | `10 / 25 / 40` | `10 / 20 / 30` | `src/economy/config.ts` |
-| Hints `HINT_COST` | narrow/contested/branch `1/2/3` | **unchanged** `1/2/3` | none |
+- GitHub-only candidate. **MERGE HOLD** for CoS/Codex Base44 sync — Grok will not merge.
+- **Base44 sync needed = Yes (Codex-owned)** — this ports Base44-validated protection concepts into the GitHub save path; Codex decides live Base44 wiring.
+- Do **not** claim Nadav’s ~30-level historical save is recoverable without device evidence.
 
-Meaning audit (what these numbers are):
-- **Restore ladder:** per-object star cost to furnish the next Academy object in a world room (indices 0..3). Runtime constant on `Economy`; not persisted.
-- **Star gates:** star totals required to enter world bunches 2/3/4 via `economy.config.worldStarGates` (map lock reason `not-enough-stars`).
-- **Hints:** separate star sink (`HINT_COST`); same `starsSpent` pool as restoration, but prices left alone per CoS.
+## Explicit Codex ask
 
-## Migration / save-loss
+Please review **impl `82a729c`** against the current Base44 app, then **select / adapt / reject**.  
+Wire nothing to live Base44 from this PR until you decide. Grok will not touch Base44 or ChronosGlobe.
 
-- **Schema bump: NOT needed.** `SAVE_SCHEMA_VERSION` stays **2**.
-- Persisted fields: `restored[world]` (0–4 count) + `starsSpent` / `totalStars`. Prices and gates are **code constants**, not save fields.
-- Existing saves keep restored object counts and spent stars. Next purchase uses the new ladder from the current index (e.g. `restored=2` → next cost is `RESTORE_COSTS[2]=2`).
-- No wipe of solver / Director / levels. No Base44.
-- Mild economy windfall for players who already paid old 2/2/3/3 mid-room; no loss of purchases or progress.
+## Bug (reproduced in tests)
 
-## Tests
+Previous GitHub path in `src/economy/save.ts` + `Economy` ctor:
+
+1. `loadSave` on malformed / unsupported primary → `emptySave(now)`
+2. ctor calls `regenerate()` which can advance clock and `commit` / `writeSave`
+3. That **overwrote** the unreadable primary — destroying the only raw copy
+
+## Protection (constants unchanged for primary)
+
+| Key | Role |
+|-----|------|
+| `SAVE_KEY = "lane-math.save.v1"` | Primary (unchanged) |
+| `SAVE_SCHEMA_VERSION = 2` | Unchanged — no healthy-save schema rewrite |
+| `SAVE_BACKUP_KEY = "lane-math.save.backup.v1"` | Last **validated** primary (parse+migrate success / healthy write) |
+| `SAVE_RECOVERY_KEY = "lane-math.save.recovery.v1"` | **First** unreadable raw payload (exact string); **never** replaced by later failures |
+
+Behavior:
+
+1. Successful primary parse+migrate → refresh backup from validated migrated JSON.
+2. Unreadable primary → if recovery empty, store exact raw once; then try backup.
+3. Valid backup → working save + rewrite healthy primary; expose `recoveredFromBackup`.
+4. No valid backup → `emptySave` for runtime; commits use `mirrorBackup: false` so recovery raw / any leftover backup is not replaced by an empty shell; ctor clock refresh cannot destroy the only raw.
+5. UI: map chip **Export save** + opening DOM button when recovery raw exists; `laneMath.downloadRecoverySave`.
+
+## Commits + changed files
+
+**Impl `82a729c`:**
+
+- `src/economy/save.ts` — backup/recovery keys, `loadSaveStatus`, `writeSave({ mirrorBackup })`
+- `src/economy/economy.ts` — load status, mirrorBackup gate on commit, recovery getters
+- `src/economy/save-recovery.test.ts` — required regression suite (7 tests)
+- `src/map/model.ts` / `src/map/map-screen.ts` — `hasRecoveryRaw` + Export save chip
+- `src/main.ts` — download recovery + opening affordance + `laneMath` hooks
+
+**#30 finalization tip (`bf3f62e`):** lineage from protection `82a729c` + minimal throw-safety/observability. `save-recovery.test.ts` **11** tests (original 7 + 4 focused). Base44 **cloud append-only / conflict choice** = **missing**. PR #30 stays **DRAFT**. No Base44/ChronosGlobe; no Capacitor Preferences.
+
+## Exact test / build / lint
 
 ```
-npm test  →  vitest run
-Test Files  57 passed (57)
-Tests       478 passed (478)
+npm test       →  vitest run
+Test Files  59 passed (59)
+Tests       494 passed (494)   # +2 P0-A/P0-B in save-recovery.test.ts (was 492 @ bf3f62e)
+
+npm run typecheck  →  tsc --noEmit   OK
+npm run build      →  vite build     OK (prebuild levels:build OK)
 ```
 
-Updated: `src/economy/restoration.test.ts` (ladder totals + pool-sharing cases for new first-slot cost 1★).  
-Star-gate unit test in `src/map/model.test.ts` overrides gates locally — still green against new defaults.
+No separate lint script in `package.json`. Suite green. Protection lineage `82a729c`; harden tip `1cc1ee5`. PR #30 stays **DRAFT**.
 
-## Files changed
+## History inspect (report only — no wild claims)
 
-- `src/economy/config.ts` — gates 10/20/30
-- `src/economy/economy.ts` — `RESTORE_COSTS = [1,1,2,2]` + comment
-- `src/economy/restoration.test.ts` — expectations
-- `ART_DIRECTION.md` — §6 price paragraph aligned to code
-- `handoffs/GROK.md` — this note (for Codex/Base44 readers)
+Inspected `git log` / blame on `src/economy/save.ts`:
 
-## Draft PR
+- Save module introduced in `3d4eb60` (2026-08-31) already at **schema 2** with key `lane-math.save.v1`; v1→v2 migration arm present (additive `restored: {}`).
+- `LocalStorageStore` catches quota / private-mode write failures silently (same commit) — writes can fail without crashing.
+- Comment still says Capacitor Preferences is a future swap; runtime uses browser `localStorage` (`main.ts` → `LocalStorageStore`). Capacitor appears elsewhere (ads/haptics), not as save backend yet.
+- `loadSave` → `emptySave` on corrupt/unsupported has existed since introduction — no historical backup key.
 
-https://github.com/nadavw9/lane-math/pull/28 (DRAFT)
+**Plausible causes of Nadav’s ~30-level loss** (not proven for his device):
 
-## ChatGPT-path regression skim (post Claude/Codex exhaustion)
+1. **Primary became unreadable** (truncated write, partial JSON, storage eviction) → emptySave → regenerate overwrote the only copy (**this bug**).
+2. **Unsupported newer schema** refused by `migrate` → same wipe path.
+3. **Silent localStorage write failure** (quota / private mode) — in-memory progress never durable; looks like a wipe on relaunch (different mechanism; backup helps after a successful prior write).
+4. **Site-data clear / WebView storage reset** — both primary and (once shipped) backup/recovery would be gone; not recoverable from app storage alone.
+5. Unlikely: healthy v1→v2 migrate alone wiping ~30 clears — migration is additive and covered by regression.
 
-Recent `origin/master` tip merges (#23–#27): warning-latency CI flake, CTA chrome sprites, HUD emblem sprites, modal frame sprites, commit-key sprites — UI/chrome only. **No economy / solver / Director / levels edits in that window.** No obvious ChatGPT-path salvage regressions visible on this checkout. Untracked local `tools/_*.mjs` + a couple `docs/review/*.png` left from prior arms; not committed here.
+**Do not claim** the historical save is recoverable without evidence from the device (e.g. recovery key contents, backup key, or an exported raw).
 
-## CoS / Eng Lead reply kit
+## Unresolved risks / escalate-to-Codex
 
-- Tip SHA: `13c5ee6`
-- Draft PR: https://github.com/nadavw9/lane-math/pull/28
-- Blocker: none for Track A.
-- Hints intentionally untouched (1/2/3).
-- Schema: no bump.
+- Backup/recovery live in the same `localStorage` origin — full storage clear still loses everything; cloud/account sync not in scope.
+- Opening DOM chip is intentionally minimal (not Wolf Academy chrome); Codex may restyle or relocate.
+- `mirrorBackup: false` empty fallback: once the player earns new progress, mirroring resumes — old recovery raw remains for export but is not auto-restored into primary.
+- Capacitor Preferences not wired — native builds still on whatever bridge uses `localStorage` today.
 
+**Escalate if:** Base44 duplication conflict, schema direction change, or evidence that loss was outside this overwrite path.
 
-## Codex review corrections (2026-09-14)
+## Base44 sync needed
 
-### 485 → 478 discrepancy (provenance)
+**Yes (Codex decides).** Grok did not touch Base44 or ChronosGlobe.
 
-CoS verified: `origin/master` @ `1ad4889` also runs **57 files / 478 passed** — identical test-file list to this branch before gate asserts.
+### Deepen (2026-09-14 CoS follow-up)
 
-**485 is not a GitHub baseline.** Investigation:
-- `vitest list` on master and on this branch both enumerated **478** tests (57 files).
-- No test files deleted between master and Track A tip; only `restoration.test.ts` price expectations changed.
-- No remote branch / unpushed commit found carrying 485 tests.
-- Most likely provenance of “485”: an **acceptance target** (Codex/Base44 or local session expectation) that assumed ~7 additional tests which **never reached GitHub** — not a Track A regression, not present on master either.
-- Local stashes (`tx-p0-readable-overlays WIP`) hold Track B renderer WIP only — no economy suite of +7.
+Confirmed from git history (still **no device-evidence recovery claim**):
+- **`SAVE_KEY` never renamed** — always `lane-math.save.v1` from introduction (`3d4eb60`); key name does not track schema number.
+- **Schema was already 2 at introduction** — no GitHub commit ever shipped `SAVE_SCHEMA_VERSION = 1` as the written constant; the v1→v2 migrate arm is for any older payloads that might exist with `schemaVersion: 1`.
+- **Deploy/origin:** browser path is `LocalStorageStore` via `main.ts`; Capacitor Preferences **not** wired for saves. Domain/origin or WebView partition changes would look like a wipe (all keys gone) and are outside backup/recovery.
+- **Rollback rejecting newer schema:** older builds that refuse current schema still hit emptySave; post-#30 recovery/backup keys mitigate wipe of the raw/last-good **on builds that include #30**. Pre-#30 devices that already overwrote primary with empty remain unrecovered without an external export.
+- **#28 economy** is already on `master` @ `cce5602` (restore `[1,1,2,2]`, gates `10/20/30`, hints `1/2/3`, schema v2) — orthogonal to save-loss; listed for CoS/Codex contract clarity only.
 
-**Do not invent filler tests to hit 485.** Added only the required direct default-gate assertions below.
+## Base44 recovery contract comparison (Codex ask — GitHub #30)
 
-### Suite after corrections
+Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent** / **stronger** / **weaker** / **missing**. Protection SHA `82a729c`; finalization tip `bf3f62e` (throw-safety + edges).
 
-`npm test` → **58 files / 481 passed / 0 failed** (master baseline 478 + 3 new `config.test.ts` cases).
+| # | Base44 contract clause | GitHub file(s) | Test coverage | Verdict | Notes |
+|---|---|---|---|---|---|
+| 1 | Schema stays **v2** (no healthy-save rewrite) | `src/economy/save.ts` `SAVE_SCHEMA_VERSION = 2` | `save-recovery.test.ts` v1→v2 migrate keeps progress | **equivalent** | No schema bump in #30 |
+| 2 | Preserve **first unreadable raw before parse** succeeds | `preserveRecoveryRawOnce` → `SAVE_RECOVERY_KEY` in `save.ts`; called in `loadSaveStatus` before backup try | "unsupported-newer…preserved"; "first recovery raw is not overwritten…" | **equivalent** | Exact string; never replaced by later failures |
+| 3 | Keep **latest valid backup** | `SAVE_BACKUP_KEY`; `refreshBackup` on successful primary; `writeSave` mirrors by default | "healthy writeSave mirrors backup…"; malformed+backup load | **equivalent** | Backup = last validated SaveData JSON |
+| 4 | **Never empty-overwrite** before recovery secured | `writeSave(..., { mirrorBackup: false })`; Economy ctor sets `mirrorBackup = !primaryUnreadable \|\| recoveredFromBackup` | "corrupt / empty write path cannot replace a valid backup"; ctor recovery survival | **equivalent** | Empty fallback commits skip backup mirror; recovery key untouched by writeSave |
+| 5 | **Auto-recover from backup** when primary unreadable | `loadSaveStatus` tries backup after preserve; Economy ctor rewrites healthy primary if `recoveredFromBackup` | "malformed primary + valid backup → loads backup progress" | **equivalent** | Auto in load path; primary rewritten on recover |
+| 6 | **Raw export** for player | `readRecoveryRaw` / `hasRecoveryRaw`; `main.ts` `downloadRecoverySave` + opening DOM; map chip via `hasRecoveryRaw` | Unit coverage on key presence; **UI click/download not automated** | **weaker** (UI) / **equivalent** (API) | Export API present; no e2e that the download button fires |
+| 7 | **Economy regen not a destructive write** of only raw / last-good | ctor: load → optional recover write → `regenerate()` with mirrorBackup gate | "ctor clock refresh cannot destroy the only raw copy" | **equivalent** | Regen may write primary empty-shell but not clobber backup/recovery when gated |
+| 8 | **No historical-recovery claim** without device evidence | `handoffs/GROK.md` history section | n/a (docs) | **equivalent** | Explicit non-claim retained |
+| 9 | **Cloud / account sync append-only** + conflict choice | none — GitHub path is `LocalStorageStore` / in-memory only | n/a | **missing** | No cloud append path, no account-linked save, no conflict UI/choice. Base44 cloud append-only contract is **not** on GitHub #30; localStorage-only durability. CoS GO: rate explicitly **missing**. |
 
-### Direct production gate tests
+### #30 harden tip `1cc1ee5` (P0-A / P0-B — 2026-09-14)
 
-New `src/economy/config.test.ts`: asserts `STAR_GATE_WORLD_2/3/4 === 10/20/30` and `DEFAULT_ECONOMY.worldStarGates` (not map injects).
+Lineage: protection `82a729c` → throw-safety `bf3f62e` / docs `30eb731` → this tip `1cc1ee5`. Schema **v2** + economy contracts unchanged. **ready-for-non-draft = no**.
 
-### Tip
+**P0-A — read failure ≠ missing key**
+- `safeReadResult`: **found** / **missing** / **unavailable** (throw). `LocalStorageStore.read` propagates getItem throws / absent storage (not null-as-miss).
+- `SaveLoadStatus.storageReadable`; Economy session with `storageReadable=false` sets `allowDurableWrites=false` — **never** fallback primary or backup writes (regen/commit in-memory only; `lastPersistOk=false`).
+- Test: seeded primary+backup map; getItem throws, setItem succeeds; Economy+regen; backing bytes **exactly unchanged**; persistence unavailable.
 
-**Tip SHA:** `13c5ee6` on `feat/academy-reprice-star-gates` / draft #28.
+**P0-B — failed recovery preserve blocks ALL durable fallback writes**
+- `preserveRecoveryRawOnce` returns boolean after write+confirm; `hasRecoveryRaw` / `recoverySecured` only from confirmed existing or successful preserve (never hard-coded `true`).
+- Unreadable primary + no valid backup + recovery not secured → block **SAVE_KEY** as well as backup mirror; retain `pendingRecoveryRaw` in memory for retry preserve.
+- Valid backup recovery may still restore primary.
+- Test: recovery key writes fail, SAVE_KEY would succeed; original primary raw unchanged; no empty backup; `hasRecoveryRaw`/`recoverySecured` false; `lastPersistOk` false; no throw.
 
-**Tests after gate asserts:** 58 files / **481 passed** (478 baseline + 3 direct gate tests). Still short of 485; not padded.
+**Also**
+- `LocalStorageStore`: `lastWriteOk=false` when `localStorage` absent (optional-chaining no-op no longer looks like success).
+- Generational backup: park previous validated primary into `SAVE_BACKUP_KEY` before replacing primary; bootstrap duplicate only when backup missing — do not always mirror newest into both keys.
+- Explicit load status: `storageReadable`, `recoverySecured` (+ `pendingRecoveryRaw` on load result).
+
+**Out of scope (unchanged):** cloud, Capacitor Preferences, multi-tab, Base44, ChronosGlobe, old UI.
+
+**Files:** `src/economy/save.ts`, `src/economy/economy.ts`, `src/economy/save-recovery.test.ts`, `handoffs/GROK.md`.
+
+**Base44 mirror delta notes:** GitHub-only. These gates are **stricter** than the prior GitHub tip (`bf3f62e`) and may diverge from live Base44 until Codex ports: (1) tri-state read / no write on read-unavailable, (2) block empty SAVE_KEY until recovery secured, (3) generational backup vs newest-duplicate mirror. Cloud append-only / conflict choice remains **missing** on GitHub. Grok will not touch Base44/ChronosGlobe.
+
+### #30 finalization tip (CoS GO checklist)
+
+Protection lineage **`82a729c`**. This tip adds focused edges + minimal production hardening (still draft; no merge):
+
+**Exact behavior**
+1. **Corrupt backup:** primary unreadable AND `SAVE_BACKUP_KEY` malformed JSON → no crash; `preserveRecoveryRawOnce` attempted safely first; runtime `emptySave`; corrupt backup **never** promoted; recovery raw exportable when storage permits; empty-fallback does not mirror over corrupt backup.
+2. **Throwing / unavailable Storage:** `getItem`/`setItem`/`removeItem` failures (private/quota) — `LocalStorageStore` never throws; does **not** clear existing keys on failure; `writeSave` returns `boolean`; `Economy.lastPersistOk` + `LocalStorageStore.lastWriteOk` make failed persistence observable (no misleading “saved”); `readRecoveryRaw` / `hasRecoveryRaw` / `loadSaveStatus` / Economy ctor never throw solely because storage throws; in-memory session save OK when durable write fails. Throw-on-write MemoryStore: prior valid backup still loads if primary later unreadable.
+3. **Resume-mirror** (small): after empty fallback, first `recordClear` re-enables backup mirror; recovery raw retained for export.
+
+**Out of scope / residual**
+- Base44 **cloud append-only / conflict choice** = **missing** (localStorage only; no cloud append, no conflict UI).
+- Capacitor Preferences **not** in #30.
+- Multi-tab concurrency: follow-up (untested).
+- No old Track B UI beyond existing recovery export chip.
+
+**Files this tip:** `src/economy/save.ts`, `src/economy/economy.ts`, `src/economy/save-recovery.test.ts`, `handoffs/GROK.md`.
+
+### Untested / residual overwrite paths (honest)
+
+| Path | Risk | Coverage gap |
+|---|---|---|
+| `LocalStorageStore` get/set/remove throw (quota/private) | In-memory progress never durable; looks like wipe on relaunch | **Covered** — throw sim + `lastPersistOk` / `writeSave` boolean + ThrowOnWriteStore backup-still-loads |
+| Same-origin / WebView storage clear | Primary + backup + recovery all gone | Unrecoverable by design; not a code bug |
+| Capacitor Preferences vs `localStorage` | Native partition drift if Preferences later wired without migration | Preferences **not wired**; no bridge test |
+| Backup itself corrupt + primary unreadable | Falls through to emptySave; recovery raw still exported | **Covered** — corrupt backup JSON + unreadable primary case |
+| Concurrent multi-tab writes | Last writer wins; backup may lag | Untested |
+| `mirrorBackup` re-enabled after empty fallback once player earns progress | Correct intent; old recovery raw retained for export only | **Covered** — resume-mirror after `recordClear` case |
+| Opening-screen / map **Export save** UX | Player discoverability | Manual / DOM only — no Playwright |
+| **Cloud / account sync append-only + conflict choice** | Cross-device / multi-client durability & merge | **missing** on GitHub (localStorage only) — Base44-owned; not in #30 |
+
+### Codex select/adapt/reject ask
+
+Review GitHub protection `82a729c` + harden tip `1cc1ee5` (after `bf3f62e`) vs live Base44 app. Closest remaining gaps: **Base44 port of P0-A/P0-B gates**, **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Tri-state reads + recovery-secured write gate + generational backup covered on GitHub; PR #30 stays DRAFT / MERGE HOLD.
+

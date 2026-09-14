@@ -3,10 +3,13 @@ import { furthestReached } from "./unlocks.js";
 import { DEFAULT_ECONOMY, livesActiveFor, starsFor, type EconomyConfig } from "./config.js";
 import {
   EMPTY_PROGRESS,
-  loadSave,
+  hasRecoveryRaw as storeHasRecoveryRaw,
+  loadSaveStatus,
+  preserveRecoveryRawOnce,
   writeSave,
   type LevelProgress,
   type SaveData,
+  type SaveLoadStatus,
   type SaveStore,
 } from "./save.js";
 
@@ -38,6 +41,35 @@ const MINUTE = 60_000;
 export class Economy {
   private save: SaveData;
 
+  /**
+   * Whether commit should mirror primary → backup (generational park).
+   * False only while running on an emptySave fallback after an unreadable
+   * primary with no valid backup — so ctor regenerate cannot wipe recovery
+   * or replace a still-valid backup with an empty shell. Flips on once the
+   * player earns real progress (or when load recovered from backup).
+   */
+  private mirrorBackup: boolean;
+
+  /**
+   * When false, commit updates in-memory state only — no durable primary or
+   * backup writes. Set for read-unavailable sessions, and for empty fallback
+   * until recovery is genuinely secured.
+   */
+  private allowDurableWrites: boolean;
+
+  /**
+   * False when the last durable writeSave failed (quota/private/throw) or when
+   * durable writes are blocked for the session. In-memory `state` may still be
+   * current — do not claim "saved" when false.
+   */
+  private persistOk = true;
+
+  private storageReadableFlag: boolean;
+  private recoverySecuredFlag: boolean;
+  private pendingRecoveryRaw: string | null;
+  private readonly recoveredFromBackupFlag: boolean;
+  private readonly primaryUnreadableFlag: boolean;
+
   /** Session-monotonic ms since the player ran out. Not persisted, by design. */
   private lockoutSince: number | null = null;
 
@@ -52,9 +84,74 @@ export class Economy {
      */
     private readonly monotonic: Clock = () => performance.now(),
   ) {
-    this.save = loadSave(store, this.now(), config.maxLives);
+    const loaded = loadSaveStatus(store, this.now(), config.maxLives);
+    this.save = loaded.save;
+    this.storageReadableFlag = loaded.storageReadable;
+    this.recoverySecuredFlag = loaded.recoverySecured;
+    this.pendingRecoveryRaw = loaded.pendingRecoveryRaw;
+    this.recoveredFromBackupFlag = loaded.recoveredFromBackup;
+    this.primaryUnreadableFlag = loaded.primaryUnreadable;
+
+    // P0-A: read-unavailable → never fallback primary/backup writes.
+    // P0-B: unreadable primary + no valid backup + recovery not secured →
+    // block ALL durable fallback writes including SAVE_KEY.
+    // Valid backup recovery may safely restore primary even if preserve failed.
+    if (!loaded.storageReadable) {
+      this.allowDurableWrites = false;
+      this.mirrorBackup = false;
+      this.persistOk = false;
+    } else if (loaded.recoveredFromBackup) {
+      this.allowDurableWrites = true;
+      this.mirrorBackup = true;
+    } else if (loaded.primaryUnreadable && !loaded.recoverySecured) {
+      this.allowDurableWrites = false;
+      this.mirrorBackup = false;
+      this.persistOk = false;
+    } else {
+      // Healthy load, or empty fallback with recovery already secured.
+      this.allowDurableWrites = true;
+      this.mirrorBackup = !loaded.primaryUnreadable || loaded.recoveredFromBackup;
+    }
+
+    if (loaded.recoveredFromBackup && this.allowDurableWrites) {
+      // Restore a healthy primary immediately so later commits are not writing
+      // over corrupt bytes without a validated working copy on SAVE_KEY.
+      this.persistOk = writeSave(this.store, this.save, { mirrorBackup: true });
+    }
     this.regenerate();
     if (this.save.lives <= 0) this.lockoutSince = this.monotonic();
+  }
+
+  /** Load outcome for UI + tests (backup recovery / preserved raw / readability). */
+  get loadStatus(): Omit<SaveLoadStatus, "save" | "pendingRecoveryRaw"> {
+    return {
+      recoveredFromBackup: this.recoveredFromBackupFlag,
+      hasRecoveryRaw: this.recoverySecuredFlag || storeHasRecoveryRaw(this.store),
+      primaryUnreadable: this.primaryUnreadableFlag,
+      storageReadable: this.storageReadableFlag,
+      recoverySecured: this.recoverySecuredFlag || storeHasRecoveryRaw(this.store),
+    };
+  }
+
+  get hasRecoveryRaw(): boolean {
+    return this.recoverySecuredFlag || storeHasRecoveryRaw(this.store);
+  }
+
+  get recoveredFromBackup(): boolean {
+    return this.recoveredFromBackupFlag;
+  }
+
+  get storageReadable(): boolean {
+    return this.storageReadableFlag;
+  }
+
+  get recoverySecured(): boolean {
+    return this.recoverySecuredFlag || storeHasRecoveryRaw(this.store);
+  }
+
+  /** False when the last commit/recover write did not reach durable storage. */
+  get lastPersistOk(): boolean {
+    return this.persistOk;
   }
 
   get state(): SaveData {
@@ -70,9 +167,43 @@ export class Economy {
     return this.save.lives;
   }
 
+  private trySecurePendingRecovery(): void {
+    if (!this.pendingRecoveryRaw) return;
+    if (!preserveRecoveryRawOnce(this.store, this.pendingRecoveryRaw)) return;
+    this.pendingRecoveryRaw = null;
+    this.recoverySecuredFlag = true;
+    // Recovery secured: empty-fallback commits may write SAVE_KEY (not backup
+    // until real progress), matching the secured empty-fallback path.
+    if (this.storageReadableFlag && !this.recoveredFromBackupFlag) {
+      this.allowDurableWrites = true;
+      this.mirrorBackup = false;
+    }
+  }
+
   private commit(next: SaveData): void {
     this.save = next;
-    writeSave(this.store, next);
+
+    if (!this.storageReadableFlag) {
+      this.persistOk = false;
+      return;
+    }
+
+    this.trySecurePendingRecovery();
+
+    if (!this.allowDurableWrites) {
+      this.persistOk = false;
+      return;
+    }
+
+    // Once the player has any progress after an empty fallback, start mirroring
+    // so future healthy commits refresh backup again (generational park).
+    if (
+      !this.mirrorBackup &&
+      (Object.keys(next.levels).length > 0 || next.totalStars > 0 || next.starsSpent > 0)
+    ) {
+      this.mirrorBackup = true;
+    }
+    this.persistOk = writeSave(this.store, next, { mirrorBackup: this.mirrorBackup });
 
     // Track when the lockout started, on a clock the player cannot set.
     if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
@@ -205,7 +336,7 @@ export class Economy {
     this.commit({ ...this.save, lives, lastLifeGrantedAt: now, clockHighWater: now });
   }
 
-    grantAdLife(): boolean {
+  grantAdLife(): boolean {
     this.regenerate();
     if (this.save.lives >= this.config.maxLives) return false;
     this.commit({ ...this.save, lives: this.save.lives + 1 });

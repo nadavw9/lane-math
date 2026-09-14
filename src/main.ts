@@ -5,7 +5,7 @@ import { MapScreen } from "./map/map-screen.js";
 import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
 import { Economy } from "./economy/economy.js";
-import { LocalStorageStore } from "./economy/save.js";
+import { LocalStorageStore, readRecoveryRaw } from "./economy/save.js";
 import { Director } from "./game/director.js";
 import type { Command, InputEvent, LadderLevel, ViewState } from "./game/types.js";
 import { Renderer } from "./renderer/renderer.js";
@@ -66,7 +66,71 @@ const renderer = new Renderer();
 await renderer.init(host);
 
 // One economy for the whole session, persisted to localStorage.
-const economy = new Economy(new LocalStorageStore());
+const saveStore = new LocalStorageStore();
+const economy = new Economy(saveStore);
+
+/**
+ * Hand the preserved unreadable primary raw to the device (P0 SAVE-LOSS).
+ * Same share → clipboard → download ladder as telemetry export.
+ */
+async function downloadRecoverySave(): Promise<string> {
+  const raw = readRecoveryRaw(saveStore);
+  if (raw === null) return "missing";
+  const filename = "lane-math-save-recovery.json";
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      const file =
+        typeof File !== "undefined" ? new File([raw], filename, { type: "application/json" }) : null;
+      if (file && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Lane Math save recovery" });
+        return "share";
+      }
+      await navigator.share({ title: "Lane Math save recovery", text: raw });
+      return "share";
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(raw);
+      return "clipboard";
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return "download";
+  } catch {
+    return "failed";
+  }
+}
+
+/** Opening-screen affordance when a preserved recovery raw exists — minimal DOM chip. */
+function mountRecoveryExportAffordance(): void {
+  if (!economy.hasRecoveryRaw) return;
+  if (document.getElementById("lane-math-recovery-export")) return;
+  const btn = document.createElement("button");
+  btn.id = "lane-math-recovery-export";
+  btn.type = "button";
+  btn.textContent = "Export saved progress";
+  btn.setAttribute("aria-label", "Download preserved save backup");
+  btn.style.cssText =
+    "position:fixed;top:8px;left:8px;z-index:9999;padding:8px 12px;font:600 12px/1.2 system-ui,sans-serif;" +
+    "background:#2a2418;color:#f2e6c9;border:1px solid #c4a35a;border-radius:8px;opacity:0.92;";
+  btn.addEventListener("click", () => {
+    void downloadRecoverySave();
+  });
+  document.body.appendChild(btn);
+}
+mountRecoveryExportAffordance();
+
 
 // §7.8 funnel, local sinks only. The remote sink plugs in at Phase 6 by
 // implementing TelemetrySink and adding it to this list.
@@ -255,6 +319,9 @@ map.attach({
   onSelectMode: (mode) => {
     send({ type: "selectMode", mode: mode as "casual" | "normal" | "expert" });
     map.show(viewWithRestoration());
+  },
+  onDownloadRecovery: () => {
+    void downloadRecoverySave();
   },
 });
 
@@ -649,6 +716,9 @@ Object.assign(window, {
     sprites: () => ({ missing: missingSprites(), loaded: loadedSprites(), failed: failedAtlases() }),
     telemetry: () => localSink.read(),
     exportTelemetry,
+    downloadRecoverySave,
+    hasRecoveryRaw: () => economy.hasRecoveryRaw,
+    loadStatus: () => economy.loadStatus,
     build: BUILD,
     clearTelemetry: () => localSink.clear(),
     offThread: () => winnability.offThread,
