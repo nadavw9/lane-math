@@ -49,6 +49,12 @@ export class Economy {
    */
   private mirrorBackup: boolean;
 
+  /**
+   * False when the last durable writeSave failed (quota/private/throw).
+   * In-memory `state` may still be current — do not claim "saved" when false.
+   */
+  private persistOk = true;
+
   /** Load outcome for UI + tests (backup recovery / preserved raw). */
   readonly loadStatus: Omit<SaveLoadStatus, "save">;
 
@@ -73,7 +79,7 @@ export class Economy {
     if (loaded.recoveredFromBackup) {
       // Restore a healthy primary immediately so later commits are not writing
       // over corrupt bytes without a validated working copy on SAVE_KEY.
-      writeSave(this.store, this.save, { mirrorBackup: true });
+      this.persistOk = writeSave(this.store, this.save, { mirrorBackup: true });
     }
     this.regenerate();
     // Regen may have written; recovery key must still be readable for UI.
@@ -91,6 +97,11 @@ export class Economy {
 
   get recoveredFromBackup(): boolean {
     return this.loadStatus.recoveredFromBackup;
+  }
+
+  /** False when the last commit/recover write did not reach durable storage. */
+  get lastPersistOk(): boolean {
+    return this.persistOk;
   }
 
   get state(): SaveData {
@@ -116,7 +127,7 @@ export class Economy {
     ) {
       this.mirrorBackup = true;
     }
-    writeSave(this.store, next, { mirrorBackup: this.mirrorBackup });
+    this.persistOk = writeSave(this.store, next, { mirrorBackup: this.mirrorBackup });
 
     // Track when the lockout started, on a clock the player cannot set.
     if (next.lives <= 0) this.lockoutSince ??= this.monotonic();

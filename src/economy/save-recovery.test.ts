@@ -205,35 +205,43 @@ describe("save backup / recovery (P0 SAVE-LOSS)", () => {
     store.write(SAVE_KEY, corruptPrimary);
     store.write(SAVE_BACKUP_KEY, corruptBackup);
 
+    // Must not crash; recovery preservation attempted before emptySave.
+    expect(() => loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives)).not.toThrow();
     const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
     expect(loaded.primaryUnreadable).toBe(true);
     expect(loaded.recoveredFromBackup).toBe(false);
     expect(loaded.hasRecoveryRaw).toBe(true);
     expect(loaded.save.totalStars).toBe(0);
     expect(Object.keys(loaded.save.levels)).toHaveLength(0);
-    // Backup must not be treated as valid — left as the corrupt string.
+    // Corrupt backup never promoted as valid — left as the corrupt string.
     expect(store.read(SAVE_BACKUP_KEY)).toBe(corruptBackup);
     expect(readRecoveryRaw(store)).toBe(corruptPrimary);
 
+    expect(() => new Economy(store, () => T0)).not.toThrow();
     const economy = new Economy(store, () => T0);
     expect(economy.recoveredFromBackup).toBe(false);
     expect(economy.hasRecoveryRaw).toBe(true);
     expect(readRecoveryRaw(store)).toBe(corruptPrimary);
-    // Empty-fallback commits must not mirror an empty shell over the corrupt backup
-    // (and must not invent a "valid" backup from emptySave).
+    // Empty-fallback commits must not mirror an empty shell over the corrupt backup.
     expect(store.read(SAVE_BACKUP_KEY)).toBe(corruptBackup);
   });
 
-  it("LocalStorageStore write throw (quota/private) does not crash; in-memory can diverge from durable", () => {
+  it("throwing Storage getItem/setItem/removeItem: Economy does not crash; data not cleared; persist observable", () => {
     const bag = new Map<string, string>();
-    let failWrites = false;
+    let failGet = false;
+    let failSet = false;
+    let failRemove = false;
     const ls = {
-      getItem: (k: string) => bag.get(k) ?? null,
+      getItem: (k: string) => {
+        if (failGet) throw new DOMException("SecurityError");
+        return bag.get(k) ?? null;
+      },
       setItem: (k: string, v: string) => {
-        if (failWrites) throw new DOMException("QuotaExceededError");
+        if (failSet) throw new DOMException("QuotaExceededError");
         bag.set(k, v);
       },
       removeItem: (k: string) => {
+        if (failRemove) throw new DOMException("SecurityError");
         bag.delete(k);
       },
       clear: () => bag.clear(),
@@ -246,52 +254,81 @@ describe("save backup / recovery (P0 SAVE-LOSS)", () => {
     Object.defineProperty(globalThis, "localStorage", { value: ls, configurable: true });
     try {
       const store = new LocalStorageStore();
-      const first = progressSave(5);
-      expect(() => writeSave(store, first)).not.toThrow();
+      // Seed durable progress while storage works.
+      expect(writeSave(store, progressSave(5))).toBe(true);
+      expect(store.lastWriteOk).toBe(true);
       expect(JSON.parse(bag.get(SAVE_KEY)!).totalStars).toBe(10);
-      expect(JSON.parse(bag.get(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
+      const seededPrimary = bag.get(SAVE_KEY)!;
+      const seededBackup = bag.get(SAVE_BACKUP_KEY)!;
 
-      failWrites = true;
-      // Silent catch inside LocalStorageStore — must not surface as a crash.
-      expect(() => writeSave(store, progressSave(12))).not.toThrow();
-      // Durable store unchanged: successful prior write still present.
-      expect(JSON.parse(bag.get(SAVE_KEY)!).totalStars).toBe(10);
-      expect(JSON.parse(bag.get(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
+      // setItem throw: no crash, durable bytes untouched, failure observable.
+      failSet = true;
+      expect(writeSave(store, progressSave(12))).toBe(false);
+      expect(store.lastWriteOk).toBe(false);
+      expect(bag.get(SAVE_KEY)).toBe(seededPrimary);
+      expect(bag.get(SAVE_BACKUP_KEY)).toBe(seededBackup);
 
-      failWrites = false;
+      failSet = false;
       const economy = new Economy(store, () => T0);
       expect(economy.state.totalStars).toBe(10);
-      failWrites = true;
+      failSet = true;
       expect(() => economy.recordClear("1-02")).not.toThrow();
-      // In-memory advanced; durable primary/backup still at pre-throw snapshot.
+      // In-memory session advances; durable store unchanged; not a misleading "saved".
       expect(economy.state.totalStars).toBeGreaterThan(10);
-      expect(JSON.parse(bag.get(SAVE_KEY)!).totalStars).toBe(10);
-      expect(JSON.parse(bag.get(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
-      // Documented risk: relaunch from durable store loses the in-memory delta.
-      failWrites = false;
-      const relaunched = new Economy(new LocalStorageStore(), () => T0);
-      expect(relaunched.state.totalStars).toBe(10);
+      expect(economy.lastPersistOk).toBe(false);
+      expect(bag.get(SAVE_KEY)).toBe(seededPrimary);
+
+      // getItem throw: construct does not crash; must not clear existing bag keys.
+      failGet = true;
+      failSet = true;
+      expect(() => new Economy(new LocalStorageStore(), () => T0)).not.toThrow();
+      expect(bag.get(SAVE_KEY)).toBe(seededPrimary);
+      expect(bag.get(SAVE_BACKUP_KEY)).toBe(seededBackup);
+      // Recovery/export helpers fail safely (no throw).
+      expect(() => readRecoveryRaw(store)).not.toThrow();
+      failRemove = false;
+      expect(() => store.remove(SAVE_RECOVERY_KEY)).not.toThrow(); // no-op if absent
+      failRemove = true;
+      expect(() => store.remove(SAVE_KEY)).not.toThrow();
+      expect(bag.get(SAVE_KEY)).toBe(seededPrimary); // removeItem throw → data not cleared
+
+      // Helpers on a store that throws from SaveStore.read/write:
+      class ThrowingStore implements SaveStore {
+        read(_key: string): string | null {
+          throw new Error("read unavailable");
+        }
+        write(_key: string, _value: string): void {
+          throw new Error("write unavailable");
+        }
+      }
+      const boom = new ThrowingStore();
+      expect(() => readRecoveryRaw(boom)).not.toThrow();
+      expect(readRecoveryRaw(boom)).toBeNull();
+      expect(() => writeSave(boom, emptySave(T0, DEFAULT_ECONOMY.maxLives))).not.toThrow();
+      expect(writeSave(boom, emptySave(T0, DEFAULT_ECONOMY.maxLives))).toBe(false);
+      expect(() => loadSaveStatus(boom, T0, DEFAULT_ECONOMY.maxLives)).not.toThrow();
+      expect(() => new Economy(boom, () => T0)).not.toThrow();
     } finally {
       Object.defineProperty(globalThis, "localStorage", { value: prev, configurable: true });
     }
   });
 
-  it("silent-fail store: prior valid backup still loads when primary later unreadable", () => {
-    /** Memory SaveStore that swallows writes like LocalStorageStore quota/private. */
-    class SilentFailStore implements SaveStore {
+  it("throw-on-write store: prior valid backup still loads when primary later unreadable", () => {
+    /** Memory SaveStore that throws on write (quota/private simulation). */
+    class ThrowOnWriteStore implements SaveStore {
       private readonly map = new Map<string, string>();
       failWrites = false;
       read(key: string): string | null {
         return this.map.get(key) ?? null;
       }
       write(key: string, value: string): void {
-        if (this.failWrites) return;
+        if (this.failWrites) throw new Error("QuotaExceededError");
         this.map.set(key, value);
       }
     }
 
-    const store = new SilentFailStore();
-    writeSave(store, progressSave(15));
+    const store = new ThrowOnWriteStore();
+    expect(writeSave(store, progressSave(15))).toBe(true);
     expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(30);
 
     // Corrupt primary while writes still succeed so recovery raw can be preserved once.
@@ -302,13 +339,14 @@ describe("save backup / recovery (P0 SAVE-LOSS)", () => {
     expect(Object.values(loaded.save.levels).filter((p) => p.cleared).length).toBe(15);
     expect(readRecoveryRaw(store)).toBe("{truncated-primary");
 
-    // Subsequent durable writes fail (quota/private). Economy recover-rewrite is swallowed;
-    // in-memory still comes from the prior valid backup.
+    // Subsequent durable writes fail. Economy recover-rewrite is swallowed;
+    // in-memory still comes from the prior valid backup; existing keys untouched.
     store.failWrites = true;
     const economy = new Economy(store, () => T0);
     expect(economy.recoveredFromBackup).toBe(true);
     expect(economy.state.totalStars).toBe(30);
     expect(economy.hasRecoveryRaw).toBe(true);
+    expect(economy.lastPersistOk).toBe(false);
     expect(store.read(SAVE_KEY)).toBe("{truncated-primary");
     expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(30);
     expect(readRecoveryRaw(store)).toBe("{truncated-primary");

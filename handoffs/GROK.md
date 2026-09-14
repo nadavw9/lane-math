@@ -5,7 +5,7 @@
 **Branch:** `feat/save-backup-recovery`  
 **Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`)  
 **Impl commit (reviewed):** `82a729c` (`82a729ce2cde9b11b79bb56c7017f221edd346e0`)  
-**Docs/handoff tip:**  () — edge tests + cloud-missing row (prior comparison tip `78a3cfa`)  
+**Docs/handoff tip:** `TIP_PENDING` — #30 finalization edges + storage throw safety (prior comparison tip `78a3cfa`)  
 **Writer:** Grok (Eng Lead sole writer on this lane)  
 **Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree.
 
@@ -55,7 +55,7 @@ Behavior:
 - `src/map/model.ts` / `src/map/map-screen.ts` — `hasRecoveryRaw` + Export save chip
 - `src/main.ts` — download recovery + opening affordance + `laneMath` hooks
 
-**Edge-tests tip (tests-only; ):** `save-recovery.test.ts` now **11** tests (+4): corrupt backup JSON, LocalStorageStore throw/diverge, SilentFailStore backup-still-loads, resume-mirror after `recordClear`. `handoffs/GROK.md` rates Base44 **cloud append-only / conflict choice** as **missing** on GitHub. PR #30 remains draft. Impl SHA unchanged `82a729c`.
+**#30 finalization tip (`TIP_PENDING`):** lineage from protection `82a729c` + minimal throw-safety/observability. `save-recovery.test.ts` **11** tests (original 7 + 4 focused). Base44 **cloud append-only / conflict choice** = **missing**. PR #30 stays **DRAFT**. No Base44/ChronosGlobe; no Capacitor Preferences.
 
 ## Exact test / build / lint
 
@@ -113,7 +113,7 @@ Confirmed from git history (still **no device-evidence recovery claim**):
 
 ## Base44 recovery contract comparison (Codex ask — GitHub #30)
 
-Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent** / **stronger** / **weaker** / **missing**. Impl review SHA `82a729c` (docs tip separate).
+Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent** / **stronger** / **weaker** / **missing**. Protection SHA `82a729c`; finalization tip `TIP_PENDING` (throw-safety + edges).
 
 | # | Base44 contract clause | GitHub file(s) | Test coverage | Verdict | Notes |
 |---|---|---|---|---|---|
@@ -127,21 +127,28 @@ Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent**
 | 8 | **No historical-recovery claim** without device evidence | `handoffs/GROK.md` history section | n/a (docs) | **equivalent** | Explicit non-claim retained |
 | 9 | **Cloud / account sync append-only** + conflict choice | none — GitHub path is `LocalStorageStore` / in-memory only | n/a | **missing** | No cloud append path, no account-linked save, no conflict UI/choice. Base44 cloud append-only contract is **not** on GitHub #30; localStorage-only durability. CoS GO: rate explicitly **missing**. |
 
-### Edge tests tip (tests-only; impl still `82a729c`)
+### #30 finalization tip (CoS GO checklist)
 
-Closing GROK comparison gaps from tip `78a3cfa` (tests-only on `feat/save-backup-recovery`; PR #30 stays draft):
+Protection lineage **`82a729c`**. This tip adds focused edges + minimal production hardening (still draft; no merge):
 
-1. **Corrupt backup JSON** + unreadable primary → `emptySave` runtime; recovery raw preserved/exportable; corrupt backup not treated as valid / not mirrored-over by empty fallback.
-2. **Storage throw simulation** — `LocalStorageStore` quota/private `setItem` throw does not crash; silent failure → in-memory can diverge from durable; SilentFail MemoryStore subclass: prior valid backup still loads when primary later unreadable even if recover-write is swallowed.
-3. **Resume-mirror** after empty fallback once player earns progress (`recordClear`) — backup mirroring re-enabled; recovery raw retained for export.
+**Exact behavior**
+1. **Corrupt backup:** primary unreadable AND `SAVE_BACKUP_KEY` malformed JSON → no crash; `preserveRecoveryRawOnce` attempted safely first; runtime `emptySave`; corrupt backup **never** promoted; recovery raw exportable when storage permits; empty-fallback does not mirror over corrupt backup.
+2. **Throwing / unavailable Storage:** `getItem`/`setItem`/`removeItem` failures (private/quota) — `LocalStorageStore` never throws; does **not** clear existing keys on failure; `writeSave` returns `boolean`; `Economy.lastPersistOk` + `LocalStorageStore.lastWriteOk` make failed persistence observable (no misleading “saved”); `readRecoveryRaw` / `hasRecoveryRaw` / `loadSaveStatus` / Economy ctor never throw solely because storage throws; in-memory session save OK when durable write fails. Throw-on-write MemoryStore: prior valid backup still loads if primary later unreadable.
+3. **Resume-mirror** (small): after empty fallback, first `recordClear` re-enables backup mirror; recovery raw retained for export.
 
-Impl review SHA remains **`82a729c`** (no production code change).
+**Out of scope / residual**
+- Base44 **cloud append-only / conflict choice** = **missing** (localStorage only; no cloud append, no conflict UI).
+- Capacitor Preferences **not** in #30.
+- Multi-tab concurrency: follow-up (untested).
+- No old Track B UI beyond existing recovery export chip.
+
+**Files this tip:** `src/economy/save.ts`, `src/economy/economy.ts`, `src/economy/save-recovery.test.ts`, `handoffs/GROK.md`.
 
 ### Untested / residual overwrite paths (honest)
 
 | Path | Risk | Coverage gap |
 |---|---|---|
-| `LocalStorageStore.write` quota/private silent catch | In-memory progress never durable; looks like wipe on relaunch | **Covered** — LocalStorageStore throw sim + SilentFailStore backup-still-loads (`save-recovery.test.ts`) |
+| `LocalStorageStore` get/set/remove throw (quota/private) | In-memory progress never durable; looks like wipe on relaunch | **Covered** — throw sim + `lastPersistOk` / `writeSave` boolean + ThrowOnWriteStore backup-still-loads |
 | Same-origin / WebView storage clear | Primary + backup + recovery all gone | Unrecoverable by design; not a code bug |
 | Capacitor Preferences vs `localStorage` | Native partition drift if Preferences later wired without migration | Preferences **not wired**; no bridge test |
 | Backup itself corrupt + primary unreadable | Falls through to emptySave; recovery raw still exported | **Covered** — corrupt backup JSON + unreadable primary case |
@@ -152,5 +159,5 @@ Impl review SHA remains **`82a729c`** (no production code change).
 
 ### Codex select/adapt/reject ask
 
-Review GitHub impl `82a729c` vs live Base44 app `6aa7c38d569a74337f54f559` recovery contract. Closest gaps to weigh: **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Corrupt-backup + storage-throw + resume-mirror edges now covered in tests (impl SHA unchanged).
+Review GitHub protection `82a729c` + finalization tip `TIP_PENDING` vs live Base44 app `6aa7c38d569a74337f54f559`. Closest remaining gaps: **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Corrupt-backup + storage-throw + persist observability + resume-mirror covered.
 

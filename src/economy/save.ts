@@ -134,18 +134,39 @@ export class MemoryStore implements SaveStore {
 }
 
 export class LocalStorageStore implements SaveStore {
+  /**
+   * False when the most recent `write` was swallowed (quota / private mode).
+   * Callers must not claim "saved" when this is false.
+   */
+  lastWriteOk = true;
+
   read(key: string): string | null {
     try {
       return globalThis.localStorage?.getItem(key) ?? null;
     } catch {
+      // getItem throw (private/unavailable) — treat as miss; never clear keys.
       return null;
     }
   }
   write(key: string, value: string): void {
     try {
       globalThis.localStorage?.setItem(key, value);
+      this.lastWriteOk = true;
     } catch {
       // Private mode or a full quota. Losing progress is bad; crashing is worse.
+      // Do not removeItem / clear — existing durable bytes stay untouched.
+      this.lastWriteOk = false;
+    }
+  }
+  /**
+   * Best-effort remove for future callers. Never throws; on failure leaves
+   * existing data in place (does not clear other keys).
+   */
+  remove(key: string): void {
+    try {
+      globalThis.localStorage?.removeItem(key);
+    } catch {
+      /* private/unavailable — leave store untouched */
     }
   }
 }
@@ -208,22 +229,44 @@ function tryParseMigrate(raw: string): SaveData | null {
   }
 }
 
+function safeRead(store: SaveStore, key: string): string | null {
+  try {
+    return store.read(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeWrite(store: SaveStore, key: string, value: string): boolean {
+  try {
+    store.write(key, value);
+  } catch {
+    return false;
+  }
+  // LocalStorageStore swallows quota/private throws internally — surface via lastWriteOk.
+  if (store instanceof LocalStorageStore) return store.lastWriteOk;
+  return true;
+}
+
 function refreshBackup(store: SaveStore, validated: SaveData): void {
-  store.write(SAVE_BACKUP_KEY, JSON.stringify(validated));
+  safeWrite(store, SAVE_BACKUP_KEY, JSON.stringify(validated));
 }
 
 /** Preserve the first unreadable primary raw; never replace a later failure. */
 function preserveRecoveryRawOnce(store: SaveStore, raw: string): void {
-  if (store.read(SAVE_RECOVERY_KEY) !== null) return;
-  store.write(SAVE_RECOVERY_KEY, raw);
+  if (safeRead(store, SAVE_RECOVERY_KEY) !== null) return;
+  // Best-effort: if storage throws/quota, still proceed to emptySave/backup try.
+  safeWrite(store, SAVE_RECOVERY_KEY, raw);
 }
 
+/** Never throws — unavailable storage → null (export helpers stay safe). */
 export function readRecoveryRaw(store: SaveStore): string | null {
-  return store.read(SAVE_RECOVERY_KEY);
+  return safeRead(store, SAVE_RECOVERY_KEY);
 }
 
+/** Never throws. */
 export function hasRecoveryRaw(store: SaveStore): boolean {
-  return store.read(SAVE_RECOVERY_KEY) !== null;
+  return safeRead(store, SAVE_RECOVERY_KEY) !== null;
 }
 
 export interface WriteSaveOptions {
@@ -240,13 +283,18 @@ export interface WriteSaveOptions {
  * Persist a working save. By default mirrors to backup (healthy path).
  * Pass `{ mirrorBackup: false }` for empty/fallback commits that must not
  * clobber a validated backup.
+ *
+ * Returns true when the primary write succeeded. False means durable store
+ * may lag in-memory (quota/private/throw) — do not claim "saved".
+ * Never throws; never clears existing keys on failure.
  */
-export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): void {
+export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): boolean {
   const payload = JSON.stringify(data);
-  store.write(SAVE_KEY, payload);
-  if (opts.mirrorBackup === false) return;
+  const primaryOk = safeWrite(store, SAVE_KEY, payload);
+  if (opts.mirrorBackup === false) return primaryOk;
   // Never park corrupt JSON in backup — SaveData always serialises cleanly.
-  store.write(SAVE_BACKUP_KEY, payload);
+  const backupOk = safeWrite(store, SAVE_BACKUP_KEY, payload);
+  return primaryOk && backupOk;
 }
 
 /**
@@ -258,8 +306,8 @@ export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptio
  * 4. No backup → emptySave for runtime; recovery raw survives later writes.
  */
 export function loadSaveStatus(store: SaveStore, now: number, maxLives: number): SaveLoadStatus {
-  const recoveryPresent = () => store.read(SAVE_RECOVERY_KEY) !== null;
-  const raw = store.read(SAVE_KEY);
+  const recoveryPresent = () => safeRead(store, SAVE_RECOVERY_KEY) !== null;
+  const raw = safeRead(store, SAVE_KEY);
 
   if (raw === null) {
     return {
@@ -284,7 +332,7 @@ export function loadSaveStatus(store: SaveStore, now: number, maxLives: number):
   // Unreadable: JSON fail, migrate null, or unsupported newer schema.
   preserveRecoveryRawOnce(store, raw);
 
-  const backupRaw = store.read(SAVE_BACKUP_KEY);
+  const backupRaw = safeRead(store, SAVE_BACKUP_KEY);
   if (backupRaw !== null) {
     const fromBackup = tryParseMigrate(backupRaw);
     if (fromBackup) {
