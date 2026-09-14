@@ -5,7 +5,7 @@
 **Branch:** `feat/save-backup-recovery`  
 **Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`)  
 **Impl commit (reviewed):** `82a729c` (`82a729ce2cde9b11b79bb56c7017f221edd346e0`)  
-**Docs/handoff tip:** `TIP_PENDING` — #30 finalization edges + storage throw safety (prior comparison tip `78a3cfa`)  
+**Docs/handoff tip:** `bf3f62e` (`bf3f62eddb6a8f67ffec2da3fbaadf0fc6fe91e0`) — #30 finalization edges + storage throw safety (prior comparison tip `78a3cfa`)  
 **Writer:** Grok (Eng Lead sole writer on this lane)  
 **Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree.
 
@@ -55,7 +55,7 @@ Behavior:
 - `src/map/model.ts` / `src/map/map-screen.ts` — `hasRecoveryRaw` + Export save chip
 - `src/main.ts` — download recovery + opening affordance + `laneMath` hooks
 
-**#30 finalization tip (`TIP_PENDING`):** lineage from protection `82a729c` + minimal throw-safety/observability. `save-recovery.test.ts` **11** tests (original 7 + 4 focused). Base44 **cloud append-only / conflict choice** = **missing**. PR #30 stays **DRAFT**. No Base44/ChronosGlobe; no Capacitor Preferences.
+**#30 finalization tip (`bf3f62e`):** lineage from protection `82a729c` + minimal throw-safety/observability. `save-recovery.test.ts` **11** tests (original 7 + 4 focused). Base44 **cloud append-only / conflict choice** = **missing**. PR #30 stays **DRAFT**. No Base44/ChronosGlobe; no Capacitor Preferences.
 
 ## Exact test / build / lint
 
@@ -113,7 +113,7 @@ Confirmed from git history (still **no device-evidence recovery claim**):
 
 ## Base44 recovery contract comparison (Codex ask — GitHub #30)
 
-Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent** / **stronger** / **weaker** / **missing**. Protection SHA `82a729c`; finalization tip `TIP_PENDING` (throw-safety + edges).
+Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent** / **stronger** / **weaker** / **missing**. Protection SHA `82a729c`; finalization tip `bf3f62e` (throw-safety + edges).
 
 | # | Base44 contract clause | GitHub file(s) | Test coverage | Verdict | Notes |
 |---|---|---|---|---|---|
@@ -159,5 +159,5 @@ Protection lineage **`82a729c`**. This tip adds focused edges + minimal producti
 
 ### Codex select/adapt/reject ask
 
-Review GitHub protection `82a729c` + finalization tip `TIP_PENDING` vs live Base44 app `6aa7c38d569a74337f54f559`. Closest remaining gaps: **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Corrupt-backup + storage-throw + persist observability + resume-mirror covered.
+Review GitHub protection `82a729c` + finalization tip `bf3f62e` vs live Base44 app `6aa7c38d569a74337f54f559`. Closest remaining gaps: **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Corrupt-backup + storage-throw + persist observability + resume-mirror covered.
 
