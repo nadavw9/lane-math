@@ -5,9 +5,19 @@
  * migration precedent)." The migration hook below has nothing to migrate yet;
  * that is the point. Adding versioning after saves exist in the wild is the
  * expensive path, and the cost of writing it now is a switch with one arm.
+ *
+ * Backup / recovery (P0 SAVE-LOSS): a single primary key used to be both the
+ * only copy and the write target. loadSave → emptySave → Economy.regenerate →
+ * writeSave could overwrite an unreadable primary and destroy the only raw
+ * payload. Backup holds the last validated primary; recovery holds the first
+ * unreadable raw string and is never replaced by later failures.
  */
 export const SAVE_SCHEMA_VERSION = 2;
 export const SAVE_KEY = "lane-math.save.v1";
+/** Previous validated primary — written only after parse+migrate success. */
+export const SAVE_BACKUP_KEY = "lane-math.save.backup.v1";
+/** First unreadable raw primary payload — written once, never replaced. */
+export const SAVE_RECOVERY_KEY = "lane-math.save.recovery.v1";
 
 export interface LevelProgress {
   /** Best rating achieved. Replays may improve it (Candy Crush model, §5.1). */
@@ -60,6 +70,16 @@ export interface SaveData {
    * needed.
    */
   readonly muted: boolean;
+}
+
+export interface SaveLoadStatus {
+  readonly save: SaveData;
+  /** True when primary was unreadable and a validated backup was used instead. */
+  readonly recoveredFromBackup: boolean;
+  /** True when SAVE_RECOVERY_KEY holds a preserved unreadable raw payload. */
+  readonly hasRecoveryRaw: boolean;
+  /** True when primary was missing-parse/migrate failure (not a clean miss). */
+  readonly primaryUnreadable: boolean;
 }
 
 export const EMPTY_PROGRESS: LevelProgress = {
@@ -180,18 +200,111 @@ export function migrate(raw: unknown): SaveData | null {
   };
 }
 
-export function loadSave(store: SaveStore, now: number, maxLives: number): SaveData {
-  const raw = store.read(SAVE_KEY);
-  if (raw === null) return emptySave(now, maxLives);
+function tryParseMigrate(raw: string): SaveData | null {
   try {
-    const migrated = migrate(JSON.parse(raw));
-    return migrated ?? emptySave(now, maxLives);
+    return migrate(JSON.parse(raw));
   } catch {
-    // Corrupt save. Starting clean beats refusing to launch.
-    return emptySave(now, maxLives);
+    return null;
   }
 }
 
-export function writeSave(store: SaveStore, data: SaveData): void {
-  store.write(SAVE_KEY, JSON.stringify(data));
+function refreshBackup(store: SaveStore, validated: SaveData): void {
+  store.write(SAVE_BACKUP_KEY, JSON.stringify(validated));
+}
+
+/** Preserve the first unreadable primary raw; never replace a later failure. */
+function preserveRecoveryRawOnce(store: SaveStore, raw: string): void {
+  if (store.read(SAVE_RECOVERY_KEY) !== null) return;
+  store.write(SAVE_RECOVERY_KEY, raw);
+}
+
+export function readRecoveryRaw(store: SaveStore): string | null {
+  return store.read(SAVE_RECOVERY_KEY);
+}
+
+export function hasRecoveryRaw(store: SaveStore): boolean {
+  return store.read(SAVE_RECOVERY_KEY) !== null;
+}
+
+export interface WriteSaveOptions {
+  /**
+   * When false, write primary only — do not replace backup. Used when the
+   * runtime fell back to emptySave after an unreadable primary so a valid
+   * backup (or an absent one) is not overwritten by an empty shell, and so a
+   * ctor clock refresh cannot destroy the only remaining progress copy.
+   */
+  readonly mirrorBackup?: boolean;
+}
+
+/**
+ * Persist a working save. By default mirrors to backup (healthy path).
+ * Pass `{ mirrorBackup: false }` for empty/fallback commits that must not
+ * clobber a validated backup.
+ */
+export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): void {
+  const payload = JSON.stringify(data);
+  store.write(SAVE_KEY, payload);
+  if (opts.mirrorBackup === false) return;
+  // Never park corrupt JSON in backup — SaveData always serialises cleanly.
+  store.write(SAVE_BACKUP_KEY, payload);
+}
+
+/**
+ * Load with backup/recovery protection.
+ *
+ * 1. Successful primary parse+migrate → refresh backup from validated save.
+ * 2. Unreadable primary → stash exact raw in recovery once, then try backup.
+ * 3. Valid backup → use as working save (caller should rewrite primary).
+ * 4. No backup → emptySave for runtime; recovery raw survives later writes.
+ */
+export function loadSaveStatus(store: SaveStore, now: number, maxLives: number): SaveLoadStatus {
+  const recoveryPresent = () => store.read(SAVE_RECOVERY_KEY) !== null;
+  const raw = store.read(SAVE_KEY);
+
+  if (raw === null) {
+    return {
+      save: emptySave(now, maxLives),
+      recoveredFromBackup: false,
+      hasRecoveryRaw: recoveryPresent(),
+      primaryUnreadable: false,
+    };
+  }
+
+  const migrated = tryParseMigrate(raw);
+  if (migrated) {
+    refreshBackup(store, migrated);
+    return {
+      save: migrated,
+      recoveredFromBackup: false,
+      hasRecoveryRaw: recoveryPresent(),
+      primaryUnreadable: false,
+    };
+  }
+
+  // Unreadable: JSON fail, migrate null, or unsupported newer schema.
+  preserveRecoveryRawOnce(store, raw);
+
+  const backupRaw = store.read(SAVE_BACKUP_KEY);
+  if (backupRaw !== null) {
+    const fromBackup = tryParseMigrate(backupRaw);
+    if (fromBackup) {
+      return {
+        save: fromBackup,
+        recoveredFromBackup: true,
+        hasRecoveryRaw: true,
+        primaryUnreadable: true,
+      };
+    }
+  }
+
+  return {
+    save: emptySave(now, maxLives),
+    recoveredFromBackup: false,
+    hasRecoveryRaw: true,
+    primaryUnreadable: true,
+  };
+}
+
+export function loadSave(store: SaveStore, now: number, maxLives: number): SaveData {
+  return loadSaveStatus(store, now, maxLives).save;
 }

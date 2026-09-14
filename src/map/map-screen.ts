@@ -63,6 +63,8 @@ export interface MapEvents {
   readonly onSelectMode: (mode: string) => void;
   /** Buy the next Academy object in this world (ART_DIRECTION §6). */
   readonly onRestore: (world: number) => void;
+  /** Download the first preserved unreadable primary raw (P0 SAVE-LOSS). */
+  readonly onDownloadRecovery?: () => void;
 }
 
 /** §1's names for the four rooms. The map shows the room; it should say so. */
@@ -799,6 +801,14 @@ export class MapScreen {
     this.chip(DESIGN.width - PAD - 84, SAFE_TOP + 30, 84, 20, muteLabel, () =>
       this.events?.onToggleMute(),
     );
+
+    // Minimal recovery export — only when a preserved unreadable raw exists.
+    // No visual redesign: same chip language as mute, left of it.
+    if (v.hasRecoveryRaw && this.events?.onDownloadRecovery) {
+      this.chip(DESIGN.width - PAD - 84 - 8 - 96, SAFE_TOP + 30, 96, 20, "Export save", () =>
+        this.events?.onDownloadRecovery?.(),
+      );
+    }
 
     // --- the ladder: four worlds, ten levels each ---
     let y = SAFE_TOP + 58 + 14;

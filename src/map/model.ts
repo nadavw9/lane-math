@@ -49,6 +49,8 @@ export interface MapView {
   /** Cost of each room's next object, or null when finished or locked (§6). */
   readonly restoreCost: Readonly<Record<number, number | null>>;
   readonly worldGates: Readonly<Record<number, number>>;
+  /** Preserved unreadable primary raw exists — show export affordance. */
+  readonly hasRecoveryRaw: boolean;
 }
 
 export const WORLDS = [1, 2, 3, 4] as const;
@@ -126,5 +128,6 @@ export function mapView(economy: Economy, ids: readonly string[]): MapView {
     showModes: unlocks.modeSelector,
     mode: save.selectedMode,
     furthest: furthestReached(save) || ids[0]!,
+    hasRecoveryRaw: economy.hasRecoveryRaw,
   };
 }
