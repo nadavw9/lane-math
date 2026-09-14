@@ -108,3 +108,11 @@ Capture: Playwright phone viewport `393×852` @ DPR 3, `?sprites=1`, seed `docs/
 ## Prior Track A (merged)
 
 Academy reprice + star gates landed via PR #28 @ `cce5602`.
+
+## FREEZE (2026-09-14 CoS / Codex)
+
+**Track B UI FROZEN** in old GitHub Pixi presentation layer. Base44 UI has diverged; Codex validates visuals there.
+- No more toast/mascot commits on this branch.
+- Impl remains `dff2b98`; soft parks parked.
+- MERGE HOLD — do not merge from Eng; Codex owns Base44 sync decision.
+
