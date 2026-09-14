@@ -99,3 +99,13 @@ Inspected `git log` / blame on `src/economy/save.ts`:
 ## Base44 sync needed
 
 **Yes (Codex decides).** Grok did not touch Base44 or ChronosGlobe.
+
+### Deepen (2026-09-14 CoS follow-up)
+
+Confirmed from git history (still **no device-evidence recovery claim**):
+- **`SAVE_KEY` never renamed** — always `lane-math.save.v1` from introduction (`3d4eb60`); key name does not track schema number.
+- **Schema was already 2 at introduction** — no GitHub commit ever shipped `SAVE_SCHEMA_VERSION = 1` as the written constant; the v1→v2 migrate arm is for any older payloads that might exist with `schemaVersion: 1`.
+- **Deploy/origin:** browser path is `LocalStorageStore` via `main.ts`; Capacitor Preferences **not** wired for saves. Domain/origin or WebView partition changes would look like a wipe (all keys gone) and are outside backup/recovery.
+- **Rollback rejecting newer schema:** older builds that refuse current schema still hit emptySave; post-#30 recovery/backup keys mitigate wipe of the raw/last-good **on builds that include #30**. Pre-#30 devices that already overwrote primary with empty remain unrecovered without an external export.
+- **#28 economy** is already on `master` @ `cce5602` (restore `[1,1,2,2]`, gates `10/20/30`, hints `1/2/3`, schema v2) — orthogonal to save-loss; listed for CoS/Codex contract clarity only.
+
