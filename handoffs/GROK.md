@@ -3,7 +3,7 @@
 **Status:** DONE — draft PR open  
 **Branch:** `feat/academy-reprice-star-gates`  
 **Base:** `origin/master` @ `1ad4889` (no merge to master)  
-**Tip SHA:** (filled after commit)  
+**Tip SHA:** `69d9563a5aa7eaaf3a7efc73929b17e2eb6b12bb` (`69d9563`)  
 **Writer:** Grok (one-writer lane)  
 **Out of scope this run:** Track B (toast/mascot), Base44, `handoffs/CODEX.md`
 
