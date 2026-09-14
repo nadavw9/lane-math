@@ -26,10 +26,10 @@ export interface EconomyConfig {
   readonly hintAdUnlockLevelId: string;
 }
 
-/** Product placeholders from the FTUE/monetization brief until tuned totals land. */
+/** World star gates: W2/W3/W4 = 10/20/30 (Track A reprice). */
 export const STAR_GATE_WORLD_2 = 10;
-export const STAR_GATE_WORLD_3 = 25;
-export const STAR_GATE_WORLD_4 = 40;
+export const STAR_GATE_WORLD_3 = 20;
+export const STAR_GATE_WORLD_4 = 30;
 
 export const DEFAULT_WORLD_STAR_GATES: Readonly<Record<number, number>> = {
   1: 0,

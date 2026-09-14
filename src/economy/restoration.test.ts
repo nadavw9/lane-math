@@ -36,7 +36,7 @@ function player(stars: number, furthest = "4-01"): { economy: Economy; store: Me
 }
 
 describe("Academy restoration (ART_DIRECTION §6)", () => {
-  it("prices 2/2/3/3 and takes 10★ to finish a room", () => {
+  it("prices 1/1/2/2 and takes 6★ to finish a room", () => {
     const { economy } = player(40);
     const before = economy.starsAvailable;
     expect(before).toBe(40);
@@ -45,8 +45,8 @@ describe("Academy restoration (ART_DIRECTION §6)", () => {
       costs.push(economy.nextRestoreCost(1)!);
       expect(economy.restore(1)).toBe(true);
     }
-    expect(costs).toEqual([2, 2, 3, 3]);
-    expect(before - economy.starsAvailable).toBe(10);
+    expect(costs).toEqual([1, 1, 2, 2]);
+    expect(before - economy.starsAvailable).toBe(6);
     expect(economy.restoredIn(1)).toBe(4);
     // A finished room has nothing left to sell.
     expect(economy.nextRestoreCost(1)).toBeNull();
@@ -70,9 +70,9 @@ describe("Academy restoration (ART_DIRECTION §6)", () => {
   });
 
   it("cannot spend the same star twice", () => {
-    // Exactly enough for one 2★ object and nothing more.
-    const { economy } = player(2);
-    expect(economy.starsAvailable).toBe(2);
+    // Exactly enough for one 1★ object and nothing more.
+    const { economy } = player(1);
+    expect(economy.starsAvailable).toBe(1);
     expect(economy.restore(1)).toBe(true);
     expect(economy.starsAvailable).toBe(0);
     // The second purchase is refused, and refused WITHOUT moving the count.
@@ -82,8 +82,8 @@ describe("Academy restoration (ART_DIRECTION §6)", () => {
   });
 
   it("shares one pool with hints, in both directions", () => {
-    const { economy } = player(4);
-    expect(economy.restore(1)).toBe(true); // 2★
+    const { economy } = player(3);
+    expect(economy.restore(1)).toBe(true); // 1★
     expect(economy.starsAvailable).toBe(2);
 
     // A 3★ hint is now unaffordable because restoration took the stars.

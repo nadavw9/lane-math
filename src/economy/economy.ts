@@ -357,12 +357,12 @@ export class Economy {
   /**
    * ACADEMY RESTORATION (ART_DIRECTION §6).
    *
-   * Prices are 2/2/3/3 per room — 10★ a world, 40★ across the ladder — set
+   * Prices are 1/1/2/2 per room — 6★ a world, 24★ across the ladder — set
    * against the STRUGGLING player's income rather than the 120★ ceiling, so
    * someone earning one star a level finishes the Academy as they finish the
-   * game.
+   * game. (Track A reprice from 2/2/3/3 totaling 10★/room.)
    */
-  static readonly RESTORE_COSTS: readonly number[] = [2, 2, 3, 3];
+  static readonly RESTORE_COSTS: readonly number[] = [1, 1, 2, 2];
 
   /** Objects restored in a world, 0-4. */
   restoredIn(world: number): number {
