@@ -178,7 +178,7 @@ Contrast rules from §9.1 still apply, inverted as needed: the gate governs, not
 
 Four objects on one floor line at one size read as a shop shelf. Four staged in depth read as a room.
 
-**Priced off the STRUGGLING income, not the ceiling.** 2/2/3/3 per room, 10★ per world, 40★ total. A struggling player earning ~10★ per world finishes the Academy as they finish the ladder. A perfect player spends 40 of 120★ and keeps 80★ for hints. Pricing off the 120★ ceiling would put objects at 7.5★ and give the struggling player one object per ten levels, which is not a loop.
+**Priced off the STRUGGLING income, not the ceiling.** 1/1/2/2 per room, 6★ per world, 24★ total (Track A reprice from 2/2/3/3 / 10★ / 40★). A struggling player earning ~10★ per world finishes the Academy as they finish the ladder. A perfect player spends 24 of 120★ and keeps the rest for hints. Pricing off the 120★ ceiling would put objects too high and give the struggling player one object per ten levels, which is not a loop.
 
 **Map only.** The board shows 6% room; a restored globe would be invisible in play. Restoration lives in the map's Academy shelf.
 
