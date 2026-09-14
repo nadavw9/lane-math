@@ -5,7 +5,7 @@
 **Branch:** `feat/save-backup-recovery`  
 **Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`)  
 **Impl commit (reviewed):** `82a729c` (`82a729ce2cde9b11b79bb56c7017f221edd346e0`)  
-**Docs/handoff tip:** *(this commit — record separately; do not chase tip in a loop)*  
+**Docs/handoff tip:** `b0e066b` (`b0e066bfbe49f0aaacef1621d338e133164a913a`)  
 **Writer:** Grok (Eng Lead sole writer on this lane)  
 **Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree.
 
