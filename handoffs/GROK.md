@@ -109,3 +109,34 @@ Confirmed from git history (still **no device-evidence recovery claim**):
 - **Rollback rejecting newer schema:** older builds that refuse current schema still hit emptySave; post-#30 recovery/backup keys mitigate wipe of the raw/last-good **on builds that include #30**. Pre-#30 devices that already overwrote primary with empty remain unrecovered without an external export.
 - **#28 economy** is already on `master` @ `cce5602` (restore `[1,1,2,2]`, gates `10/20/30`, hints `1/2/3`, schema v2) — orthogonal to save-loss; listed for CoS/Codex contract clarity only.
 
+## Base44 recovery contract comparison (Codex ask — GitHub #30)
+
+Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent** / **stronger** / **weaker** / **missing**. Impl review SHA `82a729c` (docs tip separate).
+
+| # | Base44 contract clause | GitHub file(s) | Test coverage | Verdict | Notes |
+|---|---|---|---|---|---|
+| 1 | Schema stays **v2** (no healthy-save rewrite) | `src/economy/save.ts` `SAVE_SCHEMA_VERSION = 2` | `save-recovery.test.ts` v1→v2 migrate keeps progress | **equivalent** | No schema bump in #30 |
+| 2 | Preserve **first unreadable raw before parse** succeeds | `preserveRecoveryRawOnce` → `SAVE_RECOVERY_KEY` in `save.ts`; called in `loadSaveStatus` before backup try | "unsupported-newer…preserved"; "first recovery raw is not overwritten…" | **equivalent** | Exact string; never replaced by later failures |
+| 3 | Keep **latest valid backup** | `SAVE_BACKUP_KEY`; `refreshBackup` on successful primary; `writeSave` mirrors by default | "healthy writeSave mirrors backup…"; malformed+backup load | **equivalent** | Backup = last validated SaveData JSON |
+| 4 | **Never empty-overwrite** before recovery secured | `writeSave(..., { mirrorBackup: false })`; Economy ctor sets `mirrorBackup = !primaryUnreadable \|\| recoveredFromBackup` | "corrupt / empty write path cannot replace a valid backup"; ctor recovery survival | **equivalent** | Empty fallback commits skip backup mirror; recovery key untouched by writeSave |
+| 5 | **Auto-recover from backup** when primary unreadable | `loadSaveStatus` tries backup after preserve; Economy ctor rewrites healthy primary if `recoveredFromBackup` | "malformed primary + valid backup → loads backup progress" | **equivalent** | Auto in load path; primary rewritten on recover |
+| 6 | **Raw export** for player | `readRecoveryRaw` / `hasRecoveryRaw`; `main.ts` `downloadRecoverySave` + opening DOM; map chip via `hasRecoveryRaw` | Unit coverage on key presence; **UI click/download not automated** | **weaker** (UI) / **equivalent** (API) | Export API present; no e2e that the download button fires |
+| 7 | **Economy regen not a destructive write** of only raw / last-good | ctor: load → optional recover write → `regenerate()` with mirrorBackup gate | "ctor clock refresh cannot destroy the only raw copy" | **equivalent** | Regen may write primary empty-shell but not clobber backup/recovery when gated |
+| 8 | **No historical-recovery claim** without device evidence | `handoffs/GROK.md` history section | n/a (docs) | **equivalent** | Explicit non-claim retained |
+
+### Untested / residual overwrite paths (honest)
+
+| Path | Risk | Coverage gap |
+|---|---|---|
+| `LocalStorageStore.write` quota/private silent catch | In-memory progress never durable; looks like wipe on relaunch | No test that simulates Storage throw mid-write |
+| Same-origin / WebView storage clear | Primary + backup + recovery all gone | Unrecoverable by design; not a code bug |
+| Capacitor Preferences vs `localStorage` | Native partition drift if Preferences later wired without migration | Preferences **not wired**; no bridge test |
+| Backup itself corrupt + primary unreadable | Falls through to emptySave; recovery raw still exported | No dedicated "corrupt backup JSON" case (only missing/valid backup) |
+| Concurrent multi-tab writes | Last writer wins; backup may lag | Untested |
+| `mirrorBackup` re-enabled after empty fallback once player earns progress | Correct intent; old recovery raw retained for export only | Partial — corrupt/empty path tested; "resume mirror after first star" not named as its own case |
+| Opening-screen / map **Export save** UX | Player discoverability | Manual / DOM only — no Playwright |
+
+### Codex select/adapt/reject ask
+
+Review GitHub impl `82a729c` vs live Base44 app `6aa7c38d569a74337f54f559` recovery contract. Closest gaps to weigh: **export UX strength**, **corrupt-backup** edge, **storage-throw** simulation, **Capacitor** future wiring.
+
