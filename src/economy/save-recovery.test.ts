@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ECONOMY } from "./config.js";
 import { Economy } from "./economy.js";
 import {
+  LocalStorageStore,
   MemoryStore,
   SAVE_BACKUP_KEY,
   SAVE_KEY,
@@ -14,6 +15,7 @@ import {
   readRecoveryRaw,
   writeSave,
   type SaveData,
+  type SaveStore,
 } from "./save.js";
 
 const T0 = 1_700_000_000_000;
@@ -194,5 +196,143 @@ describe("save backup / recovery (P0 SAVE-LOSS)", () => {
     const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
     expect(loaded.save.totalStars).toBe(18);
     expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(18);
+  });
+
+  it("corrupt backup JSON + unreadable primary → emptySave; recovery raw still exportable", () => {
+    const store = new MemoryStore();
+    const corruptPrimary = "{not-json-primary";
+    const corruptBackup = '{"schemaVersion":2,"levels":'; // truncated / invalid JSON
+    store.write(SAVE_KEY, corruptPrimary);
+    store.write(SAVE_BACKUP_KEY, corruptBackup);
+
+    const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
+    expect(loaded.primaryUnreadable).toBe(true);
+    expect(loaded.recoveredFromBackup).toBe(false);
+    expect(loaded.hasRecoveryRaw).toBe(true);
+    expect(loaded.save.totalStars).toBe(0);
+    expect(Object.keys(loaded.save.levels)).toHaveLength(0);
+    // Backup must not be treated as valid — left as the corrupt string.
+    expect(store.read(SAVE_BACKUP_KEY)).toBe(corruptBackup);
+    expect(readRecoveryRaw(store)).toBe(corruptPrimary);
+
+    const economy = new Economy(store, () => T0);
+    expect(economy.recoveredFromBackup).toBe(false);
+    expect(economy.hasRecoveryRaw).toBe(true);
+    expect(readRecoveryRaw(store)).toBe(corruptPrimary);
+    // Empty-fallback commits must not mirror an empty shell over the corrupt backup
+    // (and must not invent a "valid" backup from emptySave).
+    expect(store.read(SAVE_BACKUP_KEY)).toBe(corruptBackup);
+  });
+
+  it("LocalStorageStore write throw (quota/private) does not crash; in-memory can diverge from durable", () => {
+    const bag = new Map<string, string>();
+    let failWrites = false;
+    const ls = {
+      getItem: (k: string) => bag.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        if (failWrites) throw new DOMException("QuotaExceededError");
+        bag.set(k, v);
+      },
+      removeItem: (k: string) => {
+        bag.delete(k);
+      },
+      clear: () => bag.clear(),
+      key: (_i: number) => null as string | null,
+      get length() {
+        return bag.size;
+      },
+    };
+    const prev = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", { value: ls, configurable: true });
+    try {
+      const store = new LocalStorageStore();
+      const first = progressSave(5);
+      expect(() => writeSave(store, first)).not.toThrow();
+      expect(JSON.parse(bag.get(SAVE_KEY)!).totalStars).toBe(10);
+      expect(JSON.parse(bag.get(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
+
+      failWrites = true;
+      // Silent catch inside LocalStorageStore — must not surface as a crash.
+      expect(() => writeSave(store, progressSave(12))).not.toThrow();
+      // Durable store unchanged: successful prior write still present.
+      expect(JSON.parse(bag.get(SAVE_KEY)!).totalStars).toBe(10);
+      expect(JSON.parse(bag.get(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
+
+      failWrites = false;
+      const economy = new Economy(store, () => T0);
+      expect(economy.state.totalStars).toBe(10);
+      failWrites = true;
+      expect(() => economy.recordClear("1-02")).not.toThrow();
+      // In-memory advanced; durable primary/backup still at pre-throw snapshot.
+      expect(economy.state.totalStars).toBeGreaterThan(10);
+      expect(JSON.parse(bag.get(SAVE_KEY)!).totalStars).toBe(10);
+      expect(JSON.parse(bag.get(SAVE_BACKUP_KEY)!).totalStars).toBe(10);
+      // Documented risk: relaunch from durable store loses the in-memory delta.
+      failWrites = false;
+      const relaunched = new Economy(new LocalStorageStore(), () => T0);
+      expect(relaunched.state.totalStars).toBe(10);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", { value: prev, configurable: true });
+    }
+  });
+
+  it("silent-fail store: prior valid backup still loads when primary later unreadable", () => {
+    /** Memory SaveStore that swallows writes like LocalStorageStore quota/private. */
+    class SilentFailStore implements SaveStore {
+      private readonly map = new Map<string, string>();
+      failWrites = false;
+      read(key: string): string | null {
+        return this.map.get(key) ?? null;
+      }
+      write(key: string, value: string): void {
+        if (this.failWrites) return;
+        this.map.set(key, value);
+      }
+    }
+
+    const store = new SilentFailStore();
+    writeSave(store, progressSave(15));
+    expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(30);
+
+    // Corrupt primary while writes still succeed so recovery raw can be preserved once.
+    store.write(SAVE_KEY, "{truncated-primary");
+    const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
+    expect(loaded.primaryUnreadable).toBe(true);
+    expect(loaded.recoveredFromBackup).toBe(true);
+    expect(Object.values(loaded.save.levels).filter((p) => p.cleared).length).toBe(15);
+    expect(readRecoveryRaw(store)).toBe("{truncated-primary");
+
+    // Subsequent durable writes fail (quota/private). Economy recover-rewrite is swallowed;
+    // in-memory still comes from the prior valid backup.
+    store.failWrites = true;
+    const economy = new Economy(store, () => T0);
+    expect(economy.recoveredFromBackup).toBe(true);
+    expect(economy.state.totalStars).toBe(30);
+    expect(economy.hasRecoveryRaw).toBe(true);
+    expect(store.read(SAVE_KEY)).toBe("{truncated-primary");
+    expect(JSON.parse(store.read(SAVE_BACKUP_KEY)!).totalStars).toBe(30);
+    expect(readRecoveryRaw(store)).toBe("{truncated-primary");
+  });
+
+  it("resume-mirror after empty fallback once player earns progress", () => {
+    const store = new MemoryStore();
+    const raw = '{"schemaVersion":99,"broken":true}';
+    store.write(SAVE_KEY, raw);
+    // No backup → emptySave runtime; mirrorBackup gated off.
+    const economy = new Economy(store, () => T0);
+    expect(economy.recoveredFromBackup).toBe(false);
+    expect(economy.hasRecoveryRaw).toBe(true);
+    expect(store.read(SAVE_BACKUP_KEY)).toBeNull();
+    expect(readRecoveryRaw(store)).toBe(raw);
+
+    const cleared = economy.recordClear("1-01");
+    expect(cleared.totalStars).toBe(3);
+    // First real progress re-enables backup mirroring.
+    const backup = JSON.parse(store.read(SAVE_BACKUP_KEY)!);
+    expect(backup.totalStars).toBe(3);
+    expect(backup.levels["1-01"].cleared).toBe(true);
+    // Old recovery raw remains exportable; not auto-restored into primary.
+    expect(readRecoveryRaw(store)).toBe(raw);
+    expect(economy.hasRecoveryRaw).toBe(true);
   });
 });

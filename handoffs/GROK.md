@@ -5,7 +5,7 @@
 **Branch:** `feat/save-backup-recovery`  
 **Base:** `origin/master` @ `cce5602` (`cce560219117dbd321b46783aa2d7f8656298219`)  
 **Impl commit (reviewed):** `82a729c` (`82a729ce2cde9b11b79bb56c7017f221edd346e0`)  
-**Docs/handoff tip:** `b0e066b` (`b0e066bfbe49f0aaacef1621d338e133164a913a`)  
+**Docs/handoff tip:** edge-tests + cloud-missing row (SHA filled after push; prior comparison tip `78a3cfa`)  
 **Writer:** Grok (Eng Lead sole writer on this lane)  
 **Out of scope / hard rules:** No Base44 edits; no ChronosGlobe; no healthy-save schema rewrite (`SAVE_SCHEMA_VERSION` stays **2**); never write `handoffs/CODEX.md`. Codex = exclusive Base44 writer + final product/architecture integrator. CloudAgent was unavailable — implemented on existing checkout worktree.
 
@@ -55,18 +55,20 @@ Behavior:
 - `src/map/model.ts` / `src/map/map-screen.ts` — `hasRecoveryRaw` + Export save chip
 - `src/main.ts` — download recovery + opening affordance + `laneMath` hooks
 
+**Edge-tests tip (tests-only; this tip):** `save-recovery.test.ts` now **11** tests (+4): corrupt backup JSON, LocalStorageStore throw/diverge, SilentFailStore backup-still-loads, resume-mirror after `recordClear`. `handoffs/GROK.md` rates Base44 **cloud append-only / conflict choice** as **missing** on GitHub. PR #30 remains draft. Impl SHA unchanged `82a729c`.
+
 ## Exact test / build / lint
 
 ```
 npm test       →  vitest run
 Test Files  59 passed (59)
-Tests       488 passed (488)
+Tests       492 passed (492)   # +4 edge cases in save-recovery.test.ts (was 488)
 
 npm run typecheck  →  tsc --noEmit   OK
-npm run build      →  vite build     OK (prebuild levels:build OK)
+npm run build      →  vite build     OK (prebuild levels:build OK)  # not re-run this tip; typecheck+test green
 ```
 
-No separate lint script in `package.json`. Suite green.
+No separate lint script in `package.json`. Suite green. Impl still `82a729c` (tests + handoff only).
 
 ## History inspect (report only — no wild claims)
 
@@ -123,20 +125,32 @@ Compared against Codex Base44 recovery contract clauses. Ratings: **equivalent**
 | 6 | **Raw export** for player | `readRecoveryRaw` / `hasRecoveryRaw`; `main.ts` `downloadRecoverySave` + opening DOM; map chip via `hasRecoveryRaw` | Unit coverage on key presence; **UI click/download not automated** | **weaker** (UI) / **equivalent** (API) | Export API present; no e2e that the download button fires |
 | 7 | **Economy regen not a destructive write** of only raw / last-good | ctor: load → optional recover write → `regenerate()` with mirrorBackup gate | "ctor clock refresh cannot destroy the only raw copy" | **equivalent** | Regen may write primary empty-shell but not clobber backup/recovery when gated |
 | 8 | **No historical-recovery claim** without device evidence | `handoffs/GROK.md` history section | n/a (docs) | **equivalent** | Explicit non-claim retained |
+| 9 | **Cloud / account sync append-only** + conflict choice | none — GitHub path is `LocalStorageStore` / in-memory only | n/a | **missing** | No cloud append path, no account-linked save, no conflict UI/choice. Base44 cloud append-only contract is **not** on GitHub #30; localStorage-only durability. CoS GO: rate explicitly **missing**. |
+
+### Edge tests tip (tests-only; impl still `82a729c`)
+
+Closing GROK comparison gaps from tip `78a3cfa` (tests-only on `feat/save-backup-recovery`; PR #30 stays draft):
+
+1. **Corrupt backup JSON** + unreadable primary → `emptySave` runtime; recovery raw preserved/exportable; corrupt backup not treated as valid / not mirrored-over by empty fallback.
+2. **Storage throw simulation** — `LocalStorageStore` quota/private `setItem` throw does not crash; silent failure → in-memory can diverge from durable; SilentFail MemoryStore subclass: prior valid backup still loads when primary later unreadable even if recover-write is swallowed.
+3. **Resume-mirror** after empty fallback once player earns progress (`recordClear`) — backup mirroring re-enabled; recovery raw retained for export.
+
+Impl review SHA remains **`82a729c`** (no production code change).
 
 ### Untested / residual overwrite paths (honest)
 
 | Path | Risk | Coverage gap |
 |---|---|---|
-| `LocalStorageStore.write` quota/private silent catch | In-memory progress never durable; looks like wipe on relaunch | No test that simulates Storage throw mid-write |
+| `LocalStorageStore.write` quota/private silent catch | In-memory progress never durable; looks like wipe on relaunch | **Covered** — LocalStorageStore throw sim + SilentFailStore backup-still-loads (`save-recovery.test.ts`) |
 | Same-origin / WebView storage clear | Primary + backup + recovery all gone | Unrecoverable by design; not a code bug |
 | Capacitor Preferences vs `localStorage` | Native partition drift if Preferences later wired without migration | Preferences **not wired**; no bridge test |
-| Backup itself corrupt + primary unreadable | Falls through to emptySave; recovery raw still exported | No dedicated "corrupt backup JSON" case (only missing/valid backup) |
+| Backup itself corrupt + primary unreadable | Falls through to emptySave; recovery raw still exported | **Covered** — corrupt backup JSON + unreadable primary case |
 | Concurrent multi-tab writes | Last writer wins; backup may lag | Untested |
-| `mirrorBackup` re-enabled after empty fallback once player earns progress | Correct intent; old recovery raw retained for export only | Partial — corrupt/empty path tested; "resume mirror after first star" not named as its own case |
+| `mirrorBackup` re-enabled after empty fallback once player earns progress | Correct intent; old recovery raw retained for export only | **Covered** — resume-mirror after `recordClear` case |
 | Opening-screen / map **Export save** UX | Player discoverability | Manual / DOM only — no Playwright |
+| **Cloud / account sync append-only + conflict choice** | Cross-device / multi-client durability & merge | **missing** on GitHub (localStorage only) — Base44-owned; not in #30 |
 
 ### Codex select/adapt/reject ask
 
-Review GitHub impl `82a729c` vs live Base44 app `6aa7c38d569a74337f54f559` recovery contract. Closest gaps to weigh: **export UX strength**, **corrupt-backup** edge, **storage-throw** simulation, **Capacitor** future wiring.
+Review GitHub impl `82a729c` vs live Base44 app `6aa7c38d569a74337f54f559` recovery contract. Closest gaps to weigh: **export UX strength**, **Capacitor** future wiring, and explicit **missing cloud/account append-only + conflict choice** on GitHub. Corrupt-backup + storage-throw + resume-mirror edges now covered in tests (impl SHA unchanged).
 
