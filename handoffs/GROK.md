@@ -1,3 +1,19 @@
+# GROK — Eng Lead notes
+
+## Docs / audits lane (`docs/readme-and-audits`)
+
+**Tip audited:** `8cf2f07` (`8cf2f0794fbb5f477f54727fcc51de8dbc37c6bd`)  
+**Deliverables:** public `README.md` + governing-doc / CI audit in [`handoffs/DOC_AUDIT_8cf2f07.md`](./DOC_AUDIT_8cf2f07.md).  
+**Rules:** draft PR only; governing docs (`LANE_MATH_GDD.md`, `ART_DIRECTION.md`, `CLAUDE.md`, `handoffs/CODEX.md`) untouched; no Base44 / ChronosGlobe; report-only CI recommendations (no new jobs/filler tests).
+
+**Codex README pass:** audit triage **accepted**. Stale comments + CI hardening deferred. Later CI priorities (not this PR): named save-recovery gate, suite-shrink protection, ladder/curate verify.
+
+---
+
+## Archive below — P0 SAVE-LOSS / PR #30 (merged into tip)
+
+> Historical handoff. PR #30 is **merged** at tip `8cf2f07`. Treat MERGE HOLD / draft language below as archive, not current status.
+
 # GROK — Eng P0 SAVE-LOSS (backup + recovery)
 
 **Status:** CANDIDATE on GitHub only — draft PR open; **MERGE HOLD** until CoS + Codex say otherwise (Base44 sync)  
