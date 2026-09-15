@@ -1,5 +1,15 @@
 # GROK — Eng Lead notes
 
+## Current — Save concurrency AUDIT (docs) · tip `5d32dad`
+
+**Status:** DRAFT docs-only PR on `docs/save-concurrency-audit-5d32dad` — **report first, no impl**.  
+**Tip audited:** `5d32dad7b7789a1b546c501c913987d1efa21a86` (master after #34).  
+**Deliverable:** [`handoffs/SAVE_CONCURRENCY_AUDIT_5d32dad.md`](./SAVE_CONCURRENCY_AUDIT_5d32dad.md).  
+**Finding (one line):** multi-tab = last-writer-wins full-document overwrite; no `storage` / BroadcastChannel / CAS; generational backup can hold advanced bytes but healthy stale primary still wins on load → **progress loss**, not UI-only.  
+**Hard rules kept:** no behavior/schema/Economy/Base44/ChronosGlobe/CODEX changes; suite floor ≥495 untouched.
+
+---
+
 ## Current — CI acceptance hardening · PR #34
 
 **Status:** DRAFT PR #34 on `ci/acceptance-hardening`. Workflow YAML + acceptance gates are on origin. Parent CI tip `06d0b19` gates green: https://github.com/nadavw9/lane-math/actions/runs/34985486608. Prior “push blocked / tips 96167a7 / 3453674” notes are obsolete and removed.  
