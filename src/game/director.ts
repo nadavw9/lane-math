@@ -812,6 +812,14 @@ export class Director {
         return this.tapSlot(input.index);
       case "tapCommit":
         return this.commit();
+      case "clearEquation":
+        // Wrong-answer recovery: empty the row, keep the attempt (§9.5 leaves
+        // a refused equation standing; Base44's "Change answer" asks us to
+        // clear it without bumping run / failures / budget / targets).
+        this.slots = { leftTileId: null, op: null, rightTileId: null };
+        this.swapArmed = null;
+        this.message = null;
+        return this.render();
       case "loadLevel":
         return this.render();
       // Which screen is showing is not a rule about the game (§11): the shell

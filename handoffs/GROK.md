@@ -1,12 +1,29 @@
 # GROK — Eng Lead notes
 
-## Docs / audits lane (`docs/readme-and-audits`)
+## Current — Wrong-answer recovery engine (`clearEquation`) · PR #32
+
+**Status:** DRAFT until Codex/CoS clearance; engine contract only  
+**Branch:** `feat/clear-equation-wrong-answer`  
+**Base:** `master` after #31 merge (`f8b9089`)  
+**Scope:** Director / `InputEvent` only. Base44 owns incorrect-answer banner, equation resistance animation, haptic/audio, and “Change answer”. No Base44 / ChronosGlobe. Do not modify superseded GitHub presentation/UI.
+
+**Contract:** `{ type: "clearEquation" }` clears left/op/right, swap-armed, and transient equation message; renders the unchanged attempt (run, failures, targets, consumed tiles, lives, stars, operator budget preserved); restores empty slots + `affordance: "numbers"`.
+
+**Regression:** level **1-03** — make 4 with 9−5 → submit 9+3 for target 11 → reject exactly `9 + 3 = 12, not 11` → playing / targetIndex 1 / no extra tiles / `+` unspent / stars·lives·failures unchanged → `clearEquation` restores empty slots + numbers affordance.
+
+**Verify:** `npm test` → **495**; typecheck; build. No lint script.
+
+---
+
+## Docs / audits lane (`docs/readme-and-audits`) · PR #31
 
 **Tip audited:** `8cf2f07` (`8cf2f0794fbb5f477f54727fcc51de8dbc37c6bd`)  
 **Deliverables:** public `README.md` + governing-doc / CI audit in [`handoffs/DOC_AUDIT_8cf2f07.md`](./DOC_AUDIT_8cf2f07.md).  
 **Rules:** draft PR only; governing docs (`LANE_MATH_GDD.md`, `ART_DIRECTION.md`, `CLAUDE.md`, `handoffs/CODEX.md`) untouched; no Base44 / ChronosGlobe; report-only CI recommendations (no new jobs/filler tests).
 
 **Codex README pass:** audit triage **accepted**. Stale comments + CI hardening deferred. Later CI priorities (not this PR): named save-recovery gate, suite-shrink protection, ladder/curate verify.
+
+**Merged:** PR #31 → master `f8b9089` (README Node 22 / `npm install` primary / Live wording split).
 
 ---
 
