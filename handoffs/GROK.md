@@ -1,6 +1,16 @@
 # GROK — Eng Lead notes
 
-## Current — Wrong-answer recovery engine (`clearEquation`) · PR #32
+## Current — CI acceptance hardening · draft PR
+
+**Status:** DRAFT on `ci/acceptance-hardening` (do not merge until CoS/Codex say)  
+**Base:** `master` @ `210fa2c`  
+**Scope:** CI only — named save-recovery gate, suite-shrink floor (≥495 via one vitest+JSON run), `curate:verify` in gates (exit non-zero on drift), stale “270 tests” comment → ~495. No gameplay / economy / levels content / governing docs / Base44 / ChronosGlobe. `handoffs/CODEX.md` untouched.
+
+**Verify:** `npm test` → **495**; typecheck; build; `node tools/assert-suite-size.mjs`.
+
+---
+
+## Recent — Wrong-answer recovery engine (`clearEquation`) · PR #32 (merged)
 
 **Status:** MERGED into master at `2686584` (`2686584a91a5260caabac87d97bfc05872eac77d`) — engine contract shipped; Base44 still owns UI chrome  
 **Branch:** `feat/clear-equation-wrong-answer`  

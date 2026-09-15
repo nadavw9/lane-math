@@ -137,3 +137,4 @@ process.stdout.write(
     `  metric drift            : ${metricDrift}\n\n`,
 );
 for (const row of driftRows) process.stdout.write(`  ${row}\n`);
+if (unsolvable + outOfBand + metricDrift > 0) process.exit(1);
