@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
+import { Economy } from "../economy/economy.js";
+import { MemoryStore } from "../economy/save.js";
+import { DEFAULT_RULES } from "../solver/index.js";
 import { Director } from "./director.js";
 import type { Command, LadderLevel, ViewState } from "./types.js";
-import { DEFAULT_RULES } from "../solver/index.js";
 
 const stateOf = (commands: readonly Command[]): ViewState => {
   const render = [...commands].reverse().find((c) => c.type === "render");
@@ -435,5 +439,70 @@ describe("swap gesture on the equation row (GDD §3.5)", () => {
     expect(s.slots.leftTileId).toBe(left);
     expect(s.slots.op).toBe("-");
     expect(s.slots.rightTileId).toBeNull();
+  });
+});
+
+describe("clearEquation wrong-answer recovery (engine contract)", () => {
+  const load = (id: string): LadderLevel =>
+    JSON.parse(readFileSync(`levels/${id}.json`, "utf8")) as LadderLevel;
+
+  it("1-03: refused 9+3 then clearEquation restores empty slots without a new attempt", () => {
+    const level = load("1-03");
+    const economy = new Economy(new MemoryStore(), () => 1_700_000_000_000);
+    const d = new Director(level, "normal", economy);
+    let s = stateOf(d.handle({ type: "loadLevel", id: level.id }));
+
+    const runBefore = s.run;
+    const failuresBefore = s.failures;
+    const livesBefore = s.economy!.lives;
+    const starsBefore = s.economy!.totalStars;
+
+    // Make 4 with 9 − 5.
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 9) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "-" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 5) }));
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.phase).toBe("playing");
+    expect(s.targetIndex).toBe(1);
+    expect(s.tiles.filter((t) => t.consumed)).toHaveLength(2);
+    expect(s.budget["+"]).toBe(1);
+    expect(s.budget["-"]).toBe(1);
+
+    // Submit 9 + 3 for target 11 — wrong arithmetic, equation stays up (§9.5).
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 9) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
+    s = stateOf(d.handle({ type: "tapSlot", index: 0 })); // arm swap so clearEquation must clear it
+    expect(s.swapArmedSlot).toBe(0);
+
+    const refused = d.handle({ type: "tapCommit" });
+    expect(rejection(refused)).toBe("9 + 3 = 12, not 11");
+    s = stateOf(refused);
+    expect(s.phase).toBe("playing");
+    expect(s.targetIndex).toBe(1);
+    expect(s.tiles.filter((t) => t.consumed)).toHaveLength(2);
+    expect(s.budget["+"]).toBe(1);
+    expect(s.failures).toBe(failuresBefore);
+    expect(s.run).toBe(runBefore);
+    expect(s.economy!.lives).toBe(livesBefore);
+    expect(s.economy!.totalStars).toBe(starsBefore);
+    expect(s.slots.leftTileId).not.toBeNull();
+    expect(s.slots.op).toBe("+");
+    expect(s.slots.rightTileId).not.toBeNull();
+
+    // clearEquation: empty slots + number affordance; same attempt.
+    s = stateOf(d.handle({ type: "clearEquation" }));
+    expect(s.slots).toEqual({ leftTileId: null, op: null, rightTileId: null });
+    expect(s.swapArmedSlot).toBeNull();
+    expect(s.message).toBeNull();
+    expect(s.affordance).toBe("numbers");
+    expect(s.phase).toBe("playing");
+    expect(s.targetIndex).toBe(1);
+    expect(s.tiles.filter((t) => t.consumed)).toHaveLength(2);
+    expect(s.budget["+"]).toBe(1);
+    expect(s.failures).toBe(failuresBefore);
+    expect(s.run).toBe(runBefore);
+    expect(s.economy!.lives).toBe(livesBefore);
+    expect(s.economy!.totalStars).toBe(starsBefore);
   });
 });

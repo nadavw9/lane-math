@@ -209,6 +209,12 @@ export type InputEvent =
   | { readonly type: "tapUnary"; readonly op: UnaryOp }
   | { readonly type: "tapSlot"; readonly index: 0 | 1 | 2 }
   | { readonly type: "tapCommit" }
+  /**
+   * Wrong-answer recovery (engine contract). Clears the equation row after a
+   * refused commit without starting a new attempt. Base44 owns the banner /
+   * animation / haptics / "Change answer" chrome that emits this.
+   */
+  | { readonly type: "clearEquation" }
   | { readonly type: "tapRestart" }
   /**
    * Leave the board for the world map (§7.6).
