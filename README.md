@@ -4,17 +4,22 @@ A single-lane arithmetic puzzle where difficulty is **resource planning, not ari
 
 **Canonical example** (GDD §1): pool `1, 2, 2, 3, 4, 5` · ordered queue `8 → 3 → 15`. The only winning line is `2×4`, `1+2`, `3×5`; several earlier moves look correct and fail two targets later.
 
-**Live:** [https://nadavw9.github.io/lane-math/](https://nadavw9.github.io/lane-math/) (GitHub Pages; workflow deploys from `master` only).
+**Current public GitHub build:** [https://nadavw9.github.io/lane-math/](https://nadavw9.github.io/lane-math/) (GitHub Pages; workflow deploys from `master` only).  
+**Lane Math Next** is currently being developed in Base44 and is not yet publicly published.
 
 ## Setup
 
+Requires **Node 22** (CI baseline via `.github/workflows/ci.yml`; `@types/node` ^22).
+
 ```bash
-npm ci
+npm install          # primary newcomer install
 npm run dev          # Vite dev server
 npm test             # vitest run (~59 files / ~494 tests)
 npm run typecheck    # tsc --noEmit
 npm run build        # prebuild levels:build + vite build
 ```
+
+For a clean/CI-style install from the lockfile, use `npm ci` instead of `npm install`.
 
 No separate `lint` script in `package.json`.
 
