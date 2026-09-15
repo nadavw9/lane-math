@@ -1,6 +1,26 @@
 # GROK — Eng Lead notes
 
-## Current — Save concurrency AUDIT (docs) · tip `5d32dad`
+## Current — Save concurrency GUARD · `feat/save-concurrency-guard`
+
+**Status:** DRAFT PR — implement expected-primary compare-before-write (R1 adopt). **Do not merge** until CoS/Codex say otherwise.  
+**Base:** `master` @ `41496ad` (after #35 audit merge)  
+**Branch:** `feat/save-concurrency-guard`  
+**Schema:** `SAVE_SCHEMA_VERSION` stays **2** (no revision field).  
+**Design (short):**
+- **Expected-primary token:** exact `SAVE_KEY` string last loaded or successfully written (`Economy.expectedPrimaryToken`).
+- **Stale-write result:** `lastCommitResult === "rejected_stale"` + `lastPersistOk === false`; memory adopts foreign validated save; primary/backup untouched.
+- **storage event:** `Economy.adoptFromStore` wired in `main.ts` for other-tab UI sync; core correctness does not depend on it.
+- **Atomicity:** **not** achieved — best-effort compare-before-write; residual TOCTOU between re-read and `setItem`. Do not call this CAS. `navigator.locks` not wired (would force async Economy refactor).
+- **#30 preserved:** backup/recovery keys, tri-state reads, recoverySecured write blocks unchanged.
+- **Out of scope:** Base44 / ChronosGlobe / GDD / ART_DIRECTION / CLAUDE / CODEX / levels / solver / Director / economy pricing.
+
+**Verify:** `npm test`; typecheck; build; `curate:verify`; `node tools/assert-suite-size.mjs` (≥495).
+
+---
+
+## Prior — Save concurrency AUDIT (docs) · tip `5d32dad`
+
+ (docs) · tip `5d32dad`
 
 **Status:** DRAFT docs-only PR on `docs/save-concurrency-audit-5d32dad` — **report first, no impl**.  
 **Tip audited:** `5d32dad7b7789a1b546c501c913987d1efa21a86` (master after #34).  

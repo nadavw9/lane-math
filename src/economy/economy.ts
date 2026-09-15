@@ -3,15 +3,33 @@ import { furthestReached } from "./unlocks.js";
 import { DEFAULT_ECONOMY, livesActiveFor, starsFor, type EconomyConfig } from "./config.js";
 import {
   EMPTY_PROGRESS,
+  SAVE_KEY,
+  attemptWriteSave,
   hasRecoveryRaw as storeHasRecoveryRaw,
   loadSaveStatus,
+  migrate,
   preserveRecoveryRawOnce,
-  writeSave,
+  safeReadResult,
   type LevelProgress,
   type SaveData,
   type SaveLoadStatus,
   type SaveStore,
 } from "./save.js";
+
+/**
+ * Result of the last durable commit attempt.
+ *
+ * - persisted: primary write succeeded (callers may claim saved)
+ * - memory_only: in-memory updated; durable writes blocked for the session
+ * - persist_failed: write attempted but durable store rejected it
+ * - rejected_stale: foreign validated primary detected; stale mutation not
+ *   published; newest validated save adopted into memory; do NOT claim saved
+ */
+export type DurableCommitResult =
+  | "persisted"
+  | "memory_only"
+  | "persist_failed"
+  | "rejected_stale";
 
 export interface FailureOutcome {
   readonly failCount: number;
@@ -64,6 +82,16 @@ export class Economy {
    */
   private persistOk = true;
 
+  /**
+   * Exact SAVE_KEY payload this session last loaded or successfully wrote.
+   * `null` means we expect no validated primary (missing / empty-fallback start).
+   * Used for compare-before-write foreign detection — not an atomic CAS token.
+   */
+  private expectedPrimaryRaw: string | null = null;
+
+  /** Outcome of the most recent commit / adoptFromStore path. */
+  private commitResult: DurableCommitResult = "persisted";
+
   private storageReadableFlag: boolean;
   private recoverySecuredFlag: boolean;
   private pendingRecoveryRaw: string | null;
@@ -113,10 +141,27 @@ export class Economy {
       this.mirrorBackup = !loaded.primaryUnreadable || loaded.recoveredFromBackup;
     }
 
+    // Session expected-primary token from the durable bytes we actually observed.
+    const primaryAtLoad = safeReadResult(store, SAVE_KEY);
+    if (primaryAtLoad.status === "found") {
+      // Raw string is the fingerprint even when unreadable — recovery rewrite
+      // below publishes a new expected token on success.
+      this.expectedPrimaryRaw = primaryAtLoad.value;
+    } else {
+      this.expectedPrimaryRaw = null;
+    }
+
     if (loaded.recoveredFromBackup && this.allowDurableWrites) {
       // Restore a healthy primary immediately so later commits are not writing
       // over corrupt bytes without a validated working copy on SAVE_KEY.
-      this.persistOk = writeSave(this.store, this.save, { mirrorBackup: true });
+      // Skip expectedPrimary guard: we are intentionally replacing unreadable
+      // primary with validated backup (not a stale multi-tab publish).
+      const rewritten = attemptWriteSave(this.store, this.save, { mirrorBackup: true });
+      this.persistOk = rewritten.status === "written";
+      this.commitResult = this.persistOk ? "persisted" : "persist_failed";
+      if (rewritten.status === "written") {
+        this.expectedPrimaryRaw = JSON.stringify(this.save);
+      }
     }
     this.regenerate();
     if (this.save.lives <= 0) this.lockoutSince = this.monotonic();
@@ -154,6 +199,22 @@ export class Economy {
     return this.persistOk;
   }
 
+  /**
+   * Explicit last commit outcome. When `rejected_stale`, the local mutation was
+   * not published and memory now mirrors the newest validated foreign primary.
+   */
+  get lastCommitResult(): DurableCommitResult {
+    return this.commitResult;
+  }
+
+  /**
+   * Exact primary payload string this session expects on SAVE_KEY, or null when
+   * no validated primary was established yet. Test/diagnostics aid.
+   */
+  get expectedPrimaryToken(): string | null {
+    return this.expectedPrimaryRaw;
+  }
+
   get state(): SaveData {
     return this.save;
   }
@@ -181,17 +242,23 @@ export class Economy {
   }
 
   private commit(next: SaveData): void {
-    this.save = next;
-
     if (!this.storageReadableFlag) {
+      this.save = next;
       this.persistOk = false;
+      this.commitResult = "memory_only";
+      if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
+      else this.lockoutSince = null;
       return;
     }
 
     this.trySecurePendingRecovery();
 
     if (!this.allowDurableWrites) {
+      this.save = next;
       this.persistOk = false;
+      this.commitResult = "memory_only";
+      if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
+      else this.lockoutSince = null;
       return;
     }
 
@@ -203,11 +270,74 @@ export class Economy {
     ) {
       this.mirrorBackup = true;
     }
-    this.persistOk = writeSave(this.store, next, { mirrorBackup: this.mirrorBackup });
+
+    const outcome = attemptWriteSave(this.store, next, {
+      mirrorBackup: this.mirrorBackup,
+      expectedPrimary: this.expectedPrimaryRaw,
+    });
+
+    if (outcome.status === "conflict") {
+      // R1: reject stale durable write; adopt newest validated foreign save.
+      // Do not park stale into backup (attemptWriteSave already skipped writes).
+      this.save = outcome.current;
+      this.expectedPrimaryRaw = outcome.currentRaw;
+      this.persistOk = false;
+      this.commitResult = "rejected_stale";
+      if (this.save.lives <= 0) this.lockoutSince ??= this.monotonic();
+      else this.lockoutSince = null;
+      return;
+    }
+
+    this.save = next;
+    if (outcome.status === "written") {
+      this.expectedPrimaryRaw = JSON.stringify(next);
+      this.persistOk = true;
+      this.commitResult = "persisted";
+    } else {
+      this.persistOk = false;
+      this.commitResult = "persist_failed";
+    }
 
     // Track when the lockout started, on a clock the player cannot set.
     if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
     else this.lockoutSince = null;
+  }
+
+  /**
+   * Browser `storage` event integration point (other same-origin tabs).
+   *
+   * When `key` is SAVE_KEY (or null = Storage clear), re-read and adopt a
+   * validated foreign primary into memory without deleting backup/recovery.
+   * Core correctness is covered by commit's compare-before-write and is
+   * testable with MemoryStore + two Economy instances; this hook only keeps
+   * live UI from staying stale until the next mutation.
+   *
+   * @returns true when memory was updated from a foreign validated primary.
+   */
+  adoptFromStore(key: string | null = SAVE_KEY): boolean {
+    if (key !== null && key !== SAVE_KEY) return false;
+    if (!this.storageReadableFlag) return false;
+
+    const primary = safeReadResult(this.store, SAVE_KEY);
+    if (primary.status !== "found") return false;
+    if (primary.value === this.expectedPrimaryRaw) return false;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(primary.value);
+    } catch {
+      return false;
+    }
+    const validated = migrate(parsed);
+    if (!validated) return false;
+
+    this.save = validated;
+    this.expectedPrimaryRaw = primary.value;
+    this.persistOk = false;
+    this.commitResult = "rejected_stale";
+    if (this.save.lives <= 0) this.lockoutSince ??= this.monotonic();
+    else this.lockoutSince = null;
+    return true;
   }
 
   private setProgress(levelId: string, progress: LevelProgress, extra: Partial<SaveData> = {}): void {

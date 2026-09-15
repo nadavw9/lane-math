@@ -5,7 +5,7 @@ import { MapScreen } from "./map/map-screen.js";
 import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
 import { Economy } from "./economy/economy.js";
-import { LocalStorageStore, readRecoveryRaw } from "./economy/save.js";
+import { LocalStorageStore, SAVE_KEY, readRecoveryRaw } from "./economy/save.js";
 import { Director } from "./game/director.js";
 import type { Command, InputEvent, LadderLevel, ViewState } from "./game/types.js";
 import { Renderer } from "./renderer/renderer.js";
@@ -232,6 +232,26 @@ function open(level: LadderLevel): void {
 const sound = new Sound();
 sound.setMuted(economy.muted);
 renderer.attachSound(sound);
+
+/*
+ * Cross-tab save awareness (desktop multi-tab).
+ *
+ * `storage` fires in *other* documents when localStorage changes. Core
+ * correctness is Economy.commit's expected-primary compare-before-write
+ * (testable with MemoryStore + two Economy instances). This listener only
+ * adopts a foreign validated primary into the live session so mute/UI do not
+ * stay stale until the next mutation. Residual TOCTOU across tabs remains —
+ * this is not an atomic CAS / critical section. navigator.locks is not wired
+ * here to avoid an unreviewed async Economy refactor; unsupported browsers
+ * keep the sync compare-before-write guard.
+ */
+window.addEventListener("storage", (event) => {
+  if (event.storageArea && event.storageArea !== localStorage) return;
+  // event.key === null means Storage.clear(); adoptFromStore ignores wipe-to-empty.
+  if (event.key !== null && event.key !== SAVE_KEY) return;
+  if (!economy.adoptFromStore(event.key)) return;
+  sound.setMuted(economy.muted);
+});
 
 const warmAudio = (): void => {
   window.removeEventListener("pointerdown", warmAudio);
