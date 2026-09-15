@@ -2,11 +2,12 @@
 
 ## Current — CI acceptance hardening · draft PR
 
-**Status:** DRAFT on `ci/acceptance-hardening` (do not merge until CoS/Codex say)  
+**Status:** DRAFT PR #34 — remote tip `96167a7` (tools + curate exit + GROK); local tip `3453674` has `.github/workflows/ci.yml` (push blocked: OAuth needs `workflow` scope)  
 **Base:** `master` @ `210fa2c`  
 **Scope:** CI only — named save-recovery gate, suite-shrink floor (≥495 via one vitest+JSON run), `curate:verify` in gates (exit non-zero on drift), stale “270 tests” comment → ~495. No gameplay / economy / levels content / governing docs / Base44 / ChronosGlobe. `handoffs/CODEX.md` untouched.
 
-**Verify:** `npm test` → **495**; typecheck; build; `node tools/assert-suite-size.mjs`.
+**Verify:** `npm test` → **495**; typecheck; build; `node tools/assert-suite-size.mjs`.  
+**Unblock:** `gh auth refresh -h github.com -s workflow` then `git push` from `/workspace/reviews/repos/lane-math-ci-harden`.
 
 ---
 
