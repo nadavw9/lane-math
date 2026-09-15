@@ -2,7 +2,7 @@
 
 ## Current — Wrong-answer recovery engine (`clearEquation`) · PR #32
 
-**Status:** DRAFT until Codex/CoS clearance; engine contract only  
+**Status:** MERGED into master at `2686584` (`2686584a91a5260caabac87d97bfc05872eac77d`) — engine contract shipped; Base44 still owns UI chrome  
 **Branch:** `feat/clear-equation-wrong-answer`  
 **Base:** `master` after #31 merge (`f8b9089`)  
 **Scope:** Director / `InputEvent` only. Base44 owns incorrect-answer banner, equation resistance animation, haptic/audio, and “Change answer”. No Base44 / ChronosGlobe. Do not modify superseded GitHub presentation/UI.
