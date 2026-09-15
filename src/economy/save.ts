@@ -340,42 +340,102 @@ export interface WriteSaveOptions {
    * ctor clock refresh cannot destroy the only remaining progress copy.
    */
   readonly mirrorBackup?: boolean;
+  /**
+   * Session expected-primary token: the exact SAVE_KEY string this writer last
+   * loaded or successfully published. When provided (including `null` = expect
+   * missing), a validated primary that differs from both this token and the
+   * outgoing payload is a foreign durable change — the write is aborted with
+   * status "conflict" and neither primary nor backup is touched.
+   *
+   * This is best-effort compare-before-write, **not** an atomic CAS. There is
+   * residual TOCTOU between re-read and setItem across tabs unless a real
+   * cross-tab critical section (e.g. navigator.locks) is held. Do not describe
+   * this guard as atomic.
+   */
+  readonly expectedPrimary?: string | null;
 }
 
+/** Outcome of attemptWriteSave — richer than writeSave's boolean. */
+export type WriteSaveOutcome =
+  | { readonly status: "written" }
+  | { readonly status: "failed" }
+  | {
+      readonly status: "conflict";
+      readonly currentRaw: string;
+      readonly current: SaveData;
+    };
+
 /**
- * Persist a working save. By default uses generational backup: park the
- * previous validated primary into SAVE_BACKUP_KEY before replacing SAVE_KEY.
- * Pass `{ mirrorBackup: false }` for empty/fallback commits that must not
- * clobber a validated backup.
+ * Persist a working save with optional expected-primary conflict detection.
  *
- * Returns true when the primary write succeeded (and backup bootstrap when
- * needed). False means durable store may lag in-memory (quota/private/throw)
- * — do not claim "saved". Never throws; never clears existing keys on failure.
+ * By default uses generational backup: park the previous validated primary into
+ * SAVE_BACKUP_KEY before replacing SAVE_KEY. Pass `{ mirrorBackup: false }` for
+ * empty/fallback commits that must not clobber a validated backup.
+ *
+ * When `expectedPrimary` is set and a validated foreign primary is found, returns
+ * `{ status: "conflict" }` without parking into backup and without replacing
+ * primary — callers must adopt/surface the foreign save and must not claim the
+ * stale mutation was saved.
+ *
+ * Residual TOCTOU: re-read then setItem is not a cross-tab critical section.
+ * Never describe this as atomic CAS.
  */
-export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): boolean {
+export function attemptWriteSave(
+  store: SaveStore,
+  data: SaveData,
+  opts: WriteSaveOptions = {},
+): WriteSaveOutcome {
   const payload = JSON.stringify(data);
   const mirror = opts.mirrorBackup !== false;
 
+  const prev = safeReadResult(store, SAVE_KEY);
+
+  if (opts.expectedPrimary !== undefined) {
+    if (prev.status === "found") {
+      const validated = tryParseMigrate(prev.value);
+      if (
+        validated &&
+        prev.value !== opts.expectedPrimary &&
+        prev.value !== payload
+      ) {
+        // Foreign validated primary — reject stale write; leave both generations.
+        return { status: "conflict", currentRaw: prev.value, current: validated };
+      }
+    }
+  }
+
   if (mirror) {
-    const prev = safeReadResult(store, SAVE_KEY);
     // Generational: retain previous validated primary as backup before replace.
     // Do not park corrupt/unreadable bytes into backup.
+    // Do not park a foreign advanced primary when we are about to publish stale
+    // (conflict path above already returned).
     if (prev.status === "found" && tryParseMigrate(prev.value) && prev.value !== payload) {
       safeWrite(store, SAVE_BACKUP_KEY, prev.value);
     }
   }
 
   const primaryOk = safeWrite(store, SAVE_KEY, payload);
-  if (!primaryOk) return false;
-  if (!mirror) return true;
+  if (!primaryOk) return { status: "failed" };
+  if (!mirror) return { status: "written" };
 
   // Bootstrap only: if no backup exists yet, seed with current (first write).
   // Do not reduce durability to always duplicating newest into both keys.
   const backup = safeReadResult(store, SAVE_BACKUP_KEY);
   if (backup.status === "missing") {
-    return safeWrite(store, SAVE_BACKUP_KEY, payload);
+    return safeWrite(store, SAVE_BACKUP_KEY, payload)
+      ? { status: "written" }
+      : { status: "failed" };
   }
-  return true;
+  return { status: "written" };
+}
+
+/**
+ * Persist a working save. Boolean wrapper over attemptWriteSave for existing
+ * callers: true only when status === "written". Conflict and failed both return
+ * false — use attemptWriteSave when conflict must be distinguished.
+ */
+export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): boolean {
+  return attemptWriteSave(store, data, opts).status === "written";
 }
 
 /**
