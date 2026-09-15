@@ -1,6 +1,17 @@
 # GROK — Eng Lead notes
 
-## Current — Wrong-answer recovery engine (`clearEquation`) · PR #32
+## Current — CI acceptance hardening · PR #34
+
+**Status:** DRAFT PR #34 on `ci/acceptance-hardening`. Workflow YAML + acceptance gates are on origin. Parent CI tip `06d0b19` gates green: https://github.com/nadavw9/lane-math/actions/runs/34985486608. Prior “push blocked / tips 96167a7 / 3453674” notes are obsolete and removed.  
+**This change:** docs-only handoff correction (CI implementation unchanged). After push, PR HEAD is this commit on the branch.  
+**Base:** `master` @ `210fa2c`  
+**Scope:** CI only — named save-recovery gate, suite-shrink floor (≥495 via one vitest+JSON run), `curate:verify` in gates, stale “270 tests” comment → ~495. No gameplay / economy / levels content / governing docs / Base44 / ChronosGlobe. `handoffs/CODEX.md` untouched.
+
+**Verify:** `npm test` → **495**; typecheck; build; `node tools/assert-suite-size.mjs`; `npm run curate:verify`.
+
+---
+
+## Recent — Wrong-answer recovery engine (`clearEquation`) · PR #32 (merged)
 
 **Status:** MERGED into master at `2686584` (`2686584a91a5260caabac87d97bfc05872eac77d`) — engine contract shipped; Base44 still owns UI chrome  
 **Branch:** `feat/clear-equation-wrong-answer`  

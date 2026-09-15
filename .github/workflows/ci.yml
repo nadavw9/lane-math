@@ -36,7 +36,7 @@ jobs:
 
       # The named gates below are all inside `vitest run`, but they are called
       # out separately so a failure names ITSELF in the CI log rather than
-      # arriving as "1 of 270 tests failed".
+      # arriving as "1 of ~495 tests failed".
       - name: Brightness gate (GDD 9.1 — tokens clear 3:1 on every world)
         run: npx vitest run src/art/brightness-gate.test.ts
 
@@ -46,14 +46,24 @@ jobs:
       - name: Flight bound (frame-dependent correctness, CLAUDE.md 8)
         run: npx vitest run src/renderer/flights.test.ts
 
+      - name: Save-recovery gate (corrupt primary → backup / recovery raw)
+        run: npx vitest run src/economy/save-recovery.test.ts
+
       # The shipped level payload must carry exactly what the loader reads
       # (GDD 10). A field the build strips but the game wants is a runtime
       # crash on a device; metrics creeping back is 549KB nobody asked for.
       - name: Shipped levels (GDD 10 — metrics do not ship)
         run: npx vitest run src/game/shipped-levels.test.ts
 
-      - name: Full suite
-        run: npx vitest run
+      # Authored ladder still solvable / in-band under the current solver.
+      # Local `npm run curate:verify` was green and deterministic at this tip.
+      - name: Ladder curation verify
+        run: npm run curate:verify
+
+      # One vitest run: default reporter for the log + JSON count floor so a
+      # silent suite shrink (deleted file / broken include) cannot stay green.
+      - name: Full suite (≥495)
+        run: node tools/assert-suite-size.mjs
 
       # ATLASES MUST REGENERATE TO THE SAME BYTES. The operators atlas could
       # not be rebuilt for months because nobody recorded the flags, and the
