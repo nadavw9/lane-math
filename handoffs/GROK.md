@@ -1,19 +1,26 @@
 # GROK — Eng Lead notes
 
-## Current — Track C CI supply-chain DESIGN (docs-only)
+## Current — Track C1 CI hardening (impl) · DRAFT
 
-**Status:** Docs-only design PR #39 — amend audit/Dependabot accuracy, then merge. No workflow/impl in this PR; Track C1 = separate impl PR.  
-**Base:** `master` @ `010e3a1` (`010e3a13d3e012ac9035595e1ed1271a21c0682f`, after #38 Track A merge)  
-**Branch:** `docs/track-c-ci-supply-chain-design`  
-**Deliverable:** [`TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md`](./TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md).  
-**Covers (propose only):** (1) CI least privilege pages/id-token → deploy job; (2) third-party action SHA pinning; (3) dependency/security scanning — non-blocking **all-deps** `npm audit` (not prod-only); Dependabot **scheduled version updates** ≠ GitHub security updates; (4) secret-pattern detection; (5) assert default MIN ≥**548** (lane floor; **docs mention only** — do not bump in this PR); (6) release evidence checks. **Amend:** docs corrected before merge (audit all-deps; Dependabot accuracy).  
-**Hard rules:** Docs/handoffs/GROK pointer only. No workflow YAML behavior. No stacked behavior branch. No Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema.
+**Status:** DRAFT PR — **do not merge**. Implementation of Track C design (#39).  
+**Base:** `master` @ `c3f09f0` (after #39)  
+**Branch:** `ci/track-c1-ci-hardening`  
+**Deliverable:** [`TRACK_C1_CI_HARDENING_c3f09f0.md`](./TRACK_C1_CI_HARDENING_c3f09f0.md).  
+**Landed:** MIN **548**; workflow default `contents: read` only; deploy-only `pages`+`id-token` write; action SHA pins; Dependabot version updates (≠ security updates); non-blocking all-deps `npm audit` (visibility ≠ security proof).  
+**Hard rules:** No Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema. No CodeQL/gitleaks/attest/Android in C1.
+
+---
+
+## Prior — Track C CI supply-chain DESIGN · PR #39 (merged)
+
+**Status:** MERGED at `c3f09f0`. Docs-only design + amend (all-deps audit; Dependabot version≠security). Impl = Track C1 DRAFT (#40) above.  
+**Deliverable:** [`TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md`](./TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md).
 
 ---
 
 ## Prior — Track A save-validation harness · PR #38 (merged)
 
-**Status:** MERGED at `010e3a1`. Suite floor lane **548**; CI assert default MIN still **495** until Track C impl assigns the bump.  
+**Status:** MERGED at `010e3a1`. Suite floor lane **548**; CI assert default MIN bumped to **548** in Track C1 DRAFT (#40).  
 **Branch (historical):** `feat/track-a-save-validation-harness`  
 **Proof:** historical fixtures A–D; #30 recovery + `classifySaveRaw` distinctions; full mutator DCE regression gate + harness-on positive smoke; deploy artifact = `dist-pages/` (harness-off). Validation review: [`TRACK_A_PROOF_VALIDATION_REVIEW.md`](./TRACK_A_PROOF_VALIDATION_REVIEW.md).  
 **Scope landed:** A1 harness off default Pages/APK; A2 fail-closed `migrate` (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery. Improves validation — **does NOT** make client saves cheat-proof.
