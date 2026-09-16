@@ -3,6 +3,8 @@
 Prepared to run the moment `adb devices` shows a phone. Nothing here needs an
 AVD; every step is against the signed release APK already built.
 
+**Harness:** release/APK web assets must be built with `VITE_LANE_MATH_HARNESS` **unset** (default `npm run build` / Capacitor sync from that dist). Do not ship a harness-on bundle in release.
+
 **Setup, once:**
 
 ```sh
