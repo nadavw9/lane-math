@@ -1056,20 +1056,27 @@ export class Director {
     this.message = `${left.value} ${op} ${right.value} = ${result}`;
 
     if (this.targetIndex >= this.level.targets.length) {
-      const starsBefore = this.economy?.state.totalStars;
       const award = this.economy?.recordClear(this.level.id);
-      // Stale-write conflict (after Economy's one adopt retry): board is complete
-      // locally but the clear was not applied to the adopted save — do not claim
-      // win stars / level-clear telemetry against a save that lacks the clear.
+      // Stale-write conflict (after Economy's one adopt retry): clear did not
+      // persist. Restore the pre-final-move snapshot so the board stays a
+      // valid playing state (targetIndex < targets.length) and the player can
+      // repeat only the final move after the race settles — never leave
+      // playing with no front target / "cleared — could not save".
       if (award && !award.applied) {
-        this.message = "cleared — could not save";
+        const preFinal = this.history.pop();
+        if (preFinal) this.restore(preFinal);
+        // Re-seat the equation so "repeat only the final move" is one commit.
+        this.slots = { leftTileId: left.id, op, rightTileId: right.id };
+        this.message = "could not save — try again";
         return this.render();
       }
       this.phase = "won";
       this.telemetry?.levelComplete(this.level.id, award?.stars ?? 0, this.failures + 1);
       this.telemetry?.levelClear(this.level.id, award?.stars ?? 0);
-      if (award && starsBefore !== undefined) {
-        this.telemetry?.starBankUpdate(award.totalStars, award.totalStars - starsBefore, "level_clear");
+      // Use the mutation's exact starsAdded — never totalStars - starsBefore,
+      // which overcounts foreign-tab stars adopted during a clear retry.
+      if (award) {
+        this.telemetry?.starBankUpdate(award.totalStars, award.starsAdded, "level_clear");
       }
       this.message = award ? `cleared — ${award.stars} star${award.stars === 1 ? "" : "s"}` : "cleared";
       return this.render();

@@ -52,6 +52,13 @@ export interface ClearOutcome {
   readonly improved: boolean;
   readonly totalStars: number;
   /**
+   * Exact stars this successful clear mutation added to `totalStars`
+   * (`bestStars - previousBest`). Always 0 when `applied` is false.
+   * Use this for star-bank telemetry — never `totalStars - starsBefore`,
+   * which overcounts foreign-tab stars adopted during a retry.
+   */
+  readonly starsAdded: number;
+  /**
    * False when a stale-write conflict rejected the clear (after one adopt
    * retry). Callers must not award stars, claim win telemetry, or show
    * "cleared — N stars" against a save that lacks the clear.
@@ -494,6 +501,9 @@ export class Economy {
   /**
    * Review/harness only — force the life count (and lockout when zero).
    * Resets the regen anchor so a forced zero stays visible for screenshots.
+   *
+   * Intentionally single-shot (no adopt/retry): not a player-facing mutation.
+   * Time regen via `regenerate` similarly stays eventual / tick-driven.
    */
   setLives(n: number): void {
     const lives = Math.max(0, Math.min(this.config.maxLives, Math.floor(n)));
@@ -598,6 +608,7 @@ export class Economy {
         bestStars: p.bestStars,
         improved: false,
         totalStars: this.save.totalStars,
+        starsAdded: 0,
         applied: false,
       };
     };
@@ -607,11 +618,12 @@ export class Economy {
       const stars = before.ratingAttempt === "clean" ? 3 : starsFor(before.failCount, this.config);
       const bestStars = Math.max(before.bestStars, stars);
       const improved = bestStars > before.bestStars;
+      const starsAdded = bestStars - before.bestStars;
 
       const result = this.setProgress(
         levelId,
         { ...before, cleared: true, bestStars, ratingAttempt: "tainted" },
-        { totalStars: this.save.totalStars + (bestStars - before.bestStars) },
+        { totalStars: this.save.totalStars + starsAdded },
       );
 
       if (result === "rejected_stale") return unapplied();
@@ -621,6 +633,7 @@ export class Economy {
         bestStars: this.progressFor(levelId).bestStars,
         improved,
         totalStars: this.save.totalStars,
+        starsAdded,
         applied: true,
       };
     };
@@ -691,8 +704,26 @@ export class Economy {
     return this.save.selectedMode;
   }
 
-  selectMode(mode: Mode): void {
-    this.commit({ ...this.save, selectedMode: mode });
+  /**
+   * Persist preferred mode. Adopt/re-check/retry-once on stale conflict so a
+   * mode tap is not silently dropped while the board reopens under the old mode.
+   * @returns false when the mode was not applied after one adopt retry.
+   */
+  selectMode(mode: Mode): boolean {
+    let hitStale = false;
+    const attempt = (): boolean => {
+      if (this.save.selectedMode === mode) return true;
+      const result = this.commit({ ...this.save, selectedMode: mode });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.save.selectedMode === mode;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /** Audio off. Persisted, so the choice survives a relaunch. Default ON. */
@@ -700,8 +731,26 @@ export class Economy {
     return this.save.muted;
   }
 
-  setMuted(muted: boolean): void {
-    this.commit({ ...this.save, muted });
+  /**
+   * Persist mute preference. Adopt/re-check/retry-once on stale conflict so a
+   * mute toggle is not silently ignored after a foreign tab advanced.
+   * @returns false when mute was not applied after one adopt retry.
+   */
+  setMuted(muted: boolean): boolean {
+    let hitStale = false;
+    const attempt = (): boolean => {
+      if (this.save.muted === muted) return true;
+      const result = this.commit({ ...this.save, muted });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.save.muted === muted;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   hintsPurchased(levelId: string): readonly string[] {
@@ -812,9 +861,28 @@ export class Economy {
    * better rating, so the failure counter resets — but only for a level already
    * cleared, and the attempt still costs a life, so it is not farmable.
    */
-  beginReplay(levelId: string): void {
-    const before = this.progressFor(levelId);
-    if (!before.cleared) return;
-    this.setProgress(levelId, { ...before, failCount: 0 });
+  /**
+   * Reset failCount for a cleared level. Adopt/re-check/retry-once on stale
+   * conflict so a replay cannot start without the fail counter reset.
+   * @returns false when not cleared, or when the reset did not apply after one
+   * adopt retry.
+   */
+  beginReplay(levelId: string): boolean {
+    let hitStale = false;
+    const attempt = (): boolean => {
+      const before = this.progressFor(levelId);
+      if (!before.cleared) return false;
+      if (before.failCount === 0) return true;
+      const result = this.setProgress(levelId, { ...before, failCount: 0 });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.progressFor(levelId).failCount === 0;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 }

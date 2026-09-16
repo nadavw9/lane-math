@@ -67,7 +67,7 @@ function dualEconomies(seedLevels: number) {
 }
 
 describe("save concurrency guard (dual Economy / shared MemoryStore)", () => {
-  it("1. B advances; A mutes → B's progress survives on primary", () => {
+  it("1. B advances; A mutes → adopt+retry keeps B's progress and applies mute", () => {
     const { store, a, b } = dualEconomies(10);
     expect(clearedCount(b.state)).toBe(10);
 
@@ -75,32 +75,30 @@ describe("save concurrency guard (dual Economy / shared MemoryStore)", () => {
     expect(b.lastCommitResult).toBe("persisted");
     expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(11);
 
-    const primaryBeforeMute = store.read(SAVE_KEY)!;
-    const backupBeforeMute = store.read(SAVE_BACKUP_KEY);
-
-    a.setMuted(true);
-    expect(a.lastPersistOk).toBe(false);
-    expect(a.lastCommitResult).toBe("rejected_stale");
-    expect(a.muted).toBe(false); // adopted B — B did not mute
+    expect(a.setMuted(true)).toBe(true);
+    expect(a.lastCommitResult).toBe("persisted");
+    expect(a.lastPersistOk).toBe(true);
+    expect(a.muted).toBe(true);
     expect(clearedCount(a.state)).toBe(11);
 
-    expect(store.read(SAVE_KEY)).toBe(primaryBeforeMute);
-    expect(store.read(SAVE_BACKUP_KEY)).toBe(backupBeforeMute);
-    expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(11);
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.muted).toBe(true);
+    expect(clearedCount(disk)).toBe(11);
   });
 
-  it("2. B advances; A changes mode → B survives", () => {
+  it("2. B advances; A changes mode → adopt+retry keeps B and applies mode", () => {
     const { store, a, b } = dualEconomies(8);
     b.recordClear("1-09");
     expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(9);
 
-    a.selectMode("casual");
-    expect(a.lastCommitResult).toBe("rejected_stale");
-    expect(a.lastPersistOk).toBe(false);
-    expect(a.selectedMode).toBe("normal"); // adopted B
+    expect(a.selectMode("casual")).toBe(true);
+    expect(a.lastCommitResult).toBe("persisted");
+    expect(a.lastPersistOk).toBe(true);
+    expect(a.selectedMode).toBe("casual");
     expect(clearedCount(a.state)).toBe(9);
-    expect(JSON.parse(store.read(SAVE_KEY)!).selectedMode).toBe("normal");
-    expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(9);
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.selectedMode).toBe("casual");
+    expect(clearedCount(disk)).toBe(9);
   });
 
   it("3. B clears one level; A clears another → adopt+retry keeps foreign + new clear", () => {
@@ -145,16 +143,33 @@ describe("save concurrency guard (dual Economy / shared MemoryStore)", () => {
   });
 
   it("5. Rejected stale write does not replace primary or backup", () => {
-    const { store, a, b } = dualEconomies(12);
-    b.recordClear("2-03");
-    const primary = store.read(SAVE_KEY)!;
-    const backup = store.read(SAVE_BACKUP_KEY)!;
-    expect(backup).toBeTruthy();
+    // Double-conflict (adopt retry also stale) must not publish anything.
+    const seed = progressSave(12);
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    const primary = inner.read(SAVE_KEY)!;
+    const backup = inner.read(SAVE_BACKUP_KEY)!;
+    let tick = 0;
+    const racing: SaveStore = {
+      read(key) {
+        if (key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
 
-    a.setMuted(true);
+    const a = new Economy(racing, () => T0);
+    expect(a.setMuted(true)).toBe(false);
     expect(a.lastCommitResult).toBe("rejected_stale");
-    expect(store.read(SAVE_KEY)).toBe(primary);
-    expect(store.read(SAVE_BACKUP_KEY)).toBe(backup);
+    expect(inner.read(SAVE_KEY)).toBe(primary);
+    expect(inner.read(SAVE_BACKUP_KEY)).toBe(backup);
   });
 
   it("6. After adopt/reload newest, later valid write succeeds", () => {
@@ -162,17 +177,20 @@ describe("save concurrency guard (dual Economy / shared MemoryStore)", () => {
     b.recordClear("1-07");
     expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(7);
 
-    a.setMuted(true);
-    expect(a.lastCommitResult).toBe("rejected_stale");
+    // Mute adopt+retries onto B's progress in one call.
+    expect(a.setMuted(true)).toBe(true);
+    expect(a.lastCommitResult).toBe("persisted");
     expect(clearedCount(a.state)).toBe(7);
+    expect(a.muted).toBe(true);
 
-    // Now A is synced to B's primary — mute on top of newest must persist.
-    a.setMuted(true);
+    // Synced + already muted: idempotent true; flipping off must persist.
+    expect(a.setMuted(true)).toBe(true);
+    expect(a.setMuted(false)).toBe(true);
     expect(a.lastCommitResult).toBe("persisted");
     expect(a.lastPersistOk).toBe(true);
-    expect(a.muted).toBe(true);
+    expect(a.muted).toBe(false);
     const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
-    expect(disk.muted).toBe(true);
+    expect(disk.muted).toBe(false);
     expect(clearedCount(disk)).toBe(7);
   });
 
@@ -418,5 +436,155 @@ describe("blocker: expected-token preflight fail-closed", () => {
     expect(map.get(SAVE_KEY)).toBe("{not-json-foreign");
     expect(map.has(SAVE_BACKUP_KEY)).toBe(false);
     expect(map.has(SAVE_RECOVERY_KEY)).toBe(true);
+  });
+});
+
+
+describe("blocker: mute / mode / replay adopt+retry", () => {
+  it("stale mute adopt+retries onto foreign progress", () => {
+    const { store, a, b } = dualEconomies(5);
+    b.recordClear("1-06");
+    expect(a.setMuted(true)).toBe(true);
+    expect(a.muted).toBe(true);
+    expect(a.state.levels["1-06"]?.cleared).toBe(true);
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.muted).toBe(true);
+    expect(disk.levels["1-06"]?.cleared).toBe(true);
+  });
+
+  it("stale mute double-conflict reports unapplied", () => {
+    const seed = progressSave(4);
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let tick = 0;
+    const racing: SaveStore = {
+      read(key) {
+        if (key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+    const economy = new Economy(racing, () => T0);
+    expect(economy.setMuted(true)).toBe(false);
+    expect(economy.muted).toBe(false);
+    expect(economy.lastCommitResult).toBe("rejected_stale");
+  });
+
+  it("stale mode adopt+retries onto foreign progress", () => {
+    const { store, a, b } = dualEconomies(5);
+    b.recordClear("1-06");
+    expect(a.selectMode("casual")).toBe(true);
+    expect(a.selectedMode).toBe("casual");
+    expect(a.state.levels["1-06"]?.cleared).toBe(true);
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.selectedMode).toBe("casual");
+    expect(disk.levels["1-06"]?.cleared).toBe(true);
+  });
+
+  it("stale mode double-conflict reports unapplied", () => {
+    const seed = progressSave(4);
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let tick = 0;
+    const racing: SaveStore = {
+      read(key) {
+        if (key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+    const economy = new Economy(racing, () => T0);
+    expect(economy.selectMode("expert")).toBe(false);
+    expect(economy.selectedMode).toBe("normal");
+    expect(economy.lastCommitResult).toBe("rejected_stale");
+  });
+
+  it("stale replay adopt+retries failCount reset onto foreign progress", () => {
+    const { store, a, b } = dualEconomies(5);
+    // Seed includes 1-01..1-05 cleared. Give A local fails on 1-01, then B advances.
+    a.recordFailure("1-01");
+    a.recordFailure("1-01");
+    expect(a.progressFor("1-01").failCount).toBe(2);
+
+    b.recordClear("1-06");
+    expect(a.beginReplay("1-01")).toBe(true);
+    expect(a.progressFor("1-01").failCount).toBe(0);
+    expect(a.state.levels["1-06"]?.cleared).toBe(true);
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.levels["1-01"]?.failCount).toBe(0);
+    expect(disk.levels["1-06"]?.cleared).toBe(true);
+  });
+
+  it("stale replay double-conflict leaves failCount unrest", () => {
+    const base = progressSave(5);
+    const seed = progressSave(5, {
+      levels: {
+        ...base.levels,
+        "1-01": {
+          ...base.levels["1-01"]!,
+          failCount: 2,
+          cleared: true,
+        },
+      },
+    });
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let tick = 0;
+    const racing: SaveStore = {
+      read(key) {
+        if (key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+          levels: {
+            ...seed.levels,
+            "1-01": { ...seed.levels["1-01"]!, failCount: 2 },
+          },
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+    const economy = new Economy(racing, () => T0);
+    expect(economy.progressFor("1-01").failCount).toBe(2);
+    expect(economy.beginReplay("1-01")).toBe(false);
+    expect(economy.progressFor("1-01").failCount).toBe(2);
+    expect(economy.lastCommitResult).toBe("rejected_stale");
+  });
+});
+
+describe("blocker: starsAdded is the local clear delta only", () => {
+  it("foreign progress + local retry reports only local clear's starsAdded", () => {
+    const { store, a, b } = dualEconomies(5);
+    const beforeA = a.state.totalStars;
+    b.recordClear("2-05"); // +2 stars on foreign (bestStars 2 from starsFor on fresh clear with 0 fails = 3 actually)
+    const foreignAward = b.state.totalStars; // absolute after B
+    // Fresh clear of uncleared level: 0 fails → 3 stars.
+    const award = a.recordClear("2-06");
+    expect(award.applied).toBe(true);
+    expect(award.starsAdded).toBe(3);
+    // totalStars grew by foreign clear + local clear, but starsAdded is local only.
+    expect(award.totalStars).toBe(beforeA + 3 /* local */ + (foreignAward - beforeA));
+    expect(award.totalStars - beforeA).toBeGreaterThan(award.starsAdded);
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.levels["2-05"]?.cleared).toBe(true);
+    expect(disk.levels["2-06"]?.cleared).toBe(true);
   });
 });

@@ -3,8 +3,16 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { Economy } from "../economy/economy.js";
-import { MemoryStore } from "../economy/save.js";
+import {
+  MemoryStore,
+  SAVE_KEY,
+  SAVE_SCHEMA_VERSION,
+  writeSave,
+  type SaveData,
+  type SaveStore,
+} from "../economy/save.js";
 import { DEFAULT_RULES } from "../solver/index.js";
+import { MemorySink, Telemetry } from "../telemetry/telemetry.js";
 import { Director } from "./director.js";
 import type { Command, LadderLevel, ViewState } from "./types.js";
 
@@ -504,5 +512,201 @@ describe("clearEquation wrong-answer recovery (engine contract)", () => {
     expect(s.run).toBe(runBefore);
     expect(s.economy!.lives).toBe(livesBefore);
     expect(s.economy!.totalStars).toBe(starsBefore);
+  });
+});
+
+
+describe("save-concurrency: Director clear / fail unapplied paths", () => {
+  const T0 = 1_700_000_000_000;
+
+  /** Single-target board — final move is the only move. */
+  const FINAL: LadderLevel = {
+    id: "test-final-clear",
+    world: 1,
+    pool: [2, 3],
+    targets: [5],
+    rules: DEFAULT_RULES,
+    modes: {
+      casual: { budget: { "+": null }, tier: "tutorial" },
+      normal: { budget: { "+": null }, tier: "tutorial" },
+      expert: { budget: { "+": null }, tier: "tutorial" },
+    },
+    surplus: 0,
+  };
+
+  function emptySave(): SaveData {
+    return {
+      schemaVersion: SAVE_SCHEMA_VERSION,
+      levels: {},
+      lives: 5,
+      lastLifeGrantedAt: T0,
+      clockHighWater: T0,
+      totalStars: 0,
+      starsSpent: 0,
+      restored: {},
+      selectedMode: "normal",
+      muted: false,
+    };
+  }
+
+  /** Every primary read returns a distinct foreign validated payload. */
+  function racingStore(seed: SaveData): {
+    store: SaveStore;
+    inner: MemoryStore;
+    stopRace: () => void;
+  } {
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let race = true;
+    let tick = 0;
+    const store: SaveStore = {
+      read(key) {
+        if (!race || key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+    return {
+      store,
+      inner,
+      stopRace: () => {
+        race = false;
+      },
+    };
+  }
+
+  it("double-conflict clear restores pre-final tiles/budget/targetIndex; no win telemetry", () => {
+    const seed = emptySave();
+    const { store, inner, stopRace } = racingStore(seed);
+    const economy = new Economy(store, () => T0);
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const d = new Director(FINAL, "normal", economy, telemetry);
+
+    let s = stateOf(d.handle({ type: "loadLevel", id: FINAL.id }));
+    expect(s.phase).toBe("playing");
+    expect(s.targetIndex).toBe(0);
+    const budgetBefore = { ...s.budget };
+
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 2) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
+    s = stateOf(d.handle({ type: "tapCommit" }));
+
+    // Restored to pre-final: still playing with a front target.
+    expect(s.phase).toBe("playing");
+    expect(s.targetIndex).toBe(0);
+    expect(s.targetIndex).toBeLessThan(FINAL.targets.length);
+    expect(s.tiles.every((t) => !t.consumed)).toBe(true);
+    expect(s.budget).toEqual(budgetBefore);
+    expect(s.slots.leftTileId).not.toBeNull();
+    expect(s.slots.op).toBe("+");
+    expect(s.slots.rightTileId).not.toBeNull();
+    expect(s.message).toBe("could not save — try again");
+    expect(economy.state.levels[FINAL.id]?.cleared).toBeFalsy();
+
+    const names = sink.events.map((e) => e.event.name);
+    expect(names).not.toContain("level_complete");
+    expect(names).not.toContain("level_clear");
+    expect(names).not.toContain("star_bank_update");
+
+    // Race settles: pin adopted token as durable primary, then final move wins.
+    stopRace();
+    const token = economy.expectedPrimaryToken;
+    expect(token).toBeTruthy();
+    inner.write(SAVE_KEY, token!);
+
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.phase).toBe("won");
+    expect(economy.state.levels[FINAL.id]?.cleared).toBe(true);
+    expect(sink.events.some((e) => e.event.name === "level_clear")).toBe(true);
+  });
+
+  it("starBankUpdate delta equals starsAdded after foreign adopt+retry", () => {
+    const shared = new MemoryStore();
+    writeSave(shared, {
+      ...emptySave(),
+      totalStars: 4,
+      levels: {
+        "1-01": {
+          bestStars: 2,
+          failCount: 0,
+          cleared: true,
+          firstFailureUsed: false,
+          hintsPurchased: [],
+          ratingAttempt: "tainted",
+        },
+        "1-02": {
+          bestStars: 2,
+          failCount: 0,
+          cleared: true,
+          firstFailureUsed: false,
+          hintsPurchased: [],
+          ratingAttempt: "tainted",
+        },
+      },
+    });
+    const a = new Economy(shared, () => T0);
+    const b = new Economy(shared, () => T0);
+    b.recordClear("2-01"); // foreign +3
+    const foreignTotal = b.state.totalStars;
+
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const d = new Director(FINAL, "normal", a, telemetry);
+    let s = stateOf(d.handle({ type: "loadLevel", id: FINAL.id }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 2) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.phase).toBe("won");
+
+    const bank = sink.events.find((e) => e.event.name === "star_bank_update");
+    expect(bank).toBeTruthy();
+    if (!bank || bank.event.name !== "star_bank_update") throw new Error("missing");
+    // Local clear of fresh level = 3★; must NOT include foreign tab's +3.
+    expect(bank.event.delta).toBe(3);
+    expect(bank.event.total_stars).toBe(foreignTotal + 3);
+    expect(bank.event.delta).toBeLessThan(bank.event.total_stars - 4);
+  });
+
+  it("unapplied failure suppresses fail/life telemetry", () => {
+    const seed = emptySave();
+    // World-3 id so lives are active if a life were spent; racing forces unapplied.
+    const level: LadderLevel = {
+      ...CANONICAL_UNASSISTED,
+      id: "3-05",
+      world: 3,
+    };
+    const { store } = racingStore(seed);
+    const economy = new Economy(store, () => T0);
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const d = new Director(level, "expert", economy, telemetry);
+
+    let s = stateOf(d.handle({ type: "loadLevel", id: level.id }));
+    // Fatal path: 3+5=8 then 1+2=3 leaves 15 unreachable.
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 5) }));
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 1) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 2) }));
+    s = stateOf(d.handle({ type: "tapCommit" }));
+
+    expect(s.phase).toBe("failed");
+    const names = sink.events.map((e) => e.event.name);
+    expect(names).not.toContain("level_fail");
+    expect(names).not.toContain("life_depleted");
+    // Economy mutation itself did not stick.
+    expect(economy.progressFor("3-05").failCount).toBe(0);
   });
 });
