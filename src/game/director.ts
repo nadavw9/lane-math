@@ -1056,9 +1056,16 @@ export class Director {
     this.message = `${left.value} ${op} ${right.value} = ${result}`;
 
     if (this.targetIndex >= this.level.targets.length) {
-      this.phase = "won";
       const starsBefore = this.economy?.state.totalStars;
       const award = this.economy?.recordClear(this.level.id);
+      // Stale-write conflict (after Economy's one adopt retry): board is complete
+      // locally but the clear was not applied to the adopted save — do not claim
+      // win stars / level-clear telemetry against a save that lacks the clear.
+      if (award && !award.applied) {
+        this.message = "cleared — could not save";
+        return this.render();
+      }
+      this.phase = "won";
       this.telemetry?.levelComplete(this.level.id, award?.stars ?? 0, this.failures + 1);
       this.telemetry?.levelClear(this.level.id, award?.stars ?? 0);
       if (award && starsBefore !== undefined) {
@@ -1274,6 +1281,14 @@ export class Director {
     if (decompositions.length === 0 && transforms.length === 0) {
       this.phase = "failed";
       const outcome = this.economy?.recordFailure(this.level.id);
+      // Stale conflict: keep local fail UI but do not adopt rejected life debit /
+      // fail-count / telemetry as if the mutation survived.
+      if (outcome && !outcome.applied) {
+        this.failures = this.failures + 1;
+        this.lastFailureExempt = false;
+        this.message = `${target} cannot be made from what is left`;
+        return this.render();
+      }
       // The economy owns the counter once attached, so it stays authoritative
       // across an app kill rather than being re-derived in memory.
       this.failures = outcome?.failCount ?? this.failures + 1;

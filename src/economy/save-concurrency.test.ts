@@ -8,9 +8,11 @@ import {
   SAVE_KEY,
   SAVE_RECOVERY_KEY,
   SAVE_SCHEMA_VERSION,
+  attemptWriteSave,
   loadSaveStatus,
   writeSave,
   type SaveData,
+  type SaveStore,
 } from "./save.js";
 
 const T0 = 1_700_000_000_000;
@@ -101,23 +103,23 @@ describe("save concurrency guard (dual Economy / shared MemoryStore)", () => {
     expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(9);
   });
 
-  it("3. B clears one level; A clears another from stale → no silent overwrite", () => {
+  it("3. B clears one level; A clears another → adopt+retry keeps foreign + new clear", () => {
     const { store, a, b } = dualEconomies(5);
     // Shared seed has 1-01..1-05. B clears 2-05 only from that base.
     b.recordClear("2-05");
     expect(b.state.levels["2-05"]?.cleared).toBe(true);
     expect(a.state.levels["2-05"]?.cleared).toBeFalsy();
 
-    a.recordClear("2-06");
-    expect(a.lastCommitResult).toBe("rejected_stale");
-    expect(a.lastPersistOk).toBe(false);
-    // Disk keeps B's branch only — A's 2-06 must not silently replace it.
+    const award = a.recordClear("2-06");
+    // Domain mutation retries once on adopted foreign save — both clears survive.
+    expect(award.applied).toBe(true);
+    expect(a.lastCommitResult).toBe("persisted");
+    expect(a.lastPersistOk).toBe(true);
     const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
     expect(disk.levels["2-05"]?.cleared).toBe(true);
-    expect(disk.levels["2-06"]?.cleared).toBeFalsy();
-    // A adopted B — has 2-05, not its rejected 2-06.
+    expect(disk.levels["2-06"]?.cleared).toBe(true);
     expect(a.state.levels["2-05"]?.cleared).toBe(true);
-    expect(a.state.levels["2-06"]?.cleared).toBeFalsy();
+    expect(a.state.levels["2-06"]?.cleared).toBe(true);
   });
 
   it("4. Regen from stale cannot overwrite newer progress", () => {
@@ -213,5 +215,208 @@ describe("save concurrency guard (dual Economy / shared MemoryStore)", () => {
     // Idempotent when already synced.
     expect(a.adoptFromStore(SAVE_KEY)).toBe(false);
     expect(a.adoptFromStore("other-key")).toBe(false);
+  });
+});
+
+
+describe("blocker: rejected actions must not report success", () => {
+  it("stale clear reports applied:false when adopt retry also conflicts", () => {
+    const seed = progressSave(5);
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let tick = 0;
+    const racing: SaveStore = {
+      read(key) {
+        if (key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        // Every primary read returns a distinct validated foreign payload.
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+
+    const economy = new Economy(racing, () => T0);
+    const award = economy.recordClear("2-06");
+    expect(award.applied).toBe(false);
+    expect(award.improved).toBe(false);
+    expect(economy.state.levels["2-06"]?.cleared).toBeFalsy();
+    expect(economy.lastCommitResult).toBe("rejected_stale");
+  });
+
+  it("stale failure never applies wrong life debit / fail count", () => {
+    const seed = progressSave(10, { lives: 3 });
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let tick = 0;
+    const racing: SaveStore = {
+      read(key) {
+        if (key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          lives: 3,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+
+    const economy = new Economy(racing, () => T0);
+    const beforeFails = economy.progressFor("3-05").failCount;
+    const beforeLives = economy.state.lives;
+    const outcome = economy.recordFailure("3-05");
+    expect(outcome.applied).toBe(false);
+    expect(outcome.lifeSpent).toBe(false);
+    expect(outcome.failCount).toBe(beforeFails);
+    expect(economy.state.lives).toBe(beforeLives);
+  });
+
+  it("stale hint/restore never return success unless present after adopt retry", () => {
+    const { a, b } = dualEconomies(12);
+    // B spends the bank so A's stale affordability is wrong after adopt.
+    expect(b.restore(1)).toBe(true);
+    while (b.starsAvailable >= 1 && b.restoredIn(1) < 4) {
+      if (!b.restore(1)) break;
+    }
+    // Drain remaining spendable stars via hints on a cleared level.
+    let guard = 0;
+    while (b.starsAvailable > 0 && guard++ < 50) {
+      const ok = b.purchaseHint("1-01", `drain-${guard}`, b.starsAvailable > 0 ? 1 : 99);
+      if (!ok) break;
+    }
+    expect(b.starsAvailable).toBe(0);
+
+    // A still thinks it has stars from the seed.
+    expect(a.starsAvailable).toBeGreaterThan(0);
+    expect(a.purchaseHint("1-02", "trap-shape", 1)).toBe(false);
+    expect(a.hintsPurchased("1-02")).not.toContain("trap-shape");
+    expect(a.restore(2)).toBe(false);
+  });
+
+  it("valid hint retry after adoption preserves foreign progress + new hint", () => {
+    const { store, a, b } = dualEconomies(12);
+    b.recordClear("2-04");
+    expect(clearedCount(JSON.parse(store.read(SAVE_KEY)!))).toBe(13);
+
+    expect(a.starsAvailable).toBeGreaterThan(0);
+    expect(a.purchaseHint("1-03", "branch", 1)).toBe(true);
+    expect(a.hintsPurchased("1-03")).toContain("branch");
+    const disk = JSON.parse(store.read(SAVE_KEY)!) as SaveData;
+    expect(disk.levels["2-04"]?.cleared).toBe(true);
+    expect(disk.levels["1-03"]?.hintsPurchased).toContain("branch");
+  });
+});
+
+describe("blocker: primary-written / backup-failed token", () => {
+  it("backup fail after primary ok → next healthy commit does not self-conflict", () => {
+    const map = new Map<string, string>();
+    let failBackup = false;
+    const store: SaveStore = {
+      read(key) {
+        return map.has(key) ? map.get(key)! : null;
+      },
+      write(key, value) {
+        if (failBackup && key === SAVE_BACKUP_KEY) throw new Error("backup boom");
+        map.set(key, value);
+      },
+    };
+
+    // First durable write: primary + backup bootstrap both ok.
+    const seed = progressSave(4);
+    expect(writeSave(store, seed)).toBe(true);
+    expect(map.has(SAVE_BACKUP_KEY)).toBe(true);
+
+    // Remove backup so the next write takes the bootstrap path.
+    map.delete(SAVE_BACKUP_KEY);
+    failBackup = true;
+
+    const economy = new Economy(store, () => T0);
+    expect(economy.expectedPrimaryToken).toBeTruthy();
+
+    economy.setMuted(true);
+    // Primary must have been written even though backup bootstrap failed.
+    expect(JSON.parse(map.get(SAVE_KEY)!).muted).toBe(true);
+    expect(economy.lastPersistOk).toBe(false);
+    expect(economy.lastCommitResult).toBe("persist_failed");
+    // Token advanced to the written primary — critical for no self-conflict.
+    expect(economy.expectedPrimaryToken).toBe(map.get(SAVE_KEY)!);
+
+    failBackup = false;
+    economy.selectMode("casual");
+    expect(economy.lastCommitResult).toBe("persisted");
+    expect(economy.lastPersistOk).toBe(true);
+    expect(JSON.parse(map.get(SAVE_KEY)!).selectedMode).toBe("casual");
+    expect(JSON.parse(map.get(SAVE_KEY)!).muted).toBe(true);
+  });
+});
+
+describe("blocker: expected-token preflight fail-closed", () => {
+  it("unavailable primary read does not write when expected token supplied", () => {
+    const writes: string[] = [];
+    const store: SaveStore = {
+      read() {
+        throw new Error("unavailable");
+      },
+      write(key, value) {
+        writes.push(key);
+        void value;
+      },
+    };
+    const outcome = attemptWriteSave(store, progressSave(2), {
+      expectedPrimary: JSON.stringify(progressSave(2)),
+    });
+    expect(outcome.status).toBe("failed");
+    expect(writes).toEqual([]);
+  });
+
+  it("expected non-null + primary missing does not resurrect stale", () => {
+    const writes: string[] = [];
+    const store: SaveStore = {
+      read() {
+        return null;
+      },
+      write(key) {
+        writes.push(key);
+      },
+    };
+    const outcome = attemptWriteSave(store, progressSave(3), {
+      expectedPrimary: JSON.stringify(progressSave(1)),
+    });
+    expect(outcome.status).toBe("failed");
+    expect(writes).toEqual([]);
+  });
+
+  it("different corrupt raw does not overwrite before recovery secured", () => {
+    const map = new Map<string, string>();
+    map.set(SAVE_KEY, "{not-json-foreign");
+    const writes: Array<{ key: string; value: string }> = [];
+    const store: SaveStore = {
+      read(key) {
+        return map.has(key) ? map.get(key)! : null;
+      },
+      write(key, value) {
+        writes.push({ key, value });
+        map.set(key, value);
+      },
+    };
+
+    const outcome = attemptWriteSave(store, progressSave(4), {
+      expectedPrimary: JSON.stringify(progressSave(4)),
+    });
+    expect(outcome.status).toBe("failed");
+    // Recovery may be secured, but primary/backup must not be replaced.
+    expect(writes.every((w) => w.key === SAVE_RECOVERY_KEY)).toBe(true);
+    expect(map.get(SAVE_KEY)).toBe("{not-json-foreign");
+    expect(map.has(SAVE_BACKUP_KEY)).toBe(false);
+    expect(map.has(SAVE_RECOVERY_KEY)).toBe(true);
   });
 });

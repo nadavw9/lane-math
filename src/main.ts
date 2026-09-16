@@ -4,6 +4,7 @@ import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
 import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
+import { planAdoptRefresh } from "./economy/adopt-refresh.js";
 import { Economy } from "./economy/economy.js";
 import { LocalStorageStore, SAVE_KEY, readRecoveryRaw } from "./economy/save.js";
 import { Director } from "./game/director.js";
@@ -233,26 +234,6 @@ const sound = new Sound();
 sound.setMuted(economy.muted);
 renderer.attachSound(sound);
 
-/*
- * Cross-tab save awareness (desktop multi-tab).
- *
- * `storage` fires in *other* documents when localStorage changes. Core
- * correctness is Economy.commit's expected-primary compare-before-write
- * (testable with MemoryStore + two Economy instances). This listener only
- * adopts a foreign validated primary into the live session so mute/UI do not
- * stay stale until the next mutation. Residual TOCTOU across tabs remains —
- * this is not an atomic CAS / critical section. navigator.locks is not wired
- * here to avoid an unreviewed async Economy refactor; unsupported browsers
- * keep the sync compare-before-write guard.
- */
-window.addEventListener("storage", (event) => {
-  if (event.storageArea && event.storageArea !== localStorage) return;
-  // event.key === null means Storage.clear(); adoptFromStore ignores wipe-to-empty.
-  if (event.key !== null && event.key !== SAVE_KEY) return;
-  if (!economy.adoptFromStore(event.key)) return;
-  sound.setMuted(economy.muted);
-});
-
 const warmAudio = (): void => {
   window.removeEventListener("pointerdown", warmAudio);
   // Deferred off the gesture so the handler returns before any audio work.
@@ -343,6 +324,32 @@ map.attach({
   onDownloadRecovery: () => {
     void downloadRecoverySave();
   },
+});
+
+/*
+ * Cross-tab save awareness (desktop multi-tab).
+ *
+ * `storage` fires in *other* documents when localStorage changes. Core
+ * correctness is Economy.commit's expected-primary compare-before-write
+ * (testable with MemoryStore + two Economy instances). This listener adopts
+ * Economy state and syncs Sound mute only — it does not redraw Map/HUD by
+ * implication. `refreshEconomySurfaces` is the deterministic hook for visible
+ * economy-derived chrome (map when open); it never discards an in-progress
+ * board for a preference-only foreign change. Residual TOCTOU across tabs
+ * remains — not an atomic CAS. navigator.locks is not wired here.
+ */
+function refreshEconomySurfaces(): void {
+  const plan = planAdoptRefresh({ mapVisible: map.visible });
+  if (plan.syncSoundMute) sound.setMuted(economy.muted);
+  if (plan.refreshMap) map.show(viewWithRestoration());
+}
+
+window.addEventListener("storage", (event) => {
+  if (event.storageArea && event.storageArea !== localStorage) return;
+  // event.key === null means Storage.clear(); adoptFromStore ignores wipe-to-empty.
+  if (event.key !== null && event.key !== SAVE_KEY) return;
+  if (!economy.adoptFromStore(event.key)) return;
+  refreshEconomySurfaces();
 });
 
 /*
@@ -675,6 +682,8 @@ Object.assign(window, {
     state: () => lastState,
     setEffectSpeed,
     showMap,
+    /** Deterministic post-adoption refresh (map when visible; never interrupts board). */
+    refreshEconomySurfaces,
     /** Review hook: replay the clear-to-map handoff beat. */
     showMapAfterClear: () => {
       const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;

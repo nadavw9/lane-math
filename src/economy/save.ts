@@ -358,6 +358,12 @@ export interface WriteSaveOptions {
 /** Outcome of attemptWriteSave — richer than writeSave's boolean. */
 export type WriteSaveOutcome =
   | { readonly status: "written" }
+  /**
+   * Primary SAVE_KEY was confirmed written, but backup/durability did not
+   * complete. Callers must advance their expected-primary token to `primaryRaw`
+   * so the next write does not self-conflict, while treating persist as not OK.
+   */
+  | { readonly status: "incomplete"; readonly primaryRaw: string }
   | { readonly status: "failed" }
   | {
       readonly status: "conflict";
@@ -391,15 +397,37 @@ export function attemptWriteSave(
   const prev = safeReadResult(store, SAVE_KEY);
 
   if (opts.expectedPrimary !== undefined) {
+    // Fail-closed when an expected token is in play: never write blind.
+    if (prev.status === "unavailable") {
+      return { status: "failed" };
+    }
+    // Expected a durable primary but the key is gone (e.g. Storage.clear in
+    // another tab). Do not resurrect this session's possibly-stale memory.
+    if (opts.expectedPrimary !== null && prev.status === "missing") {
+      return { status: "failed" };
+    }
     if (prev.status === "found") {
       const validated = tryParseMigrate(prev.value);
-      if (
-        validated &&
-        prev.value !== opts.expectedPrimary &&
-        prev.value !== payload
-      ) {
-        // Foreign validated primary — reject stale write; leave both generations.
-        return { status: "conflict", currentRaw: prev.value, current: validated };
+      if (validated) {
+        if (
+          prev.value !== opts.expectedPrimary &&
+          prev.value !== payload
+        ) {
+          // Foreign validated primary — reject stale write; leave both generations.
+          return { status: "conflict", currentRaw: prev.value, current: validated };
+        }
+      } else if (prev.value !== opts.expectedPrimary && prev.value !== payload) {
+        // Different corrupt / unmigratable raw: must not overwrite until the
+        // unreadable bytes are secured on SAVE_RECOVERY_KEY (#30).
+        if (!recoverySecuredOnStore(store)) {
+          if (!preserveRecoveryRawOnce(store, prev.value)) {
+            return { status: "failed" };
+          }
+        }
+        // Recovery secured (existing or just preserved) — still refuse to
+        // replace unreadable primary from a mismatched expected token. Caller
+        // must go through load/backup recovery, not a stale session publish.
+        return { status: "failed" };
       }
     }
   }
@@ -422,9 +450,10 @@ export function attemptWriteSave(
   // Do not reduce durability to always duplicating newest into both keys.
   const backup = safeReadResult(store, SAVE_BACKUP_KEY);
   if (backup.status === "missing") {
-    return safeWrite(store, SAVE_BACKUP_KEY, payload)
-      ? { status: "written" }
-      : { status: "failed" };
+    if (safeWrite(store, SAVE_BACKUP_KEY, payload)) return { status: "written" };
+    // Primary is durable; backup bootstrap failed. Advance expected-primary
+    // via incomplete so the next write does not self-conflict.
+    return { status: "incomplete", primaryRaw: payload };
   }
   return { status: "written" };
 }
@@ -435,6 +464,7 @@ export function attemptWriteSave(
  * false — use attemptWriteSave when conflict must be distinguished.
  */
 export function writeSave(store: SaveStore, data: SaveData, opts: WriteSaveOptions = {}): boolean {
+  // incomplete (primary ok, backup not) is not full durability — false.
   return attemptWriteSave(store, data, opts).status === "written";
 }
 
