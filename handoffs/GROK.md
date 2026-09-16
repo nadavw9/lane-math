@@ -1,6 +1,17 @@
 # GROK — Eng Lead notes
 
-## Current — Save concurrency GUARD · `feat/save-concurrency-guard`
+## Current — Security / Privacy / Release AUDIT (S0 docs) · tip `2be7ad1`
+
+**Status:** Docs-only PR #37 — severity language amended; merge when CI green.  
+**Base:** `master` @ `2be7ad1` (`2be7ad114cfbe73af2c8aef5adb64ee732024e06`, after #36 save-concurrency-guard)  
+**Branch:** `docs/security-privacy-release-audit-2be7ad1`  
+**Deliverable:** [`handoffs/SECURITY_PRIVACY_RELEASE_AUDIT_2be7ad1.md`](./SECURITY_PRIVACY_RELEASE_AUDIT_2be7ad1.md).  
+**Severity (amended):** Client-trust `migrate` + `window.laneMath` mutators = **P1** on GitHub master (local/offline / release-debug); **P0 preconditions** if cloud-authoritative / ranked / monetized / paid rewards / cross-user trust. Child/AdMob = **P0 production-ads go-live blocker** (test IDs ≠ current prod ad incident). “No cloud sync” true **only for GitHub master** — Base44 Next cloud-save is Codex-owned/gated (out of scope). Structural validation ≠ cheat-proof. **First track:** Track A (`migrate` fail-closed + harness off default prod).  
+**Hard rules kept:** no behavior/schema/Economy/CI/Base44/ChronosGlobe/CODEX/GDD/ART_DIRECTION/CLAUDE changes; suite floor lane ≥524 (CI default still 495) untouched.
+
+---
+
+## Prior — Save concurrency GUARD · `feat/save-concurrency-guard`
 
 **Status:** DRAFT PR — implement expected-primary compare-before-write (R1 adopt). **Do not merge** until CoS/Codex say otherwise.  
 **Base:** `master` @ `41496ad` (after #35 audit merge)  
