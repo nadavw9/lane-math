@@ -83,5 +83,5 @@ Delete `.github/workflows/codeql.yml` (and this handoff / GROK pointer) via reve
 - CI: CodeQL workflow run URL(s) on the DRAFT PR; existing CI gates workflow still green on the tip if triggered.
 - Tip / PR: filled at open time in GROK + below.
 
-**Tip SHA:** `c8709ee0e5f305311015a67379e54136f73f2110` (`c8709ee`) at DRAFT stamp; subsequent docs-only tip updates may advance HEAD — trust PR #50 HEAD.
+**Tip SHA:** PR [#50](https://github.com/nadavw9/lane-math/pull/50) HEAD (`ci/track-c2-codeql`) — trust `gh pr view 50 --json headRefOid`.
 **DRAFT PR:** [#50](https://github.com/nadavw9/lane-math/pull/50) — **do not merge**.
