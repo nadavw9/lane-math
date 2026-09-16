@@ -1,9 +1,9 @@
-## Current — Track C mission (C3–C6) · in progress
+## Current — Track C mission · COMPLETE
 
-**Base:** `master` @ `0fffa1c95abc304fa1d8bdcad4432f67341d158f`
-**Status:** C3 #51 `70cf1dd`; C4 #52 `bbc31d5`; C5 deploy-evidence in progress; C6 provenance DEFER.
-**Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md) is the authoritative status/evidence pointer.
-**Hard rules:** Preserve gates ≥548, Pages master-only, least privilege, SHA pins. No Base44 / Chronos / gameplay / economy / UI / schema / Android. No new third-party Actions unless C4-C requires gitleaks (document why A+B insufficient).
+**Status:** Hardening slices C3–C5 merged; C6 provenance DEFER. C2 base `0fffa1c` → C5 tip `e148eb7`.
+**Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md).
+**Landed:** C3 per-ref CI concurrency; C4 native secret scanning verified + fail-closed obvious-secret check (gitleaks deferred); C5 compact deploy evidence summary.
+**Hard rules kept:** gates ≥548; Pages master-only; least privilege; SHA pins. No Base44 / Chronos / gameplay / economy / UI / schema / Android.
 
 ---
 
