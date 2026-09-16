@@ -85,14 +85,18 @@ Revert pin commit to previous tags/SHAs.
 
 ### Proposed change (later impl)
 Phased, low-noise:
-1. **Non-blocking** `npm audit --omit=dev` (or `--production`) on `gates` with `continue-on-error: true` + step summary — visibility first.
-2. Add Dependabot npm (weekly) limited to security PRs / grouped minor bumps; Eng reviews.
+1. **Non-blocking** `npm audit` covering **all** dependencies (production **and** build/dev) on `gates` with `continue-on-error: true` + step summary — visibility first. Build/dev tools run in CI and are part of the supply-chain surface; do **not** use `--omit=dev` / `--production` for the initial visibility gate. You may **separately** summarize production-only findings in the step summary, but that summary must not replace or exclude the all-deps audit.
+2. Add Dependabot **scheduled version updates** (distinct from GitHub **security** updates):
+   - Weekly **npm** version updates with **conservative grouping** and **open-PR limits**; Eng reviews.
+   - Weekly **github-actions** version updates (once Actions are SHA-pinned).
+   - GitHub **security updates** (Dependabot security alerts / auto-security PRs) are a **separate** product path — enable/handle in repo settings when desired. **`dependabot.yml` does not create a security-only mode**; it configures scheduled version-update PRs only.
 3. Optional later: CodeQL JS (default queries) on master/PRs — only if Codex wants SARIF noise budget.
 
 Out of scope unless assigned: mandatory fail-on-high that blocks Pages without an allowlist story.
 
 ### Acceptance criteria
-- Audit/Dependabot (whichever Codex picks) surfaces advisories without breaking green master deploy on day one unless explicitly made blocking.
+- Non-blocking all-deps `npm audit` surfaces advisories (including transitive build/dev) without breaking green master deploy on day one unless explicitly made blocking. Green/non-blocking ≠ secure supply chain.
+- Dependabot version-update config (weekly npm + actions, grouping/limits) is documented as **≠** security updates; security updates remain a separate enablement path.
 - Lockfile remains the install source of truth (`npm ci` unchanged).
 - No Base44 / native secret stores introduced.
 
@@ -204,7 +208,7 @@ Remove evidence steps; Pages deploy reverts to current upload + deploy-pages pai
 | --- | --- | --- | --- | --- |
 | 1 | Least privilege | Workflow-wide `pages`+`id-token` write | Scope writes to `deploy` only | **Yes** (docs) |
 | 2 | Action pinning | Floating `@v3`/`@v4` tags | SHA pins + Actions Dependabot | **Yes** (docs) |
-| 3 | Dep/security scan | Lockfile only; no audit/Dependabot/CodeQL | Non-blocking audit → Dependabot → optional CodeQL | **Yes** (docs) |
+| 3 | Dep/security scan | Lockfile only; no audit/Dependabot/CodeQL | Non-blocking **all-deps** audit → Dependabot **version** updates (≠ security updates) → optional CodeQL | **Yes** (docs) |
 | 4 | Secret patterns | gitignore keystores only | Secret scanning / optional gitleaks | **Yes** (docs) |
 | 5 | Test floor | Default MIN **495**; lane **548** | Default MIN **≥548** + CI label | **Yes** (docs mention only; no bump here) |
 | 6 | Release evidence | Strong gates; thin provenance narrative | Deploy evidence summary ± provenance | **Yes** (docs) |
@@ -224,6 +228,6 @@ Remove evidence steps; Pages deploy reverts to current upload + deploy-pages pai
 1. Test-floor MIN → 548 (tiny, high value, matches lane).  
 2. Least-privilege permissions on `deploy`.  
 3. Action SHA pins (+ Actions Dependabot).  
-4. Non-blocking `npm audit` + npm Dependabot.  
+4. Non-blocking all-deps `npm audit` + Dependabot version updates (npm + actions; ≠ security updates).  
 5. Secret scanning / gitleaks.  
 6. Release evidence summary (± attest).

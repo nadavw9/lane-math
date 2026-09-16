@@ -2,11 +2,11 @@
 
 ## Current — Track C CI supply-chain DESIGN (docs-only)
 
-**Status:** DRAFT docs-only PR — **DESIGN ONLY**. No workflow/impl until Codex assigns scope. **MERGE HOLD.**  
+**Status:** Docs-only design PR #39 — amend audit/Dependabot accuracy, then merge. No workflow/impl in this PR; Track C1 = separate impl PR.  
 **Base:** `master` @ `010e3a1` (`010e3a13d3e012ac9035595e1ed1271a21c0682f`, after #38 Track A merge)  
 **Branch:** `docs/track-c-ci-supply-chain-design`  
 **Deliverable:** [`TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md`](./TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md).  
-**Covers (propose only):** (1) CI least privilege pages/id-token → deploy job; (2) third-party action SHA pinning; (3) dependency/security scanning; (4) secret-pattern detection; (5) assert default MIN ≥**548** (lane floor; **docs mention only** — do not bump in this PR); (6) release evidence checks.  
+**Covers (propose only):** (1) CI least privilege pages/id-token → deploy job; (2) third-party action SHA pinning; (3) dependency/security scanning — non-blocking **all-deps** `npm audit` (not prod-only); Dependabot **scheduled version updates** ≠ GitHub security updates; (4) secret-pattern detection; (5) assert default MIN ≥**548** (lane floor; **docs mention only** — do not bump in this PR); (6) release evidence checks. **Amend:** docs corrected before merge (audit all-deps; Dependabot accuracy).  
 **Hard rules:** Docs/handoffs/GROK pointer only. No workflow YAML behavior. No stacked behavior branch. No Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema.
 
 ---
