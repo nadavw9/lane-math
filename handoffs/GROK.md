@@ -1,14 +1,22 @@
 # GROK — Eng Lead notes
 
-## Current — Track A DRAFT · PROOF ROUND (PR #38)
+## Current — Track C CI supply-chain DESIGN (docs-only)
 
-**Status:** DRAFT PR #38 — **do not merge** until CoS/Codex say otherwise.  
-**Base:** `master` @ `e0134a8` (after #37 S0 audit merge)  
-**Branch:** `feat/track-a-save-validation-harness`  
+**Status:** Docs-only design PR #39 — amend audit/Dependabot accuracy, then merge. No workflow/impl in this PR; Track C1 = separate impl PR.  
+**Base:** `master` @ `010e3a1` (`010e3a13d3e012ac9035595e1ed1271a21c0682f`, after #38 Track A merge)  
+**Branch:** `docs/track-c-ci-supply-chain-design`  
+**Deliverable:** [`TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md`](./TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md).  
+**Covers (propose only):** (1) CI least privilege pages/id-token → deploy job; (2) third-party action SHA pinning; (3) dependency/security scanning — non-blocking **all-deps** `npm audit` (not prod-only); Dependabot **scheduled version updates** ≠ GitHub security updates; (4) secret-pattern detection; (5) assert default MIN ≥**548** (lane floor; **docs mention only** — do not bump in this PR); (6) release evidence checks. **Amend:** docs corrected before merge (audit all-deps; Dependabot accuracy).  
+**Hard rules:** Docs/handoffs/GROK pointer only. No workflow YAML behavior. No stacked behavior branch. No Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema.
+
+---
+
+## Prior — Track A save-validation harness · PR #38 (merged)
+
+**Status:** MERGED at `010e3a1`. Suite floor lane **548**; CI assert default MIN still **495** until Track C impl assigns the bump.  
+**Branch (historical):** `feat/track-a-save-validation-harness`  
 **Proof:** historical fixtures A–D; #30 recovery + `classifySaveRaw` distinctions; full mutator DCE regression gate + harness-on positive smoke; deploy artifact = `dist-pages/` (harness-off). Validation review: [`TRACK_A_PROOF_VALIDATION_REVIEW.md`](./TRACK_A_PROOF_VALIDATION_REVIEW.md).  
-**Scope:** A1 harness off default Pages/APK (`import.meta.env.DEV || VITE_LANE_MATH_HARNESS=1`, Vite DCE); A2 fail-closed `migrate` (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery. Improves validation — **does NOT** make client saves cheat-proof. String scan = regression gate only, not security proof. No silent `starsSpent>totalStars` clamp.  
-**Verify:** `npm test` → **548**; typecheck; build; `assert-no-prod-harness`; harness-on `assert-harness-present`; `curate:verify`; `MIN_TESTS=524 node tools/assert-suite-size.mjs`.  
-**Out of scope:** Base44 / ChronosGlobe / GDD / ART / CLAUDE / CODEX / economy reprice / schema bump / Track C stacked branch.
+**Scope landed:** A1 harness off default Pages/APK; A2 fail-closed `migrate` (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery. Improves validation — **does NOT** make client saves cheat-proof.
 
 ---
 
