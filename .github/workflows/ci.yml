@@ -75,16 +75,31 @@ jobs:
       # BASE MATTERS: Pages serves from /lane-math/, so the assets have to be
       # built against that prefix. Capacitor and local dev stay at "/", which is
       # why this is a flag here rather than a setting in vite.config.
-      - name: Build
+      #
+      # Track A: default prod build excludes window.laneMath harness. Boot /
+      # font / viewport gates still need the harness, so CI builds twice —
+      # Pages artifact = harness-off; smoke suite = harness-on.
+      - name: Build (Pages / default prod — harness off)
         run: npm run build -- --base=/lane-math/
+
+      - name: Assert default prod excludes review harness
+        run: node tools/assert-no-prod-harness.mjs
 
       - name: Report web build size
         run: |
-          echo "### Web build" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Web build (Pages / harness off)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           du -sh dist >> "$GITHUB_STEP_SUMMARY"
           du -b dist | tail -1 | awk '{printf "%d bytes\n", $1}' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Park Pages artefact
+        run: rm -rf dist-pages && mv dist dist-pages
+
+      - name: Build (boot gates — harness on)
+        env:
+          VITE_LANE_MATH_HARNESS: "1"
+        run: npm run build -- --base=/lane-math/
 
       # BOOT SMOKE — the gate the unit suite structurally cannot be.
       # Three silent-blank failures so far, all with green CI: a wrong asset
@@ -137,7 +152,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist-pages
 
   # MASTER ONLY. The gates run on every branch so a change can be judged by CI
   # before it reaches master, but a branch must never publish to production.

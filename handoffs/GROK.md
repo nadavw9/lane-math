@@ -1,13 +1,21 @@
 # GROK — Eng Lead notes
 
-## Current — Security / Privacy / Release AUDIT (S0 docs) · tip `2be7ad1`
+## Current — Track A DRAFT · save validation + prod harness gate
 
-**Status:** Docs-only PR #37 — severity language amended; merge when CI green.  
-**Base:** `master` @ `2be7ad1` (`2be7ad114cfbe73af2c8aef5adb64ee732024e06`, after #36 save-concurrency-guard)  
-**Branch:** `docs/security-privacy-release-audit-2be7ad1`  
+**Status:** DRAFT PR — **do not merge** until CoS/Codex say otherwise.  
+**Base:** `master` @ `e0134a8` (after #37 S0 audit merge)  
+**Branch:** `feat/track-a-save-validation-harness`  
+**Scope:** A1 harness off default Pages/APK (`import.meta.env.DEV || VITE_LANE_MATH_HARNESS=1`, Vite DCE); A2 fail-closed `migrate` shape validation (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery invariant tests. Improves validation — **does NOT** make client saves cheat-proof.  
+**Verify:** `npm test` → **538**; typecheck; build; `node tools/assert-no-prod-harness.mjs`; `curate:verify`; `MIN_TESTS=524 node tools/assert-suite-size.mjs`.  
+**Out of scope:** Base44 / ChronosGlobe / GDD / ART / CLAUDE / CODEX / economy reprice / schema bump / Track C.
+
+---
+
+## Prior — Security / Privacy / Release AUDIT (S0 docs) · PR #37 (merged)
+
+**Status:** MERGED at `e0134a8`.  
 **Deliverable:** [`handoffs/SECURITY_PRIVACY_RELEASE_AUDIT_2be7ad1.md`](./SECURITY_PRIVACY_RELEASE_AUDIT_2be7ad1.md).  
-**Severity (amended):** Client-trust `migrate` + `window.laneMath` mutators = **P1** on GitHub master (local/offline / release-debug); **P0 preconditions** if cloud-authoritative / ranked / monetized / paid rewards / cross-user trust. Child/AdMob = **P0 production-ads go-live blocker** (test IDs ≠ current prod ad incident). “No cloud sync” true **only for GitHub master** — Base44 Next cloud-save is Codex-owned/gated (out of scope). Structural validation ≠ cheat-proof. **First track:** Track A (`migrate` fail-closed + harness off default prod).  
-**Hard rules kept:** no behavior/schema/Economy/CI/Base44/ChronosGlobe/CODEX/GDD/ART_DIRECTION/CLAUDE changes; suite floor lane ≥524 (CI default still 495) untouched.
+**Severity (amended):** Client-trust `migrate` + `window.laneMath` mutators = **P1** on GitHub master; **P0 preconditions** if cloud/ranked/monetized. Child/AdMob = **P0 production-ads go-live blocker** (test IDs ≠ incident). “No cloud sync” true **only for GitHub master**.
 
 ---
 

@@ -670,91 +670,110 @@ function measureTapLatency(iterations = 200): { median: number; mean: number; ma
   };
 }
 
-Object.assign(window, {
-  laneMath: {
-    measureRetry,
-    measureTapLatency,
-    load: (id: string) => {
-      const level = levels.get(id);
-      if (!level) throw new Error(`no level ${id}`);
-      open(level);
+/*
+ * Review / proof harness (Track A).
+ *
+ * Default production Pages/APK builds must NOT expose state-mutating
+ * `window.laneMath` APIs. The entire harness (mutators + diagnostics) is gated
+ * behind `import.meta.env.DEV` or explicit `VITE_LANE_MATH_HARNESS=1`
+ * (disabled-by-default). No hidden prod backdoor.
+ *
+ * Non-mutating diagnostics that *could* be argued for prod boot-proofing
+ * (diagnostics/state/sprites/build) are intentionally NOT retained by
+ * assumption — CI boot gates rebuild with VITE_LANE_MATH_HARNESS=1; the
+ * Pages artifact is the default (harness-off) build.
+ */
+// Compile-time gate: Vite replaces import.meta.env.* so production DCE drops
+// the entire harness object (function-call gating would keep it in the bundle).
+if (import.meta.env.DEV || import.meta.env.VITE_LANE_MATH_HARNESS === "1") {
+  Object.assign(window, {
+    laneMath: {
+      /** Marker for prod-exclusion asserts — never ship in default builds. */
+      __harness: true as const,
+      measureRetry,
+      measureTapLatency,
+      load: (id: string) => {
+        const level = levels.get(id);
+        if (!level) throw new Error(`no level ${id}`);
+        open(level);
+      },
+      send,
+      playIntoFailure,
+      winLevel: playIntoWin,
+      economy: () => economy.state,
+      state: () => lastState,
+      setEffectSpeed,
+      showMap,
+      /** Deterministic post-adoption refresh (map when visible; never interrupts board). */
+      refreshEconomySurfaces,
+      /** Review hook: replay the clear-to-map handoff beat. */
+      showMapAfterClear: () => {
+        const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
+        showMap(focus);
+      },
+      /** Review hook: force the spendable star balance. */
+      setStars: (n: number) => {
+        forcedStars = n;
+        if (map.visible) map.show(viewWithRestoration());
+      },
+      /** Review hook: force lives (0 opens the out-of-lives screen on a lives-active level). */
+      setLives: (n: number) => {
+        economy.setLives(n);
+        if (map.visible) map.show(viewWithRestoration());
+        else send({ type: "tick" });
+      },
+      /** Review hook: open the restore confirm for a world. */
+      tapRestore: (world: number) => map.openRestoreConfirm(world),
+      /** Review hook: set every room's restored count (ART_DIRECTION §6). */
+      setRestored: (n: 0 | 1 | 2 | 3 | 4) => {
+        forcedRestored = { 1: n, 2: n, 3: n, 4: n };
+        if (map.visible) map.show(viewWithRestoration());
+      },
+      showBoard,
+      endLevelIntro: () => renderer.endLevelIntro(),
+      setLevelIntroHint: (hint: string | null, message: string | null = null) => renderer.setLevelIntroHint(hint, message),
+      preLevelHint: () => director.preLevelHint(),
+      mapView: () => mapView(economy, LEVEL_IDS),
+      ads: () => ({ available: ads.available }),
+      /** The §5.2 refill offer, exposed so the ad path can be exercised. */
+      watchAdForLife: async () => {
+        const outcome = await ads.offerLifeForAd(economy);
+        if (map.visible) map.show(viewWithRestoration());
+        else send({ type: "tick" });
+        return outcome;
+      },
+      /** Audio, for the harness: state, the played-cue log, and the mute toggle. */
+      audio: () => ({
+        ready: sound.ready,
+        muted: sound.isMuted,
+        contextTimeMs: sound.contextTimeMs,
+        log: [...sound.log],
+      }),
+      warmAudio: () => sound.warm(),
+      clearAudioLog: () => {
+        sound.log.length = 0;
+      },
+      setMuted: (muted: boolean) => {
+        economy.setMuted(muted);
+        // Mirror resulting economy state — a failed persist must not force sound.
+        sound.setMuted(economy.muted);
+      },
+      /** What the feel layer is running right now — see Renderer.feelState. */
+      feel: () => renderer.feelState(),
+      /** Proof harness: mute shatter FX so automaton mid-motion is photographable. */
+      clearShatters: () => renderer.clearShatters(),
+      settleScriptedTrap: () => renderer.settleScriptedTrap(),
+      /** Every unbounded-growth candidate the renderer holds. */
+      diagnostics: () => renderer.diagnostics(),
+      sprites: () => ({ missing: missingSprites(), loaded: loadedSprites(), failed: failedAtlases() }),
+      telemetry: () => localSink.read(),
+      exportTelemetry,
+      downloadRecoverySave,
+      hasRecoveryRaw: () => economy.hasRecoveryRaw,
+      loadStatus: () => economy.loadStatus,
+      build: BUILD,
+      clearTelemetry: () => localSink.clear(),
+      offThread: () => winnability.offThread,
     },
-    send,
-    playIntoFailure,
-    winLevel: playIntoWin,
-    economy: () => economy.state,
-    state: () => lastState,
-    setEffectSpeed,
-    showMap,
-    /** Deterministic post-adoption refresh (map when visible; never interrupts board). */
-    refreshEconomySurfaces,
-    /** Review hook: replay the clear-to-map handoff beat. */
-    showMapAfterClear: () => {
-      const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
-      showMap(focus);
-    },
-    /** Review hook: force the spendable star balance. */
-    setStars: (n: number) => {
-      forcedStars = n;
-      if (map.visible) map.show(viewWithRestoration());
-    },
-    /** Review hook: force lives (0 opens the out-of-lives screen on a lives-active level). */
-    setLives: (n: number) => {
-      economy.setLives(n);
-      if (map.visible) map.show(viewWithRestoration());
-      else send({ type: "tick" });
-    },
-    /** Review hook: open the restore confirm for a world. */
-    tapRestore: (world: number) => map.openRestoreConfirm(world),
-    /** Review hook: set every room's restored count (ART_DIRECTION §6). */
-    setRestored: (n: 0 | 1 | 2 | 3 | 4) => {
-      forcedRestored = { 1: n, 2: n, 3: n, 4: n };
-      if (map.visible) map.show(viewWithRestoration());
-    },
-    showBoard,
-    endLevelIntro: () => renderer.endLevelIntro(),
-    setLevelIntroHint: (hint: string | null, message: string | null = null) => renderer.setLevelIntroHint(hint, message),
-    preLevelHint: () => director.preLevelHint(),
-    mapView: () => mapView(economy, LEVEL_IDS),
-    ads: () => ({ available: ads.available }),
-    /** The §5.2 refill offer, exposed so the ad path can be exercised. */
-    watchAdForLife: async () => {
-      const outcome = await ads.offerLifeForAd(economy);
-      if (map.visible) map.show(viewWithRestoration());
-      else send({ type: "tick" });
-      return outcome;
-    },
-    /** Audio, for the harness: state, the played-cue log, and the mute toggle. */
-    audio: () => ({
-      ready: sound.ready,
-      muted: sound.isMuted,
-      contextTimeMs: sound.contextTimeMs,
-      log: [...sound.log],
-    }),
-    warmAudio: () => sound.warm(),
-    clearAudioLog: () => {
-      sound.log.length = 0;
-    },
-    setMuted: (muted: boolean) => {
-      economy.setMuted(muted);
-      // Mirror resulting economy state — a failed persist must not force sound.
-      sound.setMuted(economy.muted);
-    },
-    /** What the feel layer is running right now — see Renderer.feelState. */
-    feel: () => renderer.feelState(),
-    /** Proof harness: mute shatter FX so automaton mid-motion is photographable. */
-    clearShatters: () => renderer.clearShatters(),
-    settleScriptedTrap: () => renderer.settleScriptedTrap(),
-    /** Every unbounded-growth candidate the renderer holds. */
-    diagnostics: () => renderer.diagnostics(),
-    sprites: () => ({ missing: missingSprites(), loaded: loadedSprites(), failed: failedAtlases() }),
-    telemetry: () => localSink.read(),
-    exportTelemetry,
-    downloadRecoverySave,
-    hasRecoveryRaw: () => economy.hasRecoveryRaw,
-    loadStatus: () => economy.loadStatus,
-    build: BUILD,
-    clearTelemetry: () => localSink.clear(),
-    offThread: () => winnability.offThread,
-  },
-});
+  });
+}

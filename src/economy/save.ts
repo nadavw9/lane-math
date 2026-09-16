@@ -212,20 +212,112 @@ export class LocalStorageStore implements SaveStore {
 }
 
 /**
+ * Structural save validation + version climb.
+ *
+ * Contract (Track A):
+ * - Missing additive fields → documented defaults (v1→v2 restored={}, muted=false, …).
+ * - Explicit invalid / impossible known fields → reject (null), never silent normalize.
+ * - Finite non-negative integers for counters/timestamps; bestStars ∈ [0, 3];
+ *   restored counts ∈ [0, 4]; booleans; mode/rating enums; hint string arrays;
+ *   levels/restored plain objects.
+ * - No arbitrary lifetime caps (e.g. lives may exceed maxLives structurally).
+ * - Ambiguous cross-field invariants are NOT clamped here — document + ask.
+ * - Unknown top-level keys are ignored (forward-safe) only when known fields validate.
+ * - Improves load integrity; does NOT make client saves cheat-proof / crypto-grade.
+ *
+ * SAVE_SCHEMA_VERSION stays 2 — no rewrite solely for validation.
+ */
+const MODES = new Set(["casual", "normal", "expert"]);
+const RATINGS = new Set(["tainted", "clean"]);
+/** GDD §5.1 bands top out at 3★; structural range only. */
+const BEST_STARS_MAX = 3;
+/** ART_DIRECTION §6 room restoration 0–4. */
+const RESTORED_MAX = 4;
+
+function isFiniteNonNegInt(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && Number.isFinite(value) && value >= 0;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateHints(value: unknown): readonly string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  if (!value.every((h) => typeof h === "string")) return null;
+  return value;
+}
+
+function validateLevelProgress(value: unknown): LevelProgress | null {
+  if (!isPlainObject(value)) return null;
+  const bestStars = value["bestStars"] === undefined ? EMPTY_PROGRESS.bestStars : value["bestStars"];
+  const failCount = value["failCount"] === undefined ? EMPTY_PROGRESS.failCount : value["failCount"];
+  const cleared = value["cleared"] === undefined ? EMPTY_PROGRESS.cleared : value["cleared"];
+  const firstFailureUsed =
+    value["firstFailureUsed"] === undefined ? EMPTY_PROGRESS.firstFailureUsed : value["firstFailureUsed"];
+  const hintsPurchased = validateHints(value["hintsPurchased"]);
+  if (hintsPurchased === null) return null;
+
+  let ratingAttempt: "tainted" | "clean" = EMPTY_PROGRESS.ratingAttempt ?? "tainted";
+  if (value["ratingAttempt"] !== undefined) {
+    if (typeof value["ratingAttempt"] !== "string" || !RATINGS.has(value["ratingAttempt"])) return null;
+    ratingAttempt = value["ratingAttempt"] as "tainted" | "clean";
+  }
+
+  if (!isFiniteNonNegInt(bestStars) || bestStars > BEST_STARS_MAX) return null;
+  if (!isFiniteNonNegInt(failCount)) return null;
+  if (typeof cleared !== "boolean") return null;
+  if (typeof firstFailureUsed !== "boolean") return null;
+
+  return {
+    bestStars,
+    failCount,
+    cleared,
+    firstFailureUsed,
+    hintsPurchased,
+    ratingAttempt,
+  };
+}
+
+function validateLevels(value: unknown): Record<string, LevelProgress> | null {
+  if (value === undefined) return {};
+  if (!isPlainObject(value)) return null;
+  const levels: Record<string, LevelProgress> = {};
+  for (const [id, progress] of Object.entries(value)) {
+    if (typeof id !== "string" || id.length === 0) return null;
+    const validated = validateLevelProgress(progress);
+    if (!validated) return null;
+    levels[id] = validated;
+  }
+  return levels;
+}
+
+function validateRestored(value: unknown): Record<string, number> | null {
+  if (value === undefined) return {};
+  if (!isPlainObject(value)) return null;
+  const restored: Record<string, number> = {};
+  for (const [world, count] of Object.entries(value)) {
+    if (typeof world !== "string" || world.length === 0) return null;
+    if (!isFiniteNonNegInt(count) || count > RESTORED_MAX) return null;
+    restored[world] = count;
+  }
+  return restored;
+}
+
+/**
  * Migrate a save of any earlier version to the current one.
  *
  * Deliberately written before it is needed. Each future version adds one arm
  * and falls through to the next, so a save can climb several versions in order.
  */
 export function migrate(raw: unknown): SaveData | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const data = raw as Partial<SaveData> & { schemaVersion?: number };
-  if (typeof data.schemaVersion !== "number") return null;
+  if (!isPlainObject(raw)) return null;
+  const data = raw;
+  const schemaVersion = data["schemaVersion"];
+  if (!isFiniteNonNegInt(schemaVersion)) return null;
 
-  const migrated: Partial<SaveData> & { schemaVersion: number } = {
-    ...data,
-    schemaVersion: data.schemaVersion,
-  };
+  let version = schemaVersion;
   /*
    * v1 -> v2: restoration state added (ART_DIRECTION §6).
    *
@@ -234,31 +326,68 @@ export function migrate(raw: unknown): SaveData | null {
    * progress. Written as a real case rather than a comment because this is the
    * first migration the game has actually needed.
    */
-  if (migrated.schemaVersion === 1) {
-    Object.assign(migrated, { restored: {}, schemaVersion: 2 });
+  let restoredRaw: unknown = data["restored"];
+  if (version === 1) {
+    if (restoredRaw === undefined) restoredRaw = {};
+    version = 2;
   }
 
   // A save written by a newer build, or one this build cannot climb to the
   // current version, is refused rather than half-read.
-  if (migrated.schemaVersion !== SAVE_SCHEMA_VERSION) return null;
+  if (version !== SAVE_SCHEMA_VERSION) return null;
 
-  const levels = Object.fromEntries(Object.entries(migrated.levels ?? {}).map(([id, progress]) => {
-    const value = progress as Partial<LevelProgress>;
-    return [id, { ...EMPTY_PROGRESS, ...value, hintsPurchased: value.hintsPurchased ?? [], ratingAttempt: value.ratingAttempt === "clean" ? "clean" : "tainted" } satisfies LevelProgress];
-  }));
+  const levels = validateLevels(data["levels"]);
+  if (!levels) return null;
+
+  const restored = validateRestored(restoredRaw);
+  if (!restored) return null;
+
+  const lives = data["lives"] === undefined ? 0 : data["lives"];
+  const lastLifeGrantedAt = data["lastLifeGrantedAt"] === undefined ? 0 : data["lastLifeGrantedAt"];
+  const clockHighWater =
+    data["clockHighWater"] === undefined
+      ? (data["lastLifeGrantedAt"] === undefined ? 0 : data["lastLifeGrantedAt"])
+      : data["clockHighWater"];
+  const totalStars = data["totalStars"] === undefined ? 0 : data["totalStars"];
+  const starsSpent = data["starsSpent"] === undefined ? 0 : data["starsSpent"];
+
+  if (!isFiniteNonNegInt(lives)) return null;
+  if (!isFiniteNonNegInt(lastLifeGrantedAt)) return null;
+  if (!isFiniteNonNegInt(clockHighWater)) return null;
+  if (!isFiniteNonNegInt(totalStars)) return null;
+  if (!isFiniteNonNegInt(starsSpent)) return null;
+
+  let selectedMode: SaveData["selectedMode"] = "normal";
+  if (data["selectedMode"] !== undefined) {
+    if (typeof data["selectedMode"] !== "string" || !MODES.has(data["selectedMode"])) return null;
+    selectedMode = data["selectedMode"] as SaveData["selectedMode"];
+  }
+
+  let muted = false;
+  if (data["muted"] !== undefined) {
+    if (typeof data["muted"] !== "boolean") return null;
+    muted = data["muted"];
+  }
 
   return {
     schemaVersion: SAVE_SCHEMA_VERSION,
     levels,
-    lives: migrated.lives ?? 0,
-    lastLifeGrantedAt: migrated.lastLifeGrantedAt ?? 0,
-    clockHighWater: migrated.clockHighWater ?? migrated.lastLifeGrantedAt ?? 0,
-    totalStars: migrated.totalStars ?? 0,
-    starsSpent: migrated.starsSpent ?? 0,
-    restored: migrated.restored ?? {},
-    selectedMode: migrated.selectedMode ?? "normal",
-    muted: migrated.muted ?? false,
+    lives,
+    lastLifeGrantedAt,
+    clockHighWater,
+    totalStars,
+    starsSpent,
+    restored,
+    selectedMode,
+    muted,
   };
+}
+
+/** True when the review / proof harness may attach to `window.laneMath`. */
+export function reviewHarnessEnabled(
+  env: { DEV?: boolean; VITE_LANE_MATH_HARNESS?: string } = import.meta.env,
+): boolean {
+  return env.DEV === true || env.VITE_LANE_MATH_HARNESS === "1";
 }
 
 function tryParseMigrate(raw: string): SaveData | null {
