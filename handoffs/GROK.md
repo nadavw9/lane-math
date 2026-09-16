@@ -1,8 +1,15 @@
-## Current — Android Release / Privacy · PHASE 2 IN PROGRESS
+## Current — Android Release / Privacy · PHASE 2 COMPLETE
 
-**Status:** Shell harden + ads warn-only gate + Data safety/checklist drafts. **No production ad IDs.** Start `e26dd8e`.
+**Status:** COMPLETE. Start `e26dd8e` → tip `ca481b0` via PR #56. **No production ad IDs.** Green tooling ≠ COPPA/GDPR.
 **Ledger:** [`MISSION_ANDROID_RELEASE_LEDGER.md`](./MISSION_ANDROID_RELEASE_LEDGER.md). Checklist: [`ANDROID_RELEASE_CHECKLIST.md`](./ANDROID_RELEASE_CHECKLIST.md). Draft: [`ANDROID_DATA_SAFETY_DRAFT.md`](./ANDROID_DATA_SAFETY_DRAFT.md).
-**Deferred (C):** TFAT/UMP/age screen/prod IDs/Families. Green tooling ≠ COPPA/GDPR.
+**Deferred (C):** TFAT/UMP/age screen/prod IDs/Families self-cert.
+
+---
+
+## Prior — Android Release · PHASE 2 impl · PR #56 (merged)
+
+**Status:** MERGED at `ca481b0`. Master CI run `35149992128` SUCCESS.
+**Landed:** allowBackup=false + dataExtractionRules/NSC/cleartext/debuggable; ads warn-only + tip assert; Data safety draft + release checklist.
 
 ---
 
