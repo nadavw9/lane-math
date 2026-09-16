@@ -1,4 +1,13 @@
-## Current — Track C mission · COMPLETE
+## Current — Android Release / Privacy / Child-Safety · PHASE 1 AUDIT
+
+**Status:** DOCS/LEDGER ONLY on tip `011bae189816cbe71fdcef41cab8a93e5a541887`. No Phase 2 hardening in this PR. **Do not set production ad IDs.**
+**Ledger:** [`MISSION_ANDROID_RELEASE_LEDGER.md`](./MISSION_ANDROID_RELEASE_LEDGER.md).
+**Sources:** CoS brief S1–S23 retrieved 2026-09-16 Asia/Jerusalem (`PRIMARY_SOURCES_BRIEF_2026-09-16.md`). Labels A/B/C; Play/AdMob/UMP/TFAT ≠ legal compliance.
+**Next:** Eng parent dispatches Phase 2 after Nadav (C) decisions + this report.
+
+---
+
+## Prior — Track C mission · COMPLETE
 
 **Status:** Hardening slices C3–C5 merged; C6 provenance DEFER. C2 base `0fffa1c` → C5 tip `e148eb7`.
 **Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md).
