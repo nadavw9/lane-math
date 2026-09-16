@@ -1,5 +1,16 @@
 # GROK — Eng Lead notes
 
+## Current — Track C2 CodeQL · DRAFT
+
+**Status:** DRAFT PR — **do not merge**. Isolated CodeQL advanced setup only.  
+**Base:** `master` @ `b1767a8` (after #40 C1 merge)  
+**Branch:** `ci/track-c2-codeql`  
+**Deliverable:** [`TRACK_C2_CODEQL_b1767a8.md`](./TRACK_C2_CODEQL_b1767a8.md).  
+**Landed (proposed):** separate `.github/workflows/codeql.yml`; `javascript-typescript` only; SHA-pinned `codeql-action` v4.38.0 + existing checkout pin; weekly cron; findings = code scanning alerts (does not block Pages deploy).  
+**Hard rules:** No gitleaks / provenance / Android / Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema. `ci.yml` gates+deploy unchanged.
+
+---
+
 ## Prior — Track C1 CI hardening (impl) · PR #40 (merged)
 
 **Status:** MERGED at `b1767a8` (`b1767a8dd61aeb1f27eba231a5daefbb8495ca41`). Historical / closed — not DRAFT. Master CI run `35105602154` gates+deploy SUCCESS.  

@@ -1,0 +1,51 @@
+# Track C2 — CodeQL only (javascript-typescript).
+# Separate from ci.yml so Pages deploy / gates are never blocked by SARIF findings.
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  # Weekly baseline scan (cheap for a small JS/TS repo; ~minutes of Actions).
+  schedule:
+    - cron: '17 4 * * 1'
+
+# Workflow default: read-only. Write scopes only on the analyze job.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    # Own concurrency so CodeQL never cancels / is cancelled by the Pages CI group.
+    concurrency:
+      group: codeql-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      # Required to upload SARIF to code scanning.
+      security-events: write
+      # Required for workflows in private repos / private dependency graphs.
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Repo primary language surface is TS/JS (Vite). Android / Java-Kotlin
+        # explicitly out of Track C2 scope.
+        language: [javascript-typescript]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+
+      # Interpreted language — no build / autobuild step required.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: "/language:${{ matrix.language }}"
