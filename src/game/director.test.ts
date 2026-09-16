@@ -710,3 +710,135 @@ describe("save-concurrency: Director clear / fail unapplied paths", () => {
     expect(economy.progressFor("3-05").failCount).toBe(0);
   });
 });
+
+describe("save-concurrency: Director mode / replay double-conflict", () => {
+  const T0 = 1_700_000_000_000;
+
+  const FINAL: LadderLevel = {
+    id: "test-final-clear",
+    world: 1,
+    pool: [2, 3],
+    targets: [5],
+    rules: DEFAULT_RULES,
+    modes: {
+      casual: { budget: { "+": null }, tier: "tutorial" },
+      normal: { budget: { "+": null }, tier: "tutorial" },
+      expert: { budget: { "+": null }, tier: "tutorial" },
+    },
+    surplus: 0,
+  };
+
+  function emptySave(): SaveData {
+    return {
+      schemaVersion: SAVE_SCHEMA_VERSION,
+      levels: {},
+      lives: 5,
+      lastLifeGrantedAt: T0,
+      clockHighWater: T0,
+      totalStars: 0,
+      starsSpent: 0,
+      restored: {},
+      selectedMode: "normal",
+      muted: false,
+    };
+  }
+
+  /** Toggleable race: every primary read can return a distinct foreign payload. */
+  function racingStore(seed: SaveData): {
+    store: SaveStore;
+    inner: MemoryStore;
+    setRace: (on: boolean) => void;
+  } {
+    const inner = new MemoryStore();
+    writeSave(inner, seed);
+    let race = true;
+    let tick = 0;
+    const store: SaveStore = {
+      read(key) {
+        if (!race || key !== SAVE_KEY) return inner.read(key);
+        tick += 1;
+        return JSON.stringify({
+          ...seed,
+          totalStars: seed.totalStars + tick,
+          clockHighWater: T0 + tick,
+          levels: { ...seed.levels },
+        });
+      },
+      write(key, value) {
+        inner.write(key, value);
+      },
+    };
+    return {
+      store,
+      inner,
+      setRace: (on: boolean) => {
+        race = on;
+      },
+    };
+  }
+
+  it("double-conflict selectMode rejects and keeps prior mode (no silent success)", () => {
+    const seed = emptySave();
+    const { store } = racingStore(seed);
+    const economy = new Economy(store, () => T0);
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const d = new Director(FINAL, "normal", economy, telemetry);
+
+    stateOf(d.handle({ type: "loadLevel", id: FINAL.id }));
+    const commands = d.handle({ type: "selectMode", mode: "casual" });
+
+    expect(rejection(commands)).toBe("could not save — try again");
+    expect(stateOf(commands).mode).toBe("normal");
+    expect(economy.selectedMode).toBe("normal");
+    expect(economy.lastCommitResult).toBe("rejected_stale");
+  });
+
+  it("double-conflict replay preserves won board; no reset / no abandon telemetry", () => {
+    const seed: SaveData = {
+      ...emptySave(),
+      totalStars: 3,
+      levels: {
+        [FINAL.id]: {
+          bestStars: 3,
+          failCount: 2,
+          cleared: true,
+          firstFailureUsed: false,
+          hintsPurchased: [],
+          ratingAttempt: "tainted",
+        },
+      },
+    };
+    const { store, setRace } = racingStore(seed);
+    setRace(false);
+    const economy = new Economy(store, () => T0);
+    const sink = new MemorySink();
+    const telemetry = new Telemetry([sink], () => T0);
+    const d = new Director(FINAL, "normal", economy, telemetry);
+
+    // Reach won without a save race, then re-arm the race for beginReplay.
+    let s = stateOf(d.handle({ type: "loadLevel", id: FINAL.id }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 2) }));
+    s = stateOf(d.handle({ type: "tapOperator", op: "+" }));
+    s = stateOf(d.handle({ type: "tapTile", id: idOfValue(s, 3) }));
+    s = stateOf(d.handle({ type: "tapCommit" }));
+    expect(s.phase).toBe("won");
+    expect(economy.progressFor(FINAL.id).failCount).toBe(2);
+
+    // Foreign reads keep seed.failCount=2 while advancing the concurrency token.
+    setRace(true);
+    sink.events.length = 0;
+    const commands = d.handle({ type: "tapRestart" });
+
+    expect(rejection(commands)).toBe("could not save — try again");
+    s = stateOf(commands);
+    expect(s.phase).toBe("won");
+    expect(s.failures).toBe(2);
+    expect(economy.progressFor(FINAL.id).failCount).toBe(2);
+    expect(economy.lastCommitResult).toBe("rejected_stale");
+
+    const names = sink.events.map((e) => e.event.name);
+    expect(names).not.toContain("level_abandon");
+    expect(names).not.toContain("level_start");
+  });
+});

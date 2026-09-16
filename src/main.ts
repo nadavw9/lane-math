@@ -192,8 +192,12 @@ function apply(commands: readonly Command[]): void {
 function send(input: InputEvent): void {
   apply(director.handle(input));
   // Changing mode changes the budgets in play, so the level is re-opened under
-  // the new one rather than mutated mid-board.
-  if (input.type === "selectMode") open(currentLevel);
+  // the new one rather than mutated mid-board — but only when the preference
+  // actually applied. A stale double-conflict leaves selectedMode unchanged;
+  // reopening would silently put the player under the previous mode.
+  if (input.type === "selectMode" && economy.selectedMode === input.mode) {
+    open(currentLevel);
+  }
 }
 
 function nextLevelIdAfter(id: string): string | null {
@@ -733,7 +737,8 @@ Object.assign(window, {
     },
     setMuted: (muted: boolean) => {
       economy.setMuted(muted);
-      sound.setMuted(muted);
+      // Mirror resulting economy state — a failed persist must not force sound.
+      sound.setMuted(economy.muted);
     },
     /** What the feel layer is running right now — see Renderer.feelState. */
     feel: () => renderer.feelState(),

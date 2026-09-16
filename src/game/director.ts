@@ -338,7 +338,12 @@ export class Director {
 
   /** GDD §5.1: a replay of a CLEARED level may re-earn a better rating. */
   replay(): Command[] {
-    this.economy?.beginReplay(this.level.id);
+    // Stale double-conflict: failCount must not stay banked while the board
+    // resets. Reject, keep the won screen, and emit no abandon/start telemetry.
+    if (this.economy && !this.economy.beginReplay(this.level.id)) {
+      return this.reject("could not save — try again");
+    }
+    this.abandon("restart");
     this.failures = this.economy?.progressFor(this.level.id).failCount ?? 0;
     this.lastFailureExempt = false;
     this.reset();
@@ -768,7 +773,12 @@ export class Director {
       }
     }
     if (input.type === "selectMode") {
-      this.economy?.selectMode(input.mode);
+      // Preferenced mode must actually persist before the shell reopens the
+      // level under it — a silent success after stale conflict reopens the
+      // previous mode with no explanation.
+      if (this.economy && !this.economy.selectMode(input.mode)) {
+        return this.reject("could not save — try again");
+      }
       return this.render();
     }
     if (input.type === "toggleShop") {
@@ -779,11 +789,12 @@ export class Director {
       return this.buyHint(input.hint as HintType);
     }
     if (input.type === "tapRestart") {
-      this.abandon("restart");
       // A cleared level replays fresh (§5.1); anything else keeps its counter.
+      // Abandon only after beginReplay succeeds — see replay().
       if (this.phase === "won" && this.economy?.progressFor(this.level.id).cleared) {
         return this.replay();
       }
+      this.abandon("restart");
       this.reset();
       this.startTelemetry();
       return this.render();
