@@ -1,9 +1,8 @@
 ## Current — Track C mission (C3–C6) · in progress
 
-**Status:** Post-C2 hardening in flight. C2 MERGED at `0fffa1c`.  
-**Base:** `master` @ `0fffa1c95abc304fa1d8bdcad4432f67341d158f`  
-**Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md) (base→end SHAs; no endless history).  
-**Active first slice:** C3 — CI concurrency per-ref (fix shared `pages` group canceling master).  
+**Base:** `master` @ `0fffa1c95abc304fa1d8bdcad4432f67341d158f`
+**Status:** C3 merged as PR #51 at `70cf1dd`; C4 secret detection in progress.
+**Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md) is the authoritative status/evidence pointer.
 **Hard rules:** Preserve gates ≥548, Pages master-only, least privilege, SHA pins. No Base44 / Chronos / gameplay / economy / UI / schema / Android. No new third-party Actions unless C4-C requires gitleaks (document why A+B insufficient).
 
 ---

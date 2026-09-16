@@ -33,6 +33,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Narrow fail-closed complement to GitHub native secret scanning/push
+      # protection. High-confidence forms only; green is not security proof.
+      - name: Obvious-secret pattern check
+        run: node tools/check-obvious-secrets.mjs
+
       - run: npm ci
 
       - name: Typecheck

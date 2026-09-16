@@ -6,9 +6,9 @@
 
 | Slice | Status | PR | Merge SHA | Notes |
 | --- | --- | --- | --- | --- |
-| C0 | in progress | — | — | GROK Current + this ledger |
-| C3 | in progress | — | — | CI concurrency per-ref (was shared `pages`) |
-| C4 | pending | — | — | Secret detection (native → optional script → gitleaks defer) |
+| C0 | merged with C3 | [#51](https://github.com/nadavw9/lane-math/pull/51) | `70cf1dd` | GROK Current + this ledger |
+| C3 | merged | [#51](https://github.com/nadavw9/lane-math/pull/51) | `70cf1dd` | Per-ref concurrency; master never canceled |
+| C4 | in progress | — | — | Native scanning verified; narrow in-repo check |
 | C5 | pending | — | — | Deploy evidence summary (light) or defer |
 | C6 | pending | — | — | Provenance/attest assess-first; default DEFER |
 
@@ -19,8 +19,15 @@ Fix: `group: ci-${{ github.workflow }}-${{ github.ref }}`; `cancel-in-progress: 
 
 ## Verification URLs
 
-_(fill per merged slice)_
+- C3 branch CI (deploy skipped): https://github.com/nadavw9/lane-math/actions/runs/35120416702
+- C3 master CI (gates + deploy SUCCESS): https://github.com/nadavw9/lane-math/actions/runs/35121348753
 
 ## Deferred / rejected
 
-_(fill as slices close)_
+- C4 full gitleaks Action: DEFER — native scanning + push protection are enabled; narrow in-repo fail-closed check covers independent high-confidence forms without another third-party Action/noise.
+- Optional native non-provider patterns + validity checks remain disabled: PATCH was accepted but settings stayed disabled (feature unavailable/not applicable via this repository API); not required for C4. No Nadav toggle is needed for core secret scanning/push protection.
+
+
+## C4 decision
+
+GitHub repository API verified native secret scanning **enabled** and push protection **enabled**; alert API returned zero open alerts at check time (visibility, not proof). `tools/check-obvious-secrets.mjs` adds a dependency-free, fail-closed CI check for private-key PEM headers, GitHub access tokens, and AWS access-key IDs. It intentionally avoids generic/high-entropy matching, so public identifiers such as AdMob test IDs are not findings. Real-secret response is removal plus rotation/revocation; bypassing a true positive is not policy.
