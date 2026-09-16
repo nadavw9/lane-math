@@ -16,7 +16,7 @@
 
 ## Executive summary
 
-Lane Math at `2be7ad1` is a **local-first**, same-origin web / Capacitor client with **no cloud sync and no remote telemetry sink**. Durable state lives in `localStorage` under three save keys plus telemetry/session keys. Integrity of lives/stars/ratings/ads rewards is therefore **client-trust**: `migrate` accepts attacker-controlled JSON numbers/flags; production builds expose `window.laneMath` review hooks (`setLives`, `watchAdForLife`, …); AdMob uses **Google public test IDs** with `testing: true` defaults. Privacy surface is **local play funnel + device context on export** (UA, viewport, equations, ad events) — not a backend PII store today. Release reliability is strong on **gates** (typecheck, named vitest gates, curate, suite floor, atlas, Pages-base build, Playwright smoke/viewport/font) but weak on **supply-chain / least-privilege / secret scanning / npm audit** (absent by design at S0). Highest-value first track: **harden save load validation + production review-harness gating** (reversible, testable) before CI scanners or CSP polish.
+Lane Math at `2be7ad1` on **GitHub master** is a **local-first**, same-origin web / Capacitor client with **no cloud sync and no remote telemetry sink on this repo tip**. (**Cloud caveat:** “No cloud sync” is true **only for GitHub master**. Base44 Lane Math Next has a separately managed cloud-save foundation under Codex — gated; not represented by GitHub master. This audit does **not** inspect or modify Base44.) Durable state lives in `localStorage` under three save keys plus telemetry/session keys. Integrity of lives/stars/ratings/ads rewards is therefore **client-trust** on GitHub: `migrate` accepts attacker-controlled JSON numbers/flags; production builds expose `window.laneMath` review hooks (`setLives`, `watchAdForLife`, …); AdMob uses **Google public test IDs** with `testing: true` defaults (test IDs ≠ a current production advertising incident). Privacy surface is **local play funnel + device context on export** (UA, viewport, equations, ad events) — not a backend PII store today. Release reliability is strong on **gates** (typecheck, named vitest gates, curate, suite floor, atlas, Pages-base build, Playwright smoke/viewport/font) but weak on **supply-chain / least-privilege / secret scanning / npm audit** (absent by design at S0). Highest-value first track: **harden save load validation + production review-harness gating** (reversible, testable; improves structural integrity — **not** cheat-proof / not crypto or server-grade) before CI scanners or CSP polish.
 
 ---
 
@@ -42,11 +42,12 @@ Lane Math at `2be7ad1` is a **local-first**, same-origin web / Capacitor client 
 
 | Claim | Evidence |
 |---|---|
-| No cloud save sync | No firebase/supabase/fetch sync of `SaveData` in `src/` |
-| Telemetry remote sink not wired | `TelemetrySink` docs: “Phase 6”; `main.ts` uses `ConsoleSink` + `LocalStorageSink` only |
-| Untrusted network payload into Economy | **Absent today** — N/A for S0 exploit; **future Phase 6** must treat remote events/saves as hostile |
+| No cloud save sync **on GitHub master** | No firebase/supabase/fetch sync of `SaveData` in `src/` on this tip |
+| Base44 Lane Math Next cloud-save | Separately managed under Codex (gated). **Not** represented by GitHub master. Out of scope — do not inspect/modify Base44 from this lane |
+| Telemetry remote sink not wired (GitHub) | `TelemetrySink` docs: “Phase 6”; `main.ts` uses `ConsoleSink` + `LocalStorageSink` only |
+| Untrusted network payload into Economy (GitHub) | **Absent on GitHub master** — N/A for S0 exploit on this tip; any future GitHub cloud path must treat remote events/saves as hostile |
 
-**Hypothesis (future):** a remote sink or sync API without schema allowlists / auth would become P0. Not present at tip.
+**Hypothesis (future / Base44):** a cloud-authoritative, ranked, purchase, or cross-user-trust path without schema allowlists / auth elevates client-trust save gaps to **P0**. GitHub master alone remains local/offline **P1** integrity until that product posture lands here.
 
 ### 1.3 Telemetry / IDs / privacy
 
@@ -132,7 +133,7 @@ Honest inventory from code. Mark **unknown** where product/legal policy is not i
 | Console | `ConsoleSink` `console.info` | Dev playtest | Process console | Session | None | Avoid in shared-screen classrooms if sensitive |
 | Analytics third parties | None in `src/` | — | — | — | — | — |
 | Accounts / email / name | **None** | — | — | — | — | — |
-| Cloud sync payloads | **None** | — | — | — | — | — |
+| Cloud sync payloads | **None on GitHub master** (Base44 Next cloud-save is Codex-owned, gated, out of scope) | — | — | — | — | — |
 | Crash / APM | **None** found | — | — | — | — | — |
 | Android backups | App data if `allowBackup` honored | OS backup | Device/cloud backup | OS-defined | Via backup tools | May duplicate local save/telemetry off-device |
 
@@ -157,9 +158,9 @@ Honest inventory from code. Mark **unknown** where product/legal policy is not i
 | No production secrets in repo | `.gitignore` only | `git log` / secret scan (**propose**) | Security | P0 if leaked | Rotate keys; purge history |
 | Dependency advisories | **None** | Periodic `npm audit` (**propose**) | Security | P1 | Pin/upgrade |
 | Workflow least privilege | Partial (deploy if master) | Review Actions permissions | Security / Release | P1 | Tighten YAML |
-| Privacy / child policy | **None in repo** | Store listing / consent UX | Product / Legal | P0 before kids-directed ads | Disable AdMob / keep testing |
-| Save integrity vs tamper | Unit tests for happy path only | DevTools edit stars | Security | P1 single-player; P0 if ranked/cloud | Validation + feature flag |
-| Production AdMob IDs | Test IDs only | Store build checklist | Release | P0 for monetization go-live | Revert ID constants |
+| Privacy / child policy | **None in repo** | Store listing / consent UX | Product / Legal / Codex+Nadav | **P0 production-ads go-live blocker** (test IDs ≠ current prod ad incident) | Keep test IDs; no prod ad IDs until child-directed status, consent, disclosures, SDK config approved |
+| Save integrity vs tamper | Unit tests for happy path only | DevTools edit stars | Security | **P1** local/offline GitHub; **P0 precondition** if cloud-authoritative / ranked / purchases / paid rewards / cross-user trust | Structural validation (not cheat-proof) + harness gate |
+| Production AdMob IDs | Test IDs only (≠ production advertising incident today) | Store build checklist | Release / Codex+Nadav | **P0** before shipping prod IDs | Keep Google test units until approval |
 | CSP / XSS hardening | **None** | Manual XSS review | Security | P2 today | Meta CSP report-only → enforce |
 
 ---
@@ -168,21 +169,21 @@ Honest inventory from code. Mark **unknown** where product/legal policy is not i
 
 Legend: **C** = confirmed from tip code/config · **H** = hypothesis (plausible, not fully proven in-product).
 
-### P0
+### P0 (current GitHub master — go-live blockers)
 
-1. **C — Client save is authoritative with no integrity bound.**  
-   `migrate` accepts `totalStars`, `starsSpent`, `lives`, `restored`, per-level `bestStars` / `ratingAttempt: "clean"`, etc. from any JSON with `schemaVersion`. Any same-origin script or DevTools user can mint economy/progress. Acceptable for pure offline toys; **not** acceptable if ads/rewards or future sync imply fair state.  
-   **Files:** `src/economy/save.ts` (`migrate`), `src/economy/economy.ts`.
-
-2. **C — Production web exposes durable cheat / ad hooks on `window.laneMath`.**  
-   `setLives`, `watchAdForLife`, `setRestored`, `exportTelemetry`, `clearTelemetry`, `downloadRecoverySave` ship in the Pages bundle. Intended for review harness; equally callable by players.  
-   **Files:** `src/main.ts` (~674–759).
-
-3. **C — Privacy / child-directed go-live blockers are policy-not-code.**  
-   AdMob + educational framing + exportable learner funnel without consent/age gate. Shipping production AdMob IDs or a remote sink without a written decision is a release blocker even though code “works”.  
+1. **C — Privacy / child-directed / AdMob production go-live blocker (policy-not-code).**  
+   AdMob + educational framing + exportable learner funnel without consent/age gate. **Current tip uses Google public test ad unit IDs + `testing: true` defaults — this is not a current production advertising incident.** Shipping **production** AdMob IDs (or a remote sink) without Codex/Nadav written approval of child-directed status, consent, disclosures, and SDK config remains a **P0 production-ads go-live blocker** even though code “works”.  
    **Files:** `src/ads/ads.ts`, `android/.../AndroidManifest.xml`, `src/telemetry/*`, `capacitor.config.json`.
 
-### P1
+### P1 (current GitHub impact) — with **P0 precondition** notes
+
+2. **C — Client save is authoritative with no integrity bound (local/offline = P1).**  
+   `migrate` accepts `totalStars`, `starsSpent`, `lives`, `restored`, per-level `bestStars` / `ratingAttempt: "clean"`, etc. from any JSON with `schemaVersion`. Same-origin script or DevTools can mint economy/progress. **Current GitHub impact = P1 local/offline integrity.** Elevates to **P0 precondition** for cloud-authoritative / ranked / purchases / paid rewards / cross-user trust. Track A structural validation rejects malformed/impossible fields but is **not** cheat-proof and **not** crypto/server-grade — do not claim otherwise.  
+   **Files:** `src/economy/save.ts` (`migrate`), `src/economy/economy.ts`.
+
+3. **C — Production web exposes durable mutators on `window.laneMath` (release-integrity / debug-surface = P1).**  
+   `setLives`, `watchAdForLife`, `setRestored`, `exportTelemetry`, `clearTelemetry`, `downloadRecoverySave` ship in the Pages bundle. Intended for review harness; equally callable by players. **Current = P1** release-integrity/debug-surface. **P0 precondition** if monetized / ranked / cloud-authoritative / externally rewarded. Keep confirmed; **prioritize remove mutating APIs from default prod builds** (Track A).  
+   **Files:** `src/main.ts` (~674–759).
 
 4. **C — Telemetry / recovery export is frictionless and unredacted.**  
    `?telemetry=1`, long-press, share sheet; includes UA + full event stream (equations). Shared-device / classroom shoulder-surf and accidental share are real.  
@@ -209,7 +210,7 @@ Legend: **C** = confirmed from tip code/config · **H** = hypothesis (plausible,
 10. **C — Capacitor Preferences not used** — WebView `localStorage` semantics (clear-on-storage-pressure varies by OS) remain the durability story.  
 11. **H — Supply-chain compromise of `pixi.js` / AdMob** — standard npm risk; lockfile helps, no verify beyond that.
 
-**Explicit non-findings (avoid inflation):** no evidence of server RCE, auth bypass, or active remote exfiltration at this tip; no cloud sync attack surface yet; XSS not demonstrated.
+**Explicit non-findings (avoid inflation):** no evidence of server RCE, auth bypass, or active remote exfiltration at this tip; **no cloud sync attack surface on GitHub master** (Base44 Next cloud-save is separate/Codex-owned); XSS not demonstrated; test AdMob IDs are not a production ads incident.
 
 ---
 
@@ -219,13 +220,13 @@ All tracks: **reversible**, **independently testable**, **no broad refactor**. S
 
 ### Track A — Save load validation + production harness gate *(recommended first)*
 
-**Goal:** Reduce cheap economy/ad integrity bypass without claiming cryptographic anti-cheat.  
+**Goal:** Improve structural load integrity (malformed/impossible fields fail closed) and remove default-prod mutators — **without** claiming cheat-proof / crypto / server-grade client saves.  
 **Scope:**  
-- Clamp / validate `migrate` numerics (lives ∈ [0, maxLives], stars ≥ 0 finite, known level id shape, `ratingAttempt` enum only, restored counts 0–4). Reject or sanitize out-of-range → treat as unreadable (reuse recovery path) **or** clamp with telemetry flag — pick one in impl brief.  
-- Gate `window.laneMath` mutating hooks behind explicit build flag / `?harness=1` / non-Pages mode so default Pages/APK builds cannot `setLives`. Keep read-only diagnostics if needed.  
-**Acceptance:** New unit tests for hostile JSON; existing save-recovery + concurrency suites green; suite ≥ lane floor; Pages build lacks mutating harness (grep/smoke).  
-**Rollback:** Revert single PR; schema version **unchanged** unless validation requires a bump (prefer no bump).  
-**Why first:** Highest confirmed exploit surface per line-of-code; local; no CI politics; aligns with GDD anti-exploit posture already in Economy comments.
+- Strict `migrate` validation: finite non-neg counters/timestamps; enum/range checks; reject explicit invalid (not silent normalize); preserve v1→v2 + additive defaults; `SAVE_SCHEMA_VERSION=2` (no rewrite solely for this). Structural validation ≠ anti-cheat theater.  
+- Gate `window.laneMath` **mutating** hooks off default Pages/APK (`import.meta.env.DEV` or explicit disabled-by-default flag). No hidden prod backdoor. Report any non-mutating diagnostics separately — do not retain by assumption.  
+**Acceptance:** New unit tests for hostile JSON + recovery invariants; existing save-recovery + concurrency suites green; suite ≥ lane floor; default prod build lacks mutating harness (assertion).  
+**Rollback:** Revert single PR; schema version stays **2**.  
+**Why first:** Highest confirmed local/offline integrity + release-debug surface per line-of-code; local; no CI politics. Remains **P1** on GitHub until cloud/ranked/monetized posture makes it a **P0 precondition**.
 
 ### Track B — Privacy export hygiene (local-only)
 
@@ -254,7 +255,7 @@ All tracks: **reversible**, **independently testable**, **no broad refactor**. S
 
 **Start with Track A (save validation + harness gate).**  
 
-It addresses confirmed P0 integrity paths with small, testable diffs in `save.ts` / `main.ts`, preserves #30/#36 behavior, needs no new CI product, and does not require legal copy. Parallel decision request: Product/Legal on child-directed + AdMob before any production ad ID or remote telemetry (feeds Track B/C scheduling).
+It addresses confirmed **P1** local/offline integrity + release-debug surfaces (and their **P0 preconditions** for cloud/ranked/monetized trust) with small, testable diffs in `save.ts` / `main.ts`, preserves #30/#36 behavior, needs no new CI product, and does not require legal copy. Improves validation — **does not** make client saves cheat-proof. Parallel **P0** decision request: Codex/Nadav on child-directed + AdMob before any **production** ad ID or remote telemetry (feeds Track B/C scheduling). Test IDs today ≠ production advertising incident.
 
 ---
 
