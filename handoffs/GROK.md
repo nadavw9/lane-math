@@ -13,9 +13,14 @@
 
 ## Prior — Track C CI supply-chain DESIGN · PR #39 (merged)
 
+**Status:** MERGED at `c3f09f0`. Docs-only design + amend (all-deps audit; Dependabot version≠security). Impl = Track C1 DRAFT (#40) above.  
+**Deliverable:** [`TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md`](./TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md).
+
+---
+
 ## Prior — Track A save-validation harness · PR #38 (merged)
 
-**Status:** MERGED at `010e3a1`. Suite floor lane **548**; CI assert default MIN still **495** until Track C impl assigns the bump.  
+**Status:** MERGED at `010e3a1`. Suite floor lane **548**; CI assert default MIN bumped to **548** in Track C1 DRAFT (#40).  
 **Branch (historical):** `feat/track-a-save-validation-harness`  
 **Proof:** historical fixtures A–D; #30 recovery + `classifySaveRaw` distinctions; full mutator DCE regression gate + harness-on positive smoke; deploy artifact = `dist-pages/` (harness-off). Validation review: [`TRACK_A_PROOF_VALIDATION_REVIEW.md`](./TRACK_A_PROOF_VALIDATION_REVIEW.md).  
 **Scope landed:** A1 harness off default Pages/APK; A2 fail-closed `migrate` (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery. Improves validation — **does NOT** make client saves cheat-proof.
