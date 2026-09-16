@@ -1,19 +1,18 @@
 # GROK — Eng Lead notes
 
-## Current — Track C1 CI hardening (impl) · DRAFT
+## Prior — Track C1 CI hardening (impl) · PR #40 (merged)
 
-**Status:** DRAFT PR — **do not merge**. Implementation of Track C design (#39).  
-**Base:** `master` @ `c3f09f0` (after #39)  
-**Branch:** `ci/track-c1-ci-hardening`  
+**Status:** MERGED at `b1767a8` (`b1767a8dd61aeb1f27eba231a5daefbb8495ca41`). Historical / closed — not DRAFT. Master CI run `35105602154` gates+deploy SUCCESS.  
+**Branch (historical):** `ci/track-c1-ci-hardening`  
 **Deliverable:** [`TRACK_C1_CI_HARDENING_c3f09f0.md`](./TRACK_C1_CI_HARDENING_c3f09f0.md).  
 **Landed:** MIN **548**; workflow default `contents: read` only; deploy-only `pages`+`id-token` write; action SHA pins; Dependabot version updates (≠ security updates); non-blocking all-deps `npm audit` (visibility ≠ security proof).  
-**Hard rules:** No Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema. No CodeQL/gitleaks/attest/Android in C1.
+**Hard rules kept:** No Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema. No CodeQL/gitleaks/attest/Android in C1 (deferred to later tracks).
 
 ---
 
 ## Prior — Track C CI supply-chain DESIGN · PR #39 (merged)
 
-**Status:** MERGED at `c3f09f0`. Docs-only design + amend (all-deps audit; Dependabot version≠security). Impl = Track C1 DRAFT (#40) above.  
+**Status:** MERGED at `c3f09f0`. Docs-only design + amend (all-deps audit; Dependabot version≠security). Impl = Track C1 merged as PR #40 @ `b1767a8`.  
 **Deliverable:** [`TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md`](./TRACK_C_CI_SUPPLY_CHAIN_DESIGN_010e3a1.md).
 
 ---
