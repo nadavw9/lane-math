@@ -1,7 +1,7 @@
 ## Current — Track C mission (C3–C6) · in progress
 
 **Base:** `master` @ `0fffa1c95abc304fa1d8bdcad4432f67341d158f`
-**Status:** C3 merged as PR #51 at `70cf1dd`; C4 secret detection in progress.
+**Status:** C3 #51 `70cf1dd`; C4 #52 `bbc31d5`; C5 deploy-evidence in progress; C6 provenance DEFER.
 **Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md) is the authoritative status/evidence pointer.
 **Hard rules:** Preserve gates ≥548, Pages master-only, least privilege, SHA pins. No Base44 / Chronos / gameplay / economy / UI / schema / Android. No new third-party Actions unless C4-C requires gitleaks (document why A+B insufficient).
 

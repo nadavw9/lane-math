@@ -167,6 +167,21 @@ jobs:
           SMOKE_BASE: /lane-math/
         run: node tools/font-coverage.mjs
 
+      # Compact evidence for humans reading the job summary. Not a new gate;
+      # named steps above already fail the job if any of these is false.
+      - name: Gates / deploy evidence
+        run: |
+          {
+            echo "### Gates / deploy evidence"
+            echo "- tip SHA: \`${{ github.sha }}\`"
+            echo "- ref: \`${{ github.ref }}\` (Pages deploy only if master)"
+            echo "- suite floor: ≥548 asserted by \`tools/assert-suite-size.mjs\`"
+            echo "- harness-off: default prod parked at \`dist-pages/\` (Pages artifact; review harness must be absent)"
+            echo "- harness-on: smoke/font/viewport rebuilt \`dist/\` with VITE_LANE_MATH_HARNESS=1 (must never be the deploy input)"
+            echo "- npm audit: visibility only — green / continue-on-error is not a supply-chain proof"
+            echo "- CodeQL / secret checks: findings ≠ overall security proof"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Supply-chain VISIBILITY only — covers ALL deps (prod + build/dev).
       # Non-blocking: findings do not fail the job or block Pages deploy.
       # Green / continue-on-error ≠ secure supply chain.
