@@ -338,7 +338,12 @@ export class Director {
 
   /** GDD §5.1: a replay of a CLEARED level may re-earn a better rating. */
   replay(): Command[] {
-    this.economy?.beginReplay(this.level.id);
+    // Stale double-conflict: failCount must not stay banked while the board
+    // resets. Reject, keep the won screen, and emit no abandon/start telemetry.
+    if (this.economy && !this.economy.beginReplay(this.level.id)) {
+      return this.reject("could not save — try again");
+    }
+    this.abandon("restart");
     this.failures = this.economy?.progressFor(this.level.id).failCount ?? 0;
     this.lastFailureExempt = false;
     this.reset();
@@ -768,7 +773,12 @@ export class Director {
       }
     }
     if (input.type === "selectMode") {
-      this.economy?.selectMode(input.mode);
+      // Preferenced mode must actually persist before the shell reopens the
+      // level under it — a silent success after stale conflict reopens the
+      // previous mode with no explanation.
+      if (this.economy && !this.economy.selectMode(input.mode)) {
+        return this.reject("could not save — try again");
+      }
       return this.render();
     }
     if (input.type === "toggleShop") {
@@ -779,11 +789,12 @@ export class Director {
       return this.buyHint(input.hint as HintType);
     }
     if (input.type === "tapRestart") {
-      this.abandon("restart");
       // A cleared level replays fresh (§5.1); anything else keeps its counter.
+      // Abandon only after beginReplay succeeds — see replay().
       if (this.phase === "won" && this.economy?.progressFor(this.level.id).cleared) {
         return this.replay();
       }
+      this.abandon("restart");
       this.reset();
       this.startTelemetry();
       return this.render();
@@ -1056,13 +1067,27 @@ export class Director {
     this.message = `${left.value} ${op} ${right.value} = ${result}`;
 
     if (this.targetIndex >= this.level.targets.length) {
-      this.phase = "won";
-      const starsBefore = this.economy?.state.totalStars;
       const award = this.economy?.recordClear(this.level.id);
+      // Stale-write conflict (after Economy's one adopt retry): clear did not
+      // persist. Restore the pre-final-move snapshot so the board stays a
+      // valid playing state (targetIndex < targets.length) and the player can
+      // repeat only the final move after the race settles — never leave
+      // playing with no front target / "cleared — could not save".
+      if (award && !award.applied) {
+        const preFinal = this.history.pop();
+        if (preFinal) this.restore(preFinal);
+        // Re-seat the equation so "repeat only the final move" is one commit.
+        this.slots = { leftTileId: left.id, op, rightTileId: right.id };
+        this.message = "could not save — try again";
+        return this.render();
+      }
+      this.phase = "won";
       this.telemetry?.levelComplete(this.level.id, award?.stars ?? 0, this.failures + 1);
       this.telemetry?.levelClear(this.level.id, award?.stars ?? 0);
-      if (award && starsBefore !== undefined) {
-        this.telemetry?.starBankUpdate(award.totalStars, award.totalStars - starsBefore, "level_clear");
+      // Use the mutation's exact starsAdded — never totalStars - starsBefore,
+      // which overcounts foreign-tab stars adopted during a clear retry.
+      if (award) {
+        this.telemetry?.starBankUpdate(award.totalStars, award.starsAdded, "level_clear");
       }
       this.message = award ? `cleared — ${award.stars} star${award.stars === 1 ? "" : "s"}` : "cleared";
       return this.render();
@@ -1274,6 +1299,14 @@ export class Director {
     if (decompositions.length === 0 && transforms.length === 0) {
       this.phase = "failed";
       const outcome = this.economy?.recordFailure(this.level.id);
+      // Stale conflict: keep local fail UI but do not adopt rejected life debit /
+      // fail-count / telemetry as if the mutation survived.
+      if (outcome && !outcome.applied) {
+        this.failures = this.failures + 1;
+        this.lastFailureExempt = false;
+        this.message = `${target} cannot be made from what is left`;
+        return this.render();
+      }
       // The economy owns the counter once attached, so it stays authoritative
       // across an app kill rather than being re-derived in memory.
       this.failures = outcome?.failCount ?? this.failures + 1;

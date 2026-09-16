@@ -3,15 +3,33 @@ import { furthestReached } from "./unlocks.js";
 import { DEFAULT_ECONOMY, livesActiveFor, starsFor, type EconomyConfig } from "./config.js";
 import {
   EMPTY_PROGRESS,
+  SAVE_KEY,
+  attemptWriteSave,
   hasRecoveryRaw as storeHasRecoveryRaw,
   loadSaveStatus,
+  migrate,
   preserveRecoveryRawOnce,
-  writeSave,
+  safeReadResult,
   type LevelProgress,
   type SaveData,
   type SaveLoadStatus,
   type SaveStore,
 } from "./save.js";
+
+/**
+ * Result of the last durable commit attempt.
+ *
+ * - persisted: primary write succeeded (callers may claim saved)
+ * - memory_only: in-memory updated; durable writes blocked for the session
+ * - persist_failed: write attempted but durable store rejected it
+ * - rejected_stale: foreign validated primary detected; stale mutation not
+ *   published; newest validated save adopted into memory; do NOT claim saved
+ */
+export type DurableCommitResult =
+  | "persisted"
+  | "memory_only"
+  | "persist_failed"
+  | "rejected_stale";
 
 export interface FailureOutcome {
   readonly failCount: number;
@@ -20,6 +38,12 @@ export interface FailureOutcome {
   readonly firstFailureExempt: boolean;
   readonly livesRemaining: number;
   readonly starsIfCleared: number;
+  /**
+   * False when a stale-write conflict rejected the failure (after one adopt
+   * retry). Callers must not debit lives / bump fail UI / telemeter from a
+   * rejected mutation.
+   */
+  readonly applied: boolean;
 }
 
 export interface ClearOutcome {
@@ -27,6 +51,19 @@ export interface ClearOutcome {
   readonly bestStars: number;
   readonly improved: boolean;
   readonly totalStars: number;
+  /**
+   * Exact stars this successful clear mutation added to `totalStars`
+   * (`bestStars - previousBest`). Always 0 when `applied` is false.
+   * Use this for star-bank telemetry — never `totalStars - starsBefore`,
+   * which overcounts foreign-tab stars adopted during a retry.
+   */
+  readonly starsAdded: number;
+  /**
+   * False when a stale-write conflict rejected the clear (after one adopt
+   * retry). Callers must not award stars, claim win telemetry, or show
+   * "cleared — N stars" against a save that lacks the clear.
+   */
+  readonly applied: boolean;
 }
 
 /** Wall clock, injectable so tests can move time without waiting. */
@@ -63,6 +100,16 @@ export class Economy {
    * current — do not claim "saved" when false.
    */
   private persistOk = true;
+
+  /**
+   * Exact SAVE_KEY payload this session last loaded or successfully wrote.
+   * `null` means we expect no validated primary (missing / empty-fallback start).
+   * Used for compare-before-write foreign detection — not an atomic CAS token.
+   */
+  private expectedPrimaryRaw: string | null = null;
+
+  /** Outcome of the most recent commit / adoptFromStore path. */
+  private commitResult: DurableCommitResult = "persisted";
 
   private storageReadableFlag: boolean;
   private recoverySecuredFlag: boolean;
@@ -113,10 +160,27 @@ export class Economy {
       this.mirrorBackup = !loaded.primaryUnreadable || loaded.recoveredFromBackup;
     }
 
+    // Session expected-primary token from the durable bytes we actually observed.
+    const primaryAtLoad = safeReadResult(store, SAVE_KEY);
+    if (primaryAtLoad.status === "found") {
+      // Raw string is the fingerprint even when unreadable — recovery rewrite
+      // below publishes a new expected token on success.
+      this.expectedPrimaryRaw = primaryAtLoad.value;
+    } else {
+      this.expectedPrimaryRaw = null;
+    }
+
     if (loaded.recoveredFromBackup && this.allowDurableWrites) {
       // Restore a healthy primary immediately so later commits are not writing
       // over corrupt bytes without a validated working copy on SAVE_KEY.
-      this.persistOk = writeSave(this.store, this.save, { mirrorBackup: true });
+      // Skip expectedPrimary guard: we are intentionally replacing unreadable
+      // primary with validated backup (not a stale multi-tab publish).
+      const rewritten = attemptWriteSave(this.store, this.save, { mirrorBackup: true });
+      this.persistOk = rewritten.status === "written";
+      this.commitResult = this.persistOk ? "persisted" : "persist_failed";
+      if (rewritten.status === "written") {
+        this.expectedPrimaryRaw = JSON.stringify(this.save);
+      }
     }
     this.regenerate();
     if (this.save.lives <= 0) this.lockoutSince = this.monotonic();
@@ -154,6 +218,22 @@ export class Economy {
     return this.persistOk;
   }
 
+  /**
+   * Explicit last commit outcome. When `rejected_stale`, the local mutation was
+   * not published and memory now mirrors the newest validated foreign primary.
+   */
+  get lastCommitResult(): DurableCommitResult {
+    return this.commitResult;
+  }
+
+  /**
+   * Exact primary payload string this session expects on SAVE_KEY, or null when
+   * no validated primary was established yet. Test/diagnostics aid.
+   */
+  get expectedPrimaryToken(): string | null {
+    return this.expectedPrimaryRaw;
+  }
+
   get state(): SaveData {
     return this.save;
   }
@@ -180,19 +260,25 @@ export class Economy {
     }
   }
 
-  private commit(next: SaveData): void {
-    this.save = next;
-
+  private commit(next: SaveData): DurableCommitResult {
     if (!this.storageReadableFlag) {
+      this.save = next;
       this.persistOk = false;
-      return;
+      this.commitResult = "memory_only";
+      if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
+      else this.lockoutSince = null;
+      return this.commitResult;
     }
 
     this.trySecurePendingRecovery();
 
     if (!this.allowDurableWrites) {
+      this.save = next;
       this.persistOk = false;
-      return;
+      this.commitResult = "memory_only";
+      if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
+      else this.lockoutSince = null;
+      return this.commitResult;
     }
 
     // Once the player has any progress after an empty fallback, start mirroring
@@ -203,15 +289,90 @@ export class Economy {
     ) {
       this.mirrorBackup = true;
     }
-    this.persistOk = writeSave(this.store, next, { mirrorBackup: this.mirrorBackup });
+
+    const outcome = attemptWriteSave(this.store, next, {
+      mirrorBackup: this.mirrorBackup,
+      expectedPrimary: this.expectedPrimaryRaw,
+    });
+
+    if (outcome.status === "conflict") {
+      // R1: reject stale durable write; adopt newest validated foreign save.
+      // Do not park stale into backup (attemptWriteSave already skipped writes).
+      this.save = outcome.current;
+      this.expectedPrimaryRaw = outcome.currentRaw;
+      this.persistOk = false;
+      this.commitResult = "rejected_stale";
+      if (this.save.lives <= 0) this.lockoutSince ??= this.monotonic();
+      else this.lockoutSince = null;
+      return this.commitResult;
+    }
+
+    this.save = next;
+    if (outcome.status === "written") {
+      this.expectedPrimaryRaw = JSON.stringify(next);
+      this.persistOk = true;
+      this.commitResult = "persisted";
+    } else if (outcome.status === "incomplete") {
+      // Primary confirmed on SAVE_KEY — advance expected token so the next
+      // healthy commit does not self-conflict. Full durability still failed.
+      this.expectedPrimaryRaw = outcome.primaryRaw;
+      this.persistOk = false;
+      this.commitResult = "persist_failed";
+    } else {
+      // Primary not written (or fail-closed preflight). Keep prior expected token.
+      this.persistOk = false;
+      this.commitResult = "persist_failed";
+    }
 
     // Track when the lockout started, on a clock the player cannot set.
     if (next.lives <= 0) this.lockoutSince ??= this.monotonic();
     else this.lockoutSince = null;
+    return this.commitResult;
   }
 
-  private setProgress(levelId: string, progress: LevelProgress, extra: Partial<SaveData> = {}): void {
-    this.commit({
+  /**
+   * Browser `storage` event integration point (other same-origin tabs).
+   *
+   * When `key` is SAVE_KEY (or null = Storage clear), re-read and adopt a
+   * validated foreign primary into memory without deleting backup/recovery.
+   * Core correctness is covered by commit's compare-before-write and is
+   * testable with MemoryStore + two Economy instances; this hook only keeps
+   * live UI from staying stale until the next mutation.
+   *
+   * @returns true when memory was updated from a foreign validated primary.
+   */
+  adoptFromStore(key: string | null = SAVE_KEY): boolean {
+    if (key !== null && key !== SAVE_KEY) return false;
+    if (!this.storageReadableFlag) return false;
+
+    const primary = safeReadResult(this.store, SAVE_KEY);
+    if (primary.status !== "found") return false;
+    if (primary.value === this.expectedPrimaryRaw) return false;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(primary.value);
+    } catch {
+      return false;
+    }
+    const validated = migrate(parsed);
+    if (!validated) return false;
+
+    this.save = validated;
+    this.expectedPrimaryRaw = primary.value;
+    this.persistOk = false;
+    this.commitResult = "rejected_stale";
+    if (this.save.lives <= 0) this.lockoutSince ??= this.monotonic();
+    else this.lockoutSince = null;
+    return true;
+  }
+
+  private setProgress(
+    levelId: string,
+    progress: LevelProgress,
+    extra: Partial<SaveData> = {},
+  ): DurableCommitResult {
+    return this.commit({
       ...this.save,
       ...extra,
       levels: { ...this.save.levels, [levelId]: progress },
@@ -295,24 +456,35 @@ export class Economy {
    * gaining them any.
    */
   grantHardLockLife(): boolean {
-    this.regenerate();
-    if (this.save.lives > 0) return false;
-    if (this.lockoutSince === null) {
-      this.lockoutSince = this.monotonic();
-      return false;
-    }
-    if (this.monotonic() - this.lockoutSince < this.config.hardLockGraceMinutes * MINUTE) {
-      return false;
-    }
+    let hitStale = false;
+    const attempt = (): boolean => {
+      this.regenerate();
+      if (this.save.lives > 0) return false;
+      if (this.lockoutSince === null) {
+        this.lockoutSince = this.monotonic();
+        return false;
+      }
+      if (this.monotonic() - this.lockoutSince < this.config.hardLockGraceMinutes * MINUTE) {
+        return false;
+      }
 
-    const now = Math.max(this.now(), this.save.clockHighWater);
-    this.commit({
-      ...this.save,
-      lives: 1,
-      lastLifeGrantedAt: now,
-      clockHighWater: now,
-    });
-    return true;
+      const now = Math.max(this.now(), this.save.clockHighWater);
+      const result = this.commit({
+        ...this.save,
+        lives: 1,
+        lastLifeGrantedAt: now,
+        clockHighWater: now,
+      });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.save.lives > 0;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /**
@@ -329,6 +501,9 @@ export class Economy {
   /**
    * Review/harness only — force the life count (and lockout when zero).
    * Resets the regen anchor so a forced zero stays visible for screenshots.
+   *
+   * Intentionally single-shot (no adopt/retry): not a player-facing mutation.
+   * Time regen via `regenerate` similarly stays eventual / tick-driven.
    */
   setLives(n: number): void {
     const lives = Math.max(0, Math.min(this.config.maxLives, Math.floor(n)));
@@ -337,10 +512,22 @@ export class Economy {
   }
 
   grantAdLife(): boolean {
-    this.regenerate();
-    if (this.save.lives >= this.config.maxLives) return false;
-    this.commit({ ...this.save, lives: this.save.lives + 1 });
-    return true;
+    let hitStale = false;
+    const attempt = (): boolean => {
+      this.regenerate();
+      if (this.save.lives >= this.config.maxLives) return false;
+      const before = this.save.lives;
+      const result = this.commit({ ...this.save, lives: this.save.lives + 1 });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.save.lives > before;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /** Can the player start this level? Lives are off in World 1 (§7.2). */
@@ -354,30 +541,59 @@ export class Economy {
    * first failure is still available (§5.2).
    */
   recordFailure(levelId: string): FailureOutcome {
-    this.regenerate();
-    const before = this.progressFor(levelId);
-    const failCount = before.failCount + 1;
-
-    const livesActive = livesActiveFor(levelId, this.config);
-    const exempt = livesActive && !before.cleared && !before.firstFailureUsed;
-    const spend = livesActive && !exempt && this.save.lives > 0;
-
-    const progress: LevelProgress = {
-      ...before,
-      failCount,
-      firstFailureUsed: before.firstFailureUsed || exempt,
-      ratingAttempt: "tainted",
+    const unapplied = (): FailureOutcome => {
+      const p = this.progressFor(levelId);
+      return {
+        failCount: p.failCount,
+        lifeSpent: false,
+        firstFailureExempt: false,
+        livesRemaining: this.save.lives,
+        starsIfCleared: starsFor(p.failCount, this.config),
+        applied: false,
+      };
     };
 
-    this.setProgress(levelId, progress, spend ? { lives: this.save.lives - 1 } : {});
+    const attempt = (): FailureOutcome => {
+      this.regenerate();
+      const before = this.progressFor(levelId);
+      const failCount = before.failCount + 1;
 
-    return {
-      failCount,
-      lifeSpent: spend,
-      firstFailureExempt: exempt,
-      livesRemaining: this.save.lives,
-      starsIfCleared: starsFor(failCount, this.config),
+      const livesActive = livesActiveFor(levelId, this.config);
+      const exempt = livesActive && !before.cleared && !before.firstFailureUsed;
+      const spend = livesActive && !exempt && this.save.lives > 0;
+
+      const progress: LevelProgress = {
+        ...before,
+        failCount,
+        firstFailureUsed: before.firstFailureUsed || exempt,
+        ratingAttempt: "tainted",
+      };
+
+      const result = this.setProgress(
+        levelId,
+        progress,
+        spend ? { lives: this.save.lives - 1 } : {},
+      );
+
+      if (result === "rejected_stale") return unapplied();
+
+      return {
+        failCount: this.progressFor(levelId).failCount,
+        lifeSpent: spend,
+        firstFailureExempt: exempt,
+        livesRemaining: this.save.lives,
+        starsIfCleared: starsFor(this.progressFor(levelId).failCount, this.config),
+        applied: true,
+      };
     };
+
+    const first = attempt();
+    if (first.applied) return first;
+    if (this.lastCommitResult === "rejected_stale") {
+      const second = attempt();
+      return second;
+    }
+    return first;
   }
 
   /**
@@ -385,18 +601,47 @@ export class Economy {
    * replay may improve the stored best (§5.1).
    */
   recordClear(levelId: string): ClearOutcome {
-    const before = this.progressFor(levelId);
-    const stars = before.ratingAttempt === "clean" ? 3 : starsFor(before.failCount, this.config);
-    const bestStars = Math.max(before.bestStars, stars);
-    const improved = bestStars > before.bestStars;
+    const unapplied = (): ClearOutcome => {
+      const p = this.progressFor(levelId);
+      return {
+        stars: 0,
+        bestStars: p.bestStars,
+        improved: false,
+        totalStars: this.save.totalStars,
+        starsAdded: 0,
+        applied: false,
+      };
+    };
 
-    this.setProgress(
-      levelId,
-      { ...before, cleared: true, bestStars, ratingAttempt: "tainted" },
-      { totalStars: this.save.totalStars + (bestStars - before.bestStars) },
-    );
+    const attempt = (): ClearOutcome => {
+      const before = this.progressFor(levelId);
+      const stars = before.ratingAttempt === "clean" ? 3 : starsFor(before.failCount, this.config);
+      const bestStars = Math.max(before.bestStars, stars);
+      const improved = bestStars > before.bestStars;
+      const starsAdded = bestStars - before.bestStars;
 
-    return { stars, bestStars, improved, totalStars: this.save.totalStars };
+      const result = this.setProgress(
+        levelId,
+        { ...before, cleared: true, bestStars, ratingAttempt: "tainted" },
+        { totalStars: this.save.totalStars + starsAdded },
+      );
+
+      if (result === "rejected_stale") return unapplied();
+
+      return {
+        stars,
+        bestStars: this.progressFor(levelId).bestStars,
+        improved,
+        totalStars: this.save.totalStars,
+        starsAdded,
+        applied: true,
+      };
+    };
+
+    const first = attempt();
+    if (first.applied) return first;
+    if (this.lastCommitResult === "rejected_stale") return attempt();
+    return first;
   }
 
   /* Rating for the current attempt, including a rewarded clean retry. */
@@ -413,10 +658,21 @@ export class Economy {
 
   /* Mint the persisted clean-rating token exactly once after a verified ad. */
   beginCleanRetry(levelId: string): boolean {
-    if (!this.canStartCleanRetry(levelId)) return false;
-    const before = this.progressFor(levelId);
-    this.setProgress(levelId, { ...before, ratingAttempt: "clean" });
-    return true;
+    let hitStale = false;
+    const attempt = (): boolean => {
+      if (!this.canStartCleanRetry(levelId)) return false;
+      const before = this.progressFor(levelId);
+      const result = this.setProgress(levelId, { ...before, ratingAttempt: "clean" });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.progressFor(levelId).ratingAttempt === "clean";
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /***
@@ -448,8 +704,26 @@ export class Economy {
     return this.save.selectedMode;
   }
 
-  selectMode(mode: Mode): void {
-    this.commit({ ...this.save, selectedMode: mode });
+  /**
+   * Persist preferred mode. Adopt/re-check/retry-once on stale conflict so a
+   * mode tap is not silently dropped while the board reopens under the old mode.
+   * @returns false when the mode was not applied after one adopt retry.
+   */
+  selectMode(mode: Mode): boolean {
+    let hitStale = false;
+    const attempt = (): boolean => {
+      if (this.save.selectedMode === mode) return true;
+      const result = this.commit({ ...this.save, selectedMode: mode });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.save.selectedMode === mode;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /** Audio off. Persisted, so the choice survives a relaunch. Default ON. */
@@ -457,8 +731,26 @@ export class Economy {
     return this.save.muted;
   }
 
-  setMuted(muted: boolean): void {
-    this.commit({ ...this.save, muted });
+  /**
+   * Persist mute preference. Adopt/re-check/retry-once on stale conflict so a
+   * mute toggle is not silently ignored after a foreign tab advanced.
+   * @returns false when mute was not applied after one adopt retry.
+   */
+  setMuted(muted: boolean): boolean {
+    let hitStale = false;
+    const attempt = (): boolean => {
+      if (this.save.muted === muted) return true;
+      const result = this.commit({ ...this.save, muted });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.save.muted === muted;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   hintsPurchased(levelId: string): readonly string[] {
@@ -473,16 +765,27 @@ export class Economy {
    * already in the list is free and always returns true.
    */
   purchaseHint(levelId: string, hint: string, cost: number): boolean {
-    const before = this.progressFor(levelId);
-    if (before.hintsPurchased.includes(hint)) return true;
-    if (this.starsAvailable < cost) return false;
+    let hitStale = false;
+    const attempt = (): boolean => {
+      const before = this.progressFor(levelId);
+      if (before.hintsPurchased.includes(hint)) return true;
+      if (this.starsAvailable < cost) return false;
 
-    this.setProgress(
-      levelId,
-      { ...before, hintsPurchased: [...before.hintsPurchased, hint] },
-      { starsSpent: this.save.starsSpent + cost },
-    );
-    return true;
+      const result = this.setProgress(
+        levelId,
+        { ...before, hintsPurchased: [...before.hintsPurchased, hint] },
+        { starsSpent: this.save.starsSpent + cost },
+      );
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.progressFor(levelId).hintsPurchased.includes(hint);
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /**
@@ -528,17 +831,29 @@ export class Economy {
    * partially applies: the star and the object move together or not at all.
    */
   restore(world: number): boolean {
-    if (!this.canRestore(world)) return false;
-    const cost = this.nextRestoreCost(world);
-    if (cost === null) return false;
-    if (this.starsAvailable < cost) return false;
+    let hitStale = false;
+    const attempt = (): boolean => {
+      if (!this.canRestore(world)) return false;
+      const cost = this.nextRestoreCost(world);
+      if (cost === null) return false;
+      if (this.starsAvailable < cost) return false;
 
-    this.commit({
-      ...this.save,
-      starsSpent: this.save.starsSpent + cost,
-      restored: { ...this.save.restored, [String(world)]: this.restoredIn(world) + 1 },
-    });
-    return true;
+      const before = this.restoredIn(world);
+      const result = this.commit({
+        ...this.save,
+        starsSpent: this.save.starsSpent + cost,
+        restored: { ...this.save.restored, [String(world)]: before + 1 },
+      });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.restoredIn(world) === before + 1;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 
   /**
@@ -546,9 +861,28 @@ export class Economy {
    * better rating, so the failure counter resets — but only for a level already
    * cleared, and the attempt still costs a life, so it is not farmable.
    */
-  beginReplay(levelId: string): void {
-    const before = this.progressFor(levelId);
-    if (!before.cleared) return;
-    this.setProgress(levelId, { ...before, failCount: 0 });
+  /**
+   * Reset failCount for a cleared level. Adopt/re-check/retry-once on stale
+   * conflict so a replay cannot start without the fail counter reset.
+   * @returns false when not cleared, or when the reset did not apply after one
+   * adopt retry.
+   */
+  beginReplay(levelId: string): boolean {
+    let hitStale = false;
+    const attempt = (): boolean => {
+      const before = this.progressFor(levelId);
+      if (!before.cleared) return false;
+      if (before.failCount === 0) return true;
+      const result = this.setProgress(levelId, { ...before, failCount: 0 });
+      if (result === "rejected_stale") {
+        hitStale = true;
+        return false;
+      }
+      return this.progressFor(levelId).failCount === 0;
+    };
+
+    if (attempt()) return true;
+    if (hitStale) return attempt();
+    return false;
   }
 }

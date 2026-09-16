@@ -4,8 +4,9 @@ import { Sound } from "./audio/sound.js";
 import { MapScreen } from "./map/map-screen.js";
 import { failedAtlases, loadedSprites, missingSprites, setSpritesEnabled } from "./renderer/sprites.js";
 import { mapView } from "./map/model.js";
+import { planAdoptRefresh } from "./economy/adopt-refresh.js";
 import { Economy } from "./economy/economy.js";
-import { LocalStorageStore, readRecoveryRaw } from "./economy/save.js";
+import { LocalStorageStore, SAVE_KEY, readRecoveryRaw } from "./economy/save.js";
 import { Director } from "./game/director.js";
 import type { Command, InputEvent, LadderLevel, ViewState } from "./game/types.js";
 import { Renderer } from "./renderer/renderer.js";
@@ -191,8 +192,12 @@ function apply(commands: readonly Command[]): void {
 function send(input: InputEvent): void {
   apply(director.handle(input));
   // Changing mode changes the budgets in play, so the level is re-opened under
-  // the new one rather than mutated mid-board.
-  if (input.type === "selectMode") open(currentLevel);
+  // the new one rather than mutated mid-board — but only when the preference
+  // actually applied. A stale double-conflict leaves selectedMode unchanged;
+  // reopening would silently put the player under the previous mode.
+  if (input.type === "selectMode" && economy.selectedMode === input.mode) {
+    open(currentLevel);
+  }
 }
 
 function nextLevelIdAfter(id: string): string | null {
@@ -323,6 +328,32 @@ map.attach({
   onDownloadRecovery: () => {
     void downloadRecoverySave();
   },
+});
+
+/*
+ * Cross-tab save awareness (desktop multi-tab).
+ *
+ * `storage` fires in *other* documents when localStorage changes. Core
+ * correctness is Economy.commit's expected-primary compare-before-write
+ * (testable with MemoryStore + two Economy instances). This listener adopts
+ * Economy state and syncs Sound mute only — it does not redraw Map/HUD by
+ * implication. `refreshEconomySurfaces` is the deterministic hook for visible
+ * economy-derived chrome (map when open); it never discards an in-progress
+ * board for a preference-only foreign change. Residual TOCTOU across tabs
+ * remains — not an atomic CAS. navigator.locks is not wired here.
+ */
+function refreshEconomySurfaces(): void {
+  const plan = planAdoptRefresh({ mapVisible: map.visible });
+  if (plan.syncSoundMute) sound.setMuted(economy.muted);
+  if (plan.refreshMap) map.show(viewWithRestoration());
+}
+
+window.addEventListener("storage", (event) => {
+  if (event.storageArea && event.storageArea !== localStorage) return;
+  // event.key === null means Storage.clear(); adoptFromStore ignores wipe-to-empty.
+  if (event.key !== null && event.key !== SAVE_KEY) return;
+  if (!economy.adoptFromStore(event.key)) return;
+  refreshEconomySurfaces();
 });
 
 /*
@@ -655,6 +686,8 @@ Object.assign(window, {
     state: () => lastState,
     setEffectSpeed,
     showMap,
+    /** Deterministic post-adoption refresh (map when visible; never interrupts board). */
+    refreshEconomySurfaces,
     /** Review hook: replay the clear-to-map handoff beat. */
     showMapAfterClear: () => {
       const focus = lastState?.phase === "won" ? nextLevelIdAfter(lastState.levelId) : null;
@@ -704,7 +737,8 @@ Object.assign(window, {
     },
     setMuted: (muted: boolean) => {
       economy.setMuted(muted);
-      sound.setMuted(muted);
+      // Mirror resulting economy state — a failed persist must not force sound.
+      sound.setMuted(economy.muted);
     },
     /** What the feel layer is running right now — see Renderer.feelState. */
     feel: () => renderer.feelState(),
