@@ -1,13 +1,14 @@
 # GROK — Eng Lead notes
 
-## Current — Track A DRAFT · save validation + prod harness gate
+## Current — Track A DRAFT · PROOF ROUND (PR #38)
 
-**Status:** DRAFT PR — **do not merge** until CoS/Codex say otherwise.  
+**Status:** DRAFT PR #38 — **do not merge** until CoS/Codex say otherwise.  
 **Base:** `master` @ `e0134a8` (after #37 S0 audit merge)  
 **Branch:** `feat/track-a-save-validation-harness`  
-**Scope:** A1 harness off default Pages/APK (`import.meta.env.DEV || VITE_LANE_MATH_HARNESS=1`, Vite DCE); A2 fail-closed `migrate` shape validation (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery invariant tests. Improves validation — **does NOT** make client saves cheat-proof.  
-**Verify:** `npm test` → **538**; typecheck; build; `node tools/assert-no-prod-harness.mjs`; `curate:verify`; `MIN_TESTS=524 node tools/assert-suite-size.mjs`.  
-**Out of scope:** Base44 / ChronosGlobe / GDD / ART / CLAUDE / CODEX / economy reprice / schema bump / Track C.
+**Proof:** historical fixtures A–D; #30 recovery + `classifySaveRaw` distinctions; full mutator DCE regression gate + harness-on positive smoke; deploy artifact = `dist-pages/` (harness-off). Validation review: [`TRACK_A_PROOF_VALIDATION_REVIEW.md`](./TRACK_A_PROOF_VALIDATION_REVIEW.md).  
+**Scope:** A1 harness off default Pages/APK (`import.meta.env.DEV || VITE_LANE_MATH_HARNESS=1`, Vite DCE); A2 fail-closed `migrate` (`SAVE_SCHEMA_VERSION` stays **2**); A3 recovery. Improves validation — **does NOT** make client saves cheat-proof. String scan = regression gate only, not security proof. No silent `starsSpent>totalStars` clamp.  
+**Verify:** `npm test` → **548**; typecheck; build; `assert-no-prod-harness`; harness-on `assert-harness-present`; `curate:verify`; `MIN_TESTS=524 node tools/assert-suite-size.mjs`.  
+**Out of scope:** Base44 / ChronosGlobe / GDD / ART / CLAUDE / CODEX / economy reprice / schema bump / Track C stacked branch.
 
 ---
 

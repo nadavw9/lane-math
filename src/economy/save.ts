@@ -398,6 +398,44 @@ function tryParseMigrate(raw: string): SaveData | null {
   }
 }
 
+/**
+ * Distinguish unreadable primary causes for recovery / ops.
+ * loadSaveStatus treats all non-ok kinds as unreadable (same recovery path);
+ * this classifier is for tests and handoffs — not a separate storage key.
+ *
+ * - json-parse-fail: JSON.parse throws
+ * - unsupported-schema: finite schemaVersion this build cannot climb (newer or unknown)
+ * - structural-fail: parsed JSON that fail-closed migrate rejects (incl. explicit null/wrong types)
+ * - ok: migrate succeeded
+ */
+export type SaveRawClass =
+  | { readonly kind: "ok"; readonly save: SaveData }
+  | { readonly kind: "json-parse-fail" }
+  | { readonly kind: "structural-fail" }
+  | { readonly kind: "unsupported-schema"; readonly schemaVersion: number };
+
+export function classifySaveRaw(raw: string): SaveRawClass {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { kind: "json-parse-fail" };
+  }
+  if (!isPlainObject(parsed)) return { kind: "structural-fail" };
+  const schemaVersion = parsed["schemaVersion"];
+  if (!isFiniteNonNegInt(schemaVersion)) return { kind: "structural-fail" };
+  if (schemaVersion > SAVE_SCHEMA_VERSION) {
+    return { kind: "unsupported-schema", schemaVersion };
+  }
+  // Known climbable majors today: 1 → 2, and current 2.
+  if (schemaVersion !== 1 && schemaVersion !== SAVE_SCHEMA_VERSION) {
+    return { kind: "unsupported-schema", schemaVersion };
+  }
+  const migrated = migrate(parsed);
+  if (migrated) return { kind: "ok", save: migrated };
+  return { kind: "structural-fail" };
+}
+
 /** Tri-state read: found / missing / unavailable (throw). Never conflates throw with miss. */
 export function safeReadResult(store: SaveStore, key: string): ReadResult {
   try {

@@ -54,6 +54,7 @@ One `gates` job on every push; `deploy` only when `github.ref == refs/heads/mast
 | Full `vitest run` | Behavioural regression suite |
 | `atlas:verify` | Sprite atlases rebuild to the same bytes |
 | `vite build --base=/lane-math/` | Production bundle for Pages prefix |
+| `assert-no-prod-harness` / harness-on dual-build | Default prod/APK = harness **off** (`VITE_LANE_MATH_HARNESS` unset). Pages deploy artifact = `dist-pages/`. String scan = regression gate only, not security proof. |
 | Playwright smoke (+ `?sprites=0`) | Built artefact boots (sprites + procedural escape hatch) |
 | `verify-viewports` / `font-coverage` | Board fits phones; every UI glyph present in the shipped font |
 

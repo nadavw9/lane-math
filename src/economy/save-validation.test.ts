@@ -9,6 +9,7 @@ import {
   SAVE_SCHEMA_VERSION,
   emptySave,
   loadSaveStatus,
+  classifySaveRaw,
   migrate,
   reviewHarnessEnabled,
   writeSave,
@@ -298,5 +299,323 @@ describe("Track A — recovery invariants under strict validation", () => {
     expect(loaded.recoveredFromBackup).toBe(false);
     expect(loaded.primaryUnreadable).toBe(false);
     expect(loaded.save).toEqual(emptySave(T0, DEFAULT_ECONOMY.maxLives));
+  });
+});
+
+
+/**
+ * Track A PROOF — exact historical fixtures (A–D) + expected defaults.
+ *
+ * Defaults applied only when the field is ABSENT (undefined):
+ *   levels → {}
+ *   restored → {}
+ *   lives/totalStars/starsSpent/lastLifeGrantedAt → 0
+ *   clockHighWater → lastLifeGrantedAt if absent else 0
+ *   selectedMode → "normal"
+ *   muted → false
+ *   per-level: bestStars/failCount 0; cleared/firstFailureUsed false;
+ *              hintsPurchased []; ratingAttempt "tainted"
+ * Explicit null / wrong primitive / numeric string / array-as-map → reject (no coerce).
+ * starsSpent > totalStars is NOT clamped (documented unresolved cross-field invariant).
+ */
+describe("Track A PROOF — historical save compatibility fixtures", () => {
+  const FIXTURE_A_V1 = {
+    schemaVersion: 1,
+    levels: {
+      "1-01": {
+        bestStars: 3,
+        failCount: 2,
+        cleared: true,
+        firstFailureUsed: true,
+        hintsPurchased: ["carry", "borrow"],
+      },
+      "1-02": {
+        bestStars: 1,
+        failCount: 0,
+        cleared: true,
+        firstFailureUsed: false,
+        hintsPurchased: [],
+      },
+    },
+    lives: 4,
+    lastLifeGrantedAt: T0,
+    // deliberately no clockHighWater / restored / muted / ratingAttempt
+    totalStars: 9,
+    starsSpent: 2,
+    selectedMode: "casual" as const,
+  };
+
+  it("A: v1 without restored/ratingAttempt/muted/clockHighWater → v2 without progress loss", () => {
+    const climbed = migrate(FIXTURE_A_V1);
+    expect(climbed).not.toBeNull();
+    expect(climbed!).toEqual({
+      schemaVersion: 2,
+      levels: {
+        "1-01": {
+          bestStars: 3,
+          failCount: 2,
+          cleared: true,
+          firstFailureUsed: true,
+          hintsPurchased: ["carry", "borrow"],
+          ratingAttempt: "tainted", // default
+        },
+        "1-02": {
+          bestStars: 1,
+          failCount: 0,
+          cleared: true,
+          firstFailureUsed: false,
+          hintsPurchased: [],
+          ratingAttempt: "tainted",
+        },
+      },
+      lives: 4,
+      lastLifeGrantedAt: T0,
+      clockHighWater: T0, // defaulted from lastLifeGrantedAt
+      totalStars: 9,
+      starsSpent: 2,
+      restored: {}, // v1→v2 additive
+      selectedMode: "casual",
+      muted: false, // default
+    });
+  });
+
+  const FIXTURE_B_EARLY_V2 = {
+    schemaVersion: 2,
+    levels: {
+      "2-01": {
+        bestStars: 2,
+        failCount: 1,
+        cleared: true,
+        firstFailureUsed: true,
+        hintsPurchased: ["hint-x"],
+        // no ratingAttempt
+      },
+    },
+    lives: 5,
+    lastLifeGrantedAt: T0,
+    // no clockHighWater
+    totalStars: 6,
+    starsSpent: 1,
+    restored: { "1": 2, "2": 1 }, // present
+    selectedMode: "expert" as const,
+    // no muted
+  };
+
+  it("B: early v2 restored present, later additives missing → documented defaults", () => {
+    const climbed = migrate(FIXTURE_B_EARLY_V2);
+    expect(climbed).not.toBeNull();
+    expect(climbed!.restored).toEqual({ "1": 2, "2": 1 });
+    expect(climbed!.muted).toBe(false);
+    expect(climbed!.clockHighWater).toBe(T0);
+    expect(climbed!.levels["2-01"]?.ratingAttempt).toBe("tainted");
+    expect(climbed!.levels["2-01"]?.hintsPurchased).toEqual(["hint-x"]);
+    expect(climbed!.totalStars).toBe(6);
+    expect(climbed!.selectedMode).toBe("expert");
+  });
+
+  it("C: current v2 all fields → round-trip without reducing/rewriting progress", () => {
+    const current = validSave({
+      totalStars: 15,
+      starsSpent: 4,
+      lives: 3,
+      muted: true,
+      selectedMode: "expert",
+      restored: { "1": 4, "3": 0 },
+      levels: {
+        "3-05": {
+          bestStars: 3,
+          failCount: 4,
+          cleared: true,
+          firstFailureUsed: true,
+          hintsPurchased: ["a", "b"],
+          ratingAttempt: "clean",
+        },
+      },
+    });
+    const once = migrate(current);
+    expect(once).toEqual(current);
+    const twice = migrate(JSON.parse(JSON.stringify(once)));
+    expect(twice).toEqual(current);
+    // starsSpent > totalStars still loads (no silent clamp)
+    const overspent = migrate(validSave({ totalStars: 2, starsSpent: 9 }));
+    expect(overspent?.totalStars).toBe(2);
+    expect(overspent?.starsSpent).toBe(9);
+  });
+
+  it("D: absent→default; explicit null/wrong primitive/array-map/numeric-string→reject", () => {
+    // Absent optional → defaults (schemaVersion alone)
+    expect(migrate({ schemaVersion: 2 })).toEqual({
+      schemaVersion: 2,
+      levels: {},
+      lives: 0,
+      lastLifeGrantedAt: 0,
+      clockHighWater: 0,
+      totalStars: 0,
+      starsSpent: 0,
+      restored: {},
+      selectedMode: "normal",
+      muted: false,
+    });
+
+    // Explicit null on known typed fields → reject
+    expect(migrate({ ...validSave(), lives: null })).toBeNull();
+    expect(migrate({ ...validSave(), muted: null })).toBeNull();
+    expect(migrate({ ...validSave(), restored: null })).toBeNull();
+    expect(
+      migrate({
+        ...validSave(),
+        levels: {
+          "1-01": {
+            bestStars: 2,
+            failCount: 0,
+            cleared: true,
+            firstFailureUsed: false,
+            hintsPurchased: [],
+            ratingAttempt: null,
+          },
+        },
+      }),
+    ).toBeNull();
+
+    // Wrong primitive → reject
+    expect(migrate({ ...validSave(), muted: 0 })).toBeNull();
+    expect(migrate({ ...validSave(), selectedMode: 1 })).toBeNull();
+    expect(migrate({ ...validSave(), totalStars: true })).toBeNull();
+
+    // Array where map expected → reject
+    expect(migrate({ ...validSave(), levels: [] })).toBeNull();
+    expect(migrate({ ...validSave(), restored: ["1", 2] })).toBeNull();
+
+    // Numeric strings → reject (no coerce)
+    expect(migrate({ ...validSave(), lives: "5" })).toBeNull();
+    expect(migrate({ ...validSave(), totalStars: "10" })).toBeNull();
+    expect(migrate({ ...validSave(), starsSpent: "0" })).toBeNull();
+    expect(migrate({ ...validSave(), lastLifeGrantedAt: String(T0) })).toBeNull();
+    expect(migrate({ ...validSave(), restored: { "1": "2" } })).toBeNull();
+  });
+});
+
+describe("Track A PROOF — #30 recovery integration + failure-class distinctions", () => {
+  it("classifies JSON parse fail vs structural fail vs unsupported schema", () => {
+    expect(classifySaveRaw("{not-json").kind).toBe("json-parse-fail");
+    expect(classifySaveRaw("null").kind).toBe("structural-fail");
+    expect(classifySaveRaw(JSON.stringify({ ...validSave(), lives: -1 })).kind).toBe(
+      "structural-fail",
+    );
+    expect(classifySaveRaw(JSON.stringify({ schemaVersion: 99, levels: {} })).kind).toBe(
+      "unsupported-schema",
+    );
+    expect(classifySaveRaw(JSON.stringify({ schemaVersion: 0, levels: {} })).kind).toBe(
+      "unsupported-schema",
+    );
+    expect(classifySaveRaw(JSON.stringify(validSave())).kind).toBe("ok");
+  });
+
+  it("structurally invalid but valid JSON primary → preserved in SAVE_RECOVERY_KEY", () => {
+    const store = new MemoryStore();
+    const good = validSave({ totalStars: 11 });
+    writeSave(store, good);
+    const structural = JSON.stringify({ ...good, lives: -1, muted: "nope" });
+    store.write(SAVE_KEY, structural);
+    expect(classifySaveRaw(structural).kind).toBe("structural-fail");
+
+    const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
+    expect(loaded.primaryUnreadable).toBe(true);
+    expect(loaded.recoveredFromBackup).toBe(true);
+    expect(store.read(SAVE_RECOVERY_KEY)).toBe(structural);
+    expect(loaded.save.totalStars).toBe(11);
+  });
+
+  it("valid backup recovered when primary fails structural validation", () => {
+    const store = new MemoryStore();
+    writeSave(store, validSave({ totalStars: 22, starsSpent: 3 }));
+    const backupBefore = store.read(SAVE_BACKUP_KEY);
+    store.write(SAVE_KEY, JSON.stringify({ ...validSave({ totalStars: 999 }), lives: 1.5 }));
+
+    const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
+    expect(loaded.recoveredFromBackup).toBe(true);
+    expect(loaded.save.totalStars).toBe(22);
+    expect(store.read(SAVE_BACKUP_KEY)).toBe(backupBefore);
+  });
+
+  it("invalid primary never replaces or corrupts valid backup", () => {
+    const store = new MemoryStore();
+    const good = validSave({ totalStars: 30 });
+    writeSave(store, good);
+    const backupBefore = store.read(SAVE_BACKUP_KEY)!;
+    store.write(SAVE_KEY, JSON.stringify({ ...good, totalStars: "∞" }));
+    loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
+    expect(store.read(SAVE_BACKUP_KEY)).toBe(backupBefore);
+    expect(JSON.parse(backupBefore).totalStars).toBe(30);
+    // empty fallback commit must not mirror
+    writeSave(store, emptySave(T0, DEFAULT_ECONOMY.maxLives), { mirrorBackup: false });
+    expect(store.read(SAVE_BACKUP_KEY)).toBe(backupBefore);
+  });
+
+  it("invalid imported/cloud-shaped payload via migrate rejects without touching local progress", () => {
+    const store = new MemoryStore();
+    const local = validSave({ totalStars: 40, starsSpent: 5 });
+    writeSave(store, local);
+    const primaryBefore = store.read(SAVE_KEY);
+    const backupBefore = store.read(SAVE_BACKUP_KEY);
+
+    const cloudHostile = {
+      schemaVersion: 2,
+      levels: {
+        "1-01": {
+          bestStars: 3,
+          failCount: 0,
+          cleared: true,
+          firstFailureUsed: false,
+          hintsPurchased: [],
+          ratingAttempt: "clean",
+        },
+      },
+      lives: "max",
+      lastLifeGrantedAt: T0,
+      clockHighWater: T0,
+      totalStars: 99999,
+      starsSpent: 0,
+      restored: {},
+      selectedMode: "normal",
+      muted: false,
+      cloudAuthority: true,
+    };
+    expect(migrate(cloudHostile)).toBeNull();
+    // Local durable bytes untouched by a rejected import candidate.
+    expect(store.read(SAVE_KEY)).toBe(primaryBefore);
+    expect(store.read(SAVE_BACKUP_KEY)).toBe(backupBefore);
+    expect(store.read(SAVE_RECOVERY_KEY)).toBeNull();
+  });
+
+  it("unsupported-schema primary is preserved distinctly from JSON parse fail", () => {
+    const store = new MemoryStore();
+    writeSave(store, validSave({ totalStars: 5 }));
+    const newer = JSON.stringify({
+      schemaVersion: SAVE_SCHEMA_VERSION + 3,
+      levels: {},
+      lives: 2,
+      lastLifeGrantedAt: T0,
+      clockHighWater: T0,
+      totalStars: 5,
+      starsSpent: 0,
+      restored: {},
+      selectedMode: "normal",
+      muted: false,
+    });
+    store.write(SAVE_KEY, newer);
+    expect(classifySaveRaw(newer).kind).toBe("unsupported-schema");
+    const loaded = loadSaveStatus(store, T0, DEFAULT_ECONOMY.maxLives);
+    expect(loaded.primaryUnreadable).toBe(true);
+    expect(loaded.recoveredFromBackup).toBe(true);
+    expect(store.read(SAVE_RECOVERY_KEY)).toBe(newer);
+
+    const store2 = new MemoryStore();
+    writeSave(store2, validSave({ totalStars: 5 }));
+    store2.write(SAVE_KEY, "{broken");
+    expect(classifySaveRaw("{broken").kind).toBe("json-parse-fail");
+    const loaded2 = loadSaveStatus(store2, T0, DEFAULT_ECONOMY.maxLives);
+    expect(store2.read(SAVE_RECOVERY_KEY)).toBe("{broken");
+    expect(loaded2.recoveredFromBackup).toBe(true);
   });
 });
