@@ -1,6 +1,6 @@
 # Mission — Android Release / Privacy / Child-Safety Readiness — PHASE 2
 
-**Status:** PHASE 2 IN PROGRESS → hardening slices landing (shell + warn-only ads gate + drafts).  
+**Status:** PHASE 2 COMPLETE — shell + warn-only ads gate + drafts merged; TFAT/UMP/age/prod IDs/Families remain DEFER (C).  
 **Mission start tip:** `e26dd8efd09b39c7e1032243904ed5bc664d0605` (Phase 1 audit PR #55 merged). Earlier audit tip: `011bae1`.  
 **Primary sources brief:** `/workspace/reviews/lane-math-android-mission/PRIMARY_SOURCES_BRIEF_2026-09-16.md` (retrieved **2026-09-16 Asia/Jerusalem / IDT**). Cite **S1–S23**.  
 **Hard exclusions:** No Base44 / ChronosGlobe; no monetization behavior / reward amounts / economy / gameplay / levels / UI / schema v2; **do NOT set production ad IDs**; no store publish; preserve ≥548, CI least-privilege/SHA pins.  
@@ -9,7 +9,13 @@
 
 ---
 
-## Phase 2 landed (this branch / PRs)
+## Phase 2 landed
+
+| PR | Merge SHA | CI | One-line |
+|----|-----------|----|----------|
+| [#56](https://github.com/nadavw9/lane-math/pull/56) | `ca481b030e795067749287f76e735a513d54236c` | [master CI SUCCESS](https://github.com/nadavw9/lane-math/actions/runs/35149992128) | Backup/NSC/debuggable + ads tip gate + Data safety/checklist drafts |
+
+**End master tip:** `ca481b030e795067749287f76e735a513d54236c` (start was `e26dd8e` / audit `011bae1`).
 
 | # | Slice | Status | Notes |
 |---|-------|--------|-------|
@@ -100,7 +106,7 @@ node tools/assert-no-prod-harness.mjs dist-pages
 ## Blockers
 
 - Store publish / prod ad IDs / TFAT / UMP / age screen: **blocked on C1–C7**.  
-- None for Phase 2 shell + warn-only + drafts merge once CI green.
+- Phase 2 Eng slices: **none remaining** (merged).
 
 ## Retrieval stamp
 
