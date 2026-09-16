@@ -7,7 +7,7 @@
 **Branch:** `ci/track-c2-codeql`  
 **Deliverable:** [`TRACK_C2_CODEQL_b1767a8.md`](./TRACK_C2_CODEQL_b1767a8.md).  
 **Landed (proposed):** separate `.github/workflows/codeql.yml`; `javascript-typescript` only; SHA-pinned `codeql-action` v4.38.0 + existing checkout pin; weekly cron; findings = code scanning alerts (does not block Pages deploy).  
-**Tip:** `d6c5ae3571ac6907e12802f671b7a0fc010b9e5e` (`d6c5ae3`). **DRAFT PR:** [#50](https://github.com/nadavw9/lane-math/pull/50) — **do not merge**.
+**Tip:** `c8709ee0e5f305311015a67379e54136f73f2110` (`c8709ee`). **DRAFT PR:** [#50](https://github.com/nadavw9/lane-math/pull/50) — **do not merge**.
 **Hard rules:** No gitleaks / provenance / Android / Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema. `ci.yml` gates+deploy unchanged.
 
 ---
