@@ -21,6 +21,40 @@ import type { Economy } from "../economy/economy.js";
  */
 export const TEST_REWARDED_ID = "ca-app-pub-3940256099942544/5224354917";
 
+
+/** Google public test publisher embedded in demo app/unit ids (S9). */
+export const GOOGLE_TEST_ADMOB_PUBLISHER = "3940256099942544";
+
+/**
+ * Warn-only consistency checks for AdMob config (Phase 2).
+ * Does NOT enable production IDs. Fail-safe callers still get "unavailable".
+ * Returns human-readable warnings for tests / CI companions.
+ */
+export function adsConfigWarnings(options: {
+  readonly rewardedId: string;
+  readonly testing: boolean;
+}): string[] {
+  const warnings: string[] = [];
+  const isTestUnit = options.rewardedId.includes(GOOGLE_TEST_ADMOB_PUBLISHER);
+  if (!isTestUnit && options.testing) {
+    warnings.push(
+      "non-test rewarded unit id with testing=true — partial cutover; do not ship (Nadav C7)",
+    );
+  }
+  if (isTestUnit && !options.testing) {
+    warnings.push(
+      "Google TEST rewarded unit with testing=false — inconsistent; keep testing=true until prod IDs (C7)",
+    );
+  }
+  if (!isTestUnit && !options.testing) {
+    warnings.push(
+      "non-test rewarded unit without Nadav C7 / Families / consent path — blocked for store",
+    );
+  }
+  return warnings;
+}
+
+
 export type AdOutcome = "rewarded" | "dismissed" | "unavailable";
 
 /** The slice of the AdMob plugin this game uses. Nothing else is imported. */
@@ -47,6 +81,9 @@ export class Ads {
     this.plugin = options.plugin ?? null;
     this.rewardedId = options.rewardedId ?? TEST_REWARDED_ID;
     this.testing = options.testing ?? true;
+    for (const w of adsConfigWarnings({ rewardedId: this.rewardedId, testing: this.testing })) {
+      console.warn(`[ads] ${w}`);
+    }
   }
 
   get available(): boolean {

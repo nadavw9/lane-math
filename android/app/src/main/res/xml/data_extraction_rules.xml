@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 2 privacy harden (S14–S16).
+  Excludes app domains from cloud backup and device-to-device transfer where
+  the OS honors dataExtractionRules (API 31+).
+
+  Caveat: android:allowBackup="false" disables Auto Backup / key-value backup
+  but may NOT stop OEM device-to-device transfer on all paths. This file is the
+  API 31+ control for cloud-backup + device-transfer excludes. Reversible if
+  Nadav (C6) chooses soft-launch cloud backup continuity.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>
