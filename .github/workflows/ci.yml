@@ -9,9 +9,12 @@ on:
 permissions:
   contents: read
 
+# Per-ref group: feature/Dependabot pushes must NOT cancel master gates/deploy.
+# Within a ref, cancel superseded runs. On master, never cancel in-progress
+# (protects Pages deploy from a second master push racing the first).
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   # Every gate in one job: they share an npm install and none of them is slow.

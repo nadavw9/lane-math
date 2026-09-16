@@ -1,14 +1,17 @@
-# GROK — Eng Lead notes
+## Current — Track C mission (C3–C6) · in progress
 
-## Current — Track C2 CodeQL · DRAFT
+**Status:** Post-C2 hardening in flight. C2 MERGED at `0fffa1c`.  
+**Base:** `master` @ `0fffa1c95abc304fa1d8bdcad4432f67341d158f`  
+**Ledger:** [`MISSION_TRACK_C_LEDGER.md`](./MISSION_TRACK_C_LEDGER.md) (base→end SHAs; no endless history).  
+**Active first slice:** C3 — CI concurrency per-ref (fix shared `pages` group canceling master).  
+**Hard rules:** Preserve gates ≥548, Pages master-only, least privilege, SHA pins. No Base44 / Chronos / gameplay / economy / UI / schema / Android. No new third-party Actions unless C4-C requires gitleaks (document why A+B insufficient).
 
-**Status:** DRAFT PR — **do not merge**. Isolated CodeQL advanced setup only.  
-**Base:** `master` @ `b1767a8` (after #40 C1 merge)  
-**Branch:** `ci/track-c2-codeql`  
-**Deliverable:** [`TRACK_C2_CODEQL_b1767a8.md`](./TRACK_C2_CODEQL_b1767a8.md).  
-**Landed (proposed):** separate `.github/workflows/codeql.yml`; `javascript-typescript` only; SHA-pinned `codeql-action` v4.38.0 + existing checkout pin; weekly cron; findings = code scanning alerts (does not block Pages deploy).  
-**Tip / DRAFT PR:** [#50](https://github.com/nadavw9/lane-math/pull/50) HEAD — **do not merge** (exact SHA = PR head / branch tip).
-**Hard rules:** No gitleaks / provenance / Android / Base44 / Chronos / GDD / ART / CLAUDE / UI / economy / schema. `ci.yml` gates+deploy unchanged.
+---
+
+## Prior — Track C2 CodeQL · PR #50 (merged)
+
+**Status:** MERGED at `0fffa1c`. Separate `codeql.yml`; JS/TS only; SHA-pinned codeql-action; findings = alerts (do not block Pages).  
+**Deliverable:** [`TRACK_C2_CODEQL_b1767a8.md`](./TRACK_C2_CODEQL_b1767a8.md).
 
 ---
 
