@@ -1,0 +1,28 @@
+# Scheduled VERSION updates only (weekly).
+# This file does NOT create a security-only mode.
+# GitHub Dependabot security updates / alerts are a separate product path
+# (repo Settings → Code security) and are handled independently when enabled.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-dev-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      npm-prod-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch

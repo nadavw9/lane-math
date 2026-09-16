@@ -10,11 +10,11 @@ import { join } from "node:path";
  * A silent drop of dozens of tests (deleted file, broken include glob) still
  * looks green if whatever remains passes. This runs the suite once, keeps the
  * human default reporter for the log, and fails when numTotalTests falls below
- * the floor (default 495; override with MIN_TESTS).
+ * the floor (default 548; override with MIN_TESTS).
  *
  *   node tools/assert-suite-size.mjs
  */
-const MIN = Number(process.env.MIN_TESTS ?? 495);
+const MIN = Number(process.env.MIN_TESTS ?? 548);
 if (!Number.isFinite(MIN) || MIN < 1) {
   console.error(`assert-suite-size: invalid MIN_TESTS=${process.env.MIN_TESTS}`);
   process.exit(2);
