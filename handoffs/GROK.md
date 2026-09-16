@@ -1,9 +1,15 @@
-## Current — Android Release / Privacy / Child-Safety · PHASE 1 AUDIT
+## Current — Android Release / Privacy · PHASE 2 IN PROGRESS
 
-**Status:** DOCS/LEDGER ONLY on tip `011bae189816cbe71fdcef41cab8a93e5a541887`. No Phase 2 hardening in this PR. **Do not set production ad IDs.**
-**Ledger:** [`MISSION_ANDROID_RELEASE_LEDGER.md`](./MISSION_ANDROID_RELEASE_LEDGER.md).
-**Sources:** CoS brief S1–S23 retrieved 2026-09-16 Asia/Jerusalem (`PRIMARY_SOURCES_BRIEF_2026-09-16.md`). Labels A/B/C; Play/AdMob/UMP/TFAT ≠ legal compliance.
-**Next:** Eng parent dispatches Phase 2 after Nadav (C) decisions + this report.
+**Status:** Shell harden + ads warn-only gate + Data safety/checklist drafts. **No production ad IDs.** Start `e26dd8e`.
+**Ledger:** [`MISSION_ANDROID_RELEASE_LEDGER.md`](./MISSION_ANDROID_RELEASE_LEDGER.md). Checklist: [`ANDROID_RELEASE_CHECKLIST.md`](./ANDROID_RELEASE_CHECKLIST.md). Draft: [`ANDROID_DATA_SAFETY_DRAFT.md`](./ANDROID_DATA_SAFETY_DRAFT.md).
+**Deferred (C):** TFAT/UMP/age screen/prod IDs/Families. Green tooling ≠ COPPA/GDPR.
+
+---
+
+## Prior — Android Release · PHASE 1 AUDIT · PR #55 (merged)
+
+**Status:** MERGED at `e26dd8e`. Docs/ledger only on tip `011bae1`.
+**Ledger:** [`MISSION_ANDROID_RELEASE_LEDGER.md`](./MISSION_ANDROID_RELEASE_LEDGER.md) (now Phase 2).
 
 ---
 

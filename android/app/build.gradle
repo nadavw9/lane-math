@@ -38,6 +38,8 @@ android {
             // R8 as in Traffic Bomb. The app is almost entirely web assets, so
             // shrinking the Java side is small in absolute terms — see the
             // reported APK breakdown for what it actually buys.
+            // Phase 2: pin debuggable false (AGP default; make checklist-grepable).
+            debuggable false
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

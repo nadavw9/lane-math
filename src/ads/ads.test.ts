@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_ECONOMY } from "../economy/config.js";
 import { Economy } from "../economy/economy.js";
-import { Ads } from "./ads.js";
+import { Ads, adsConfigWarnings, TEST_REWARDED_ID } from "./ads.js";
 
 /**
  * The rewarded-ad path (GDD §5.2, §12).
@@ -110,5 +110,24 @@ describe("an ad buys time, not an advantage (§8.1)", () => {
     // Moving the regeneration anchor would charge an ad for time already
     // served — the player would lose progress toward the free life.
     expect(e.state.lastLifeGrantedAt).toBe(anchorBefore);
+  });
+});
+
+describe("adsConfigWarnings (Phase 2 warn-only; no prod IDs)", () => {
+  it("is silent for the tip defaults (test unit + testing)", () => {
+    expect(adsConfigWarnings({ rewardedId: TEST_REWARDED_ID, testing: true })).toEqual([]);
+  });
+
+  it("warns on test unit with testing=false", () => {
+    const w = adsConfigWarnings({ rewardedId: TEST_REWARDED_ID, testing: false });
+    expect(w.length).toBeGreaterThan(0);
+  });
+
+  it("warns on non-test unit even with testing=true (partial cutover)", () => {
+    const w = adsConfigWarnings({
+      rewardedId: "ca-app-pub-0000000000000000/0000000000",
+      testing: true,
+    });
+    expect(w.some((s) => s.includes("partial cutover"))).toBe(true);
   });
 });

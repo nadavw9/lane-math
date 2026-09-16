@@ -94,6 +94,10 @@ jobs:
       - name: Assert default prod excludes review harness (regression gate, not security proof)
         run: node tools/assert-no-prod-harness.mjs
 
+      # Phase 2: Android privacy / test-AdMob tip gate (NOT COPPA/GDPR proof).
+      - name: Assert Android release privacy tip gate
+        run: node tools/assert-android-release-privacy.mjs
+
       - name: Report web build size
         run: |
           echo "### Web build (Pages / harness off)" >> "$GITHUB_STEP_SUMMARY"

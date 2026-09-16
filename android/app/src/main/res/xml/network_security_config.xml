@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 2: fail-closed cleartext. Capacitor WebView + AdMob use HTTPS.
+  targetSdk 36 already defaults cleartext off; this documents and pins it.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
